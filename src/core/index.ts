@@ -27,6 +27,18 @@ export {
 export { generateDigest, type DigestDeps, type DigestStrategy, type ToolSchema } from './digest.js'
 export { recallToolDefinition, injectRecallTool } from './recallTool.js'
 export { serializeForCache, canonicalJSON, type CachePrefix } from './serializeForCache.js'
+export {
+  clipTier3KeepingTail,
+  maybeExtractObservations,
+  extractObservationsSync,
+  type ObserverResult,
+  type ObserverDeps,
+  type ObserverDepsSync,
+  type ObserverReason,
+  type SyncLLMCaller,
+  type ClipOptions,
+} from './observer.js'
+export { OBSERVER_PROMPT_TEMPLATE, parseObservations } from './observerPrompt.js'
 export type {
   AtomicGroup,
   ClassifierFeatures,
