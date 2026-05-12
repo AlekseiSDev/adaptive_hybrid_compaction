@@ -16,6 +16,39 @@
 
 ---
 
+## Phase map
+
+Pointer-маппинг «фаза → секции». Source of truth по фазам — `system_design §7.2 Track E`.
+Колонки:
+
+- **Depends / Blocks** — внутри- и кросс-трек зависимости; читается планировщиком для параллелизации сабагентов.
+- **Core** — секции, без которых фазу не реализовать.
+- **Контракты** — типы / артефакты, которые трогает или вводит фаза (в этом треке — sweep YAML, NDJSON records, `SweepBudget`).
+- **TDD seed** — failing test / gating check, с которого фаза стартует (для E это чаще pre-flight / dry-run gate, не unit-test).
+- **Cross-cutting** — секции, которые могут потребоваться при правках на стыке.
+
+| Фаза | Depends | Blocks | Core | Контракты | TDD seed | Cross-cutting |
+|---|---|---|---|---|---|---|
+| **E1** Main sweep (4 baselines × 4 benches × 2 seeds, ~$120, 3 дня) | A1–A6, B1–B3, C1–C3, D1–D4 | E2, F | §1, §2, §3, §4, §5, §6, §6.1, §8 | `eval/sweeps/main_e1.yaml`, `SweepBudget{sweep_id:'e1',budget_usd:120}`, NDJSON records per `(bench,config,seed)` | §8 pre-flight: dry-run 2 tasks × 4 benches PASS + cost circuit-breaker halt'ит при artificially low budget | §9 post-run audit (gate в F), §7 (только если E1 conf'ы пересекаются с E3 subset) |
+| **E2** Ablation grid (4 AHC configs × 2 benches × 2 seeds, ~$30, 1 день) | E1 ahc_full (sanity baseline) | F | §2 (E2 deps), §3, §4, §5, §6, §6.1, §8 (упрощённый checklist) | `eval/sweeps/ablation_e2.yaml`, `SweepBudget{sweep_id:'e2',budget_usd:30}`, NDJSON per ablation config | dry-run 1 task × 2 benches на каждой ablation config PASS; ahc_full numbers из E1 в пределах stderr от reference | §9 post-run audit, §3 parallelization (E1 ∥ E2 option) |
+| **E3** Cache-hit subset (n=10–15 tasks на Anthropic direct, Sonnet-4.6, ~$20, 0.5 дня) | A6, C2 (оба на Anthropic direct API) | F | §7 (E3-specific), §4, §6, §6.1, §8 (упрощённый checklist) | `eval/sweeps/cache_hit_e3.yaml`, `SweepBudget{sweep_id:'e3',budget_usd:20}`, output в `benchmarks/runs/cache-hit-subset/` | dry-run 2 tasks (AHC-full + Mastra OM + Anthropic-native compact) на Sonnet-4.6 → `cache_read_input_tokens` поле присутствует в response и > 0 на 2nd turn | §3 parallelization (concurrency=2 для Anthropic), `system_design §2.1` target ≥ 60% |
+
+**Parallelization:** E3 — independent от E1/E2 (другой провайдер, отдельный rate-limit), может стартовать параллельно как только A6 + C2 готовы. E1 и E2 по default sequential (предсказуемость cost-tracker и file lock simplicity, §2); параллельно — option если OpenRouter concurrent rate-limit позволяет (§3) и E1 уходит > 36ч wall-clock (см. Open question 1).
+
+**Orthogonal / deferred:**
+- §9 Post-run audit — gate между E и F, не часть самих E-фаз; читается перед стартом F.
+- §10 Open questions — revisit во время run'ов, не блокирует старт.
+
+**Как пользоваться.** Phase map — маршрутизатор контекста для plan-mode / агента-реализатора:
+перед фазой читаем только Core + Контракты + TDD seed (всё остальное в design doc — фон,
+открываем при необходимости через Cross-cutting). Depends/Blocks показывают где фазы
+параллелятся сабагентами. Сам план шагов и прогресс — отдельные артефакты: plan-mode
+разбивает фазу на task'и, прогресс трекается через TaskCreate / `implementation/<phase>.md`
+по `templates/implementation_template.md`. Pseudocode и контракты остаются в design
+doc как source of truth, не дублируются в implementation.
+
+---
+
 ## 1. Scope
 
 - **In**: run orchestration, sweep execution policy, cost monitoring, replication,

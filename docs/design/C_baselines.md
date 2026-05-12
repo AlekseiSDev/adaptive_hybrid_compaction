@@ -15,6 +15,40 @@
 
 ---
 
+## Phase map
+
+Pointer-маппинг «фаза → секции». Source of truth по фазам — `system_design §7.2 Track C`.
+Колонки:
+
+- **Depends / Blocks** — внутри- и кросс-трек зависимости; читается планировщиком для параллелизации сабагентов.
+- **Core** — секции, без которых фазу не реализовать.
+- **Контракты** — типы / интерфейсы из §1 (`Baseline`, `BaselineState`), которые фаза реализует.
+- **TDD seed** — failing test, с которого фаза стартует (Red в TDD-цикле).
+- **Cross-cutting** — секции, которые могут потребоваться при правках на стыке.
+
+| Фаза | Depends | Blocks | Core | Контракты | TDD seed | Cross-cutting |
+|---|---|---|---|---|---|---|
+| **C1** Mastra OM baseline (2 дня) | B1, §1 | E1 | §4, §4.1, §4.2, §4.3 | `Baseline` impl `mastra_om`; `BaselineState.scratch.thread_id`; `RunRecord.scratch.mastra_config` (§4.3) | step()-roundtrip: prepare → step(userMsg) → response message non-empty, `thread_id` сохранён в state.scratch между turns | §4.4 failure modes; §5 config_id; `B_eval-harness.md §2` RunRecord shape |
+| **C2** Anthropic native compact wrapper (1 день) | B1, §1, verify `compact_20260112` shape (§3) | E1 | §3, §3.1 | `Baseline` impl `anthropic_compact`; `BaselineState.scratch.compacted_history_id` | compaction event logging: после step с large history `telemetry.compaction_events[].type='reflection'` имеет before/after bytes (§3.1) | §3.2 failure modes; §5 config_id |
+| **C3** Full context baseline (0.5 дня) | B1, §1 | E1 | §2 | `Baseline` impl `full_context`; pass-through `state.history` | history accumulation: после N step'ов `state.history.length == 2*N` (user + assistant per turn), ничего не trim'ается | §2.1 failure modes (context window exceeded); §5 config_id |
+
+**Parallelization:** `C1/C2/C3` независимы между собой после `B1` — все три реализуют один и тот же `Baseline` interface из §1 и могут разрабатываться параллельными сабагентами. Все три блокируют `E1` (main sweep по `design/E_main-runs.md §2` требует все 3 baseline'а).
+
+**Orthogonal / deferred:**
+- §5 Cross-baseline integration — читается один раз перед C1 (config_id naming convention), не требует отдельной фазы.
+- §1 Common baseline contract — baseline reference, читаем перед любой из C1/C2/C3.
+- Open questions (Mastra version pin, Anthropic API shape verify) — resolved at-phase-start, не выделяем в отдельную фазу.
+
+**Как пользоваться.** Phase map — маршрутизатор контекста для plan-mode / агента-реализатора:
+перед фазой читаем только Core + Контракты + TDD seed (всё остальное в design doc — фон,
+открываем при необходимости через Cross-cutting). Depends/Blocks показывают где фазы
+параллелятся сабагентами. Сам план шагов и прогресс — отдельные артефакты: plan-mode
+разбивает фазу на task'и, прогресс трекается через TaskCreate / `implementation/<phase>.md`
+по `templates/implementation_template.md`. Pseudocode и контракты остаются в design
+doc как source of truth, не дублируются в implementation.
+
+---
+
 ## 1. Common baseline contract
 
 ```typescript

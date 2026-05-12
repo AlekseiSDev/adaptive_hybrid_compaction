@@ -15,6 +15,41 @@
 
 ---
 
+## Phase map
+
+Pointer-маппинг «фаза → секции». Source of truth по фазам — `system_design §7.2 Track D`.
+Колонки:
+
+- **Depends / Blocks** — внутри- и кросс-трек зависимости; читается планировщиком для параллелизации сабагентов.
+- **Core** — секции, без которых фазу не реализовать.
+- **Контракты** — типы/схемы, которые трогает или вводит фаза (для D — task JSON schema из §2 и storage layout из §7).
+- **TDD seed** — failing test, с которого фаза стартует (Red в TDD-цикле).
+- **Cross-cutting** — секции, которые могут потребоваться при правках на стыке.
+
+| Фаза | Depends | Blocks | Core | Контракты | TDD seed | Cross-cutting |
+|---|---|---|---|---|---|---|
+| **D1** AssistantTraj design + JSON schema | — | D2, D3, D4 | §1, §1.1, §2, §7 | `Task` JSON schema (§2), storage layout (§7) | schema validator round-trip: valid task проходит, missing required field — fail | §5 eval dispatch (skeleton полей для category/modality) |
+| **D2** Сбор реальных трасс (real + open-source) | D1 | D4 | §3.1, §3.2, §4 | conformance к `Task` schema из §2; anonymized payload по §4 | anonymization snapshot test: PII-laden trace → 0 hits по regex набору §4 после прогона | §1.1 target distribution (учёт квот при отборе), §7 storage layout |
+| **D3** Synthetic top-up + manual review | D1 (conditional: запускается если `real + oss < 30`) | D4 | §3.3, §1.1 | conformance к `Task` schema; пометка `source: synthetic` | synthetic task проходит тот же schema-validator + manual-review checklist (100% review gate) | §3.1/§3.2 (что именно недобрали), §6 rubric (synthetic не должен ломать judge) |
+| **D4** Eval adapter + LLM-judge rubrics | D1, D2, D3 | E1 | §5, §6, §6.1, §6.2 | judge prompt template (§6), rubric scoring contract (1.0 / 0.5 / 0.0) | judge calibration: на 10% human-labeled subset Cohen's κ ≥ target из §6.1 | §6.2 judge cache (детерминизм/повтор прогонов), §7 storage (запись judge outputs) |
+
+**Parallelization:** `D1` — first, нет deps; `D2/D3` параллельны после `D1` (D2 — real/oss collection, D3 — synthetic top-up), результаты merge'атся перед D4; `D4` ждёт оба и закрывает трек.
+
+**Orthogonal / deferred:**
+- §4 Anonymization protocol — формально critical только для D2 (real traces); open-source и synthetic не требуют PII-стрипа, но schema-валидация одна для всех.
+- §6.2 Judge cache — не блокирует D4 MVP, но нужен для повторных прогонов в Track E (стабильность стоимости).
+- §1.1 Target distribution — baseline, читаем при D1, перечитываем если D2 недобирает квоту и активируется D3.
+
+**Как пользоваться.** Phase map — маршрутизатор контекста для plan-mode / агента-реализатора:
+перед фазой читаем только Core + Контракты + TDD seed (всё остальное в design doc — фон,
+открываем при необходимости через Cross-cutting). Depends/Blocks показывают где фазы
+параллелятся сабагентами. Сам план шагов и прогресс — отдельные артефакты: plan-mode
+разбивает фазу на task'и, прогресс трекается через TaskCreate / `implementation/<phase>.md`
+по `templates/implementation_template.md`. Pseudocode и контракты остаются в design
+doc как source of truth, не дублируются в implementation.
+
+---
+
 ## 1. Scope
 
 - **In**: task JSON schema, source pipeline, anonymization protocol, judge rubric format,

@@ -17,6 +17,39 @@
 
 ---
 
+## Phase map
+
+Pointer-маппинг «фаза → секции». Source of truth по фазам — `system_design §7.2 Track F`.
+Колонки:
+
+- **Depends / Blocks** — внутри- и кросс-трек зависимости; читается планировщиком для параллелизации сабагентов.
+- **Core** — секции, без которых фазу не реализовать.
+- **Контракты** — артефакты/входы из Track E (NDJSON, sweep configs, числа), на которые опирается фаза.
+- **TDD seed** — отчётный трек не делает unit-тестов; вместо failing test — проверяемый exit criterion фазы.
+- **Cross-cutting** — секции, которые могут потребоваться при правках на стыке.
+
+| Фаза | Depends | Blocks | Core | Контракты | TDD seed | Cross-cutting |
+|---|---|---|---|---|---|---|
+| **F1** Структура отчёта по NLP_Course_Template | Track E (все числа — main sweep, ablations, cache-hit) | F2 | §1, §2 section outline, §4 citation plan, §5 reproducibility appendix | E1 main sweep NDJSON, E2 ablations, E3 cache-hit, `system_design §1, §2.3, §6` | source mapping: каждая section в §2 имеет конкретный artifact-источник, no "TBD" в skeleton | §4.1 cites из existing paper.pdf, §4.2 external refs |
+| **F2** Figures + discussion | F1 (skeleton с placeholders на figures) | F3 | §3 figure plan, §6 discussion talking points | NDJSON из `benchmarks/runs/`, scripts из `scripts/plots/` | figures regenerate from NDJSON deterministically — никаких stale numbers, hand-edited values | §2 Results section (figures referenced), `system_design §9, §10` negative results framing |
+| **F3** Финальный pass + полировка | F2 | — | §7 final polish checklist, §5 reproducibility appendix | refs.bib, submission tag в repo, verify.sh PASS | §7 polish checklist 100% PASS (включая bibtex-tidy, page budget, терминология consistency) | §1 терминология из `A_ahc-algorithm §1` / `system_design §1.1` |
+
+**Parallelization:** трек sequential по природе (написать → отрисовать → отполировать); F1/F2/F3 не параллелятся между собой, параллелизация возможна только через дополнительных людей, не сабагентов. F не блокирует ничего (terminal трек, deliverable отчёта).
+
+**Orthogonal / deferred:**
+- §8 Open questions — не блокируют фазы; разрешаются при contact с course staff, фиксируются в `decisions.md`.
+- §4.1 vs §4.2 split — операционная классификация, читаем один раз при F1.
+
+**Как пользоваться.** Phase map — маршрутизатор контекста для plan-mode / агента-реализатора:
+перед фазой читаем только Core + Контракты + TDD seed (всё остальное в design doc — фон,
+открываем при необходимости через Cross-cutting). Depends/Blocks показывают где фазы
+параллелятся сабагентами. Сам план шагов и прогресс — отдельные артефакты: plan-mode
+разбивает фазу на task'и, прогресс трекается через TaskCreate / `implementation/<phase>.md`
+по `templates/implementation_template.md`. Pseudocode и контракты остаются в design
+doc как source of truth, не дублируются в implementation.
+
+---
+
 ## 1. Scope
 
 - **In**: section outline, figure list, citation plan, reproducibility appendix,

@@ -8,6 +8,42 @@ pseudocode и инварианты. Используется как рефере
 
 ---
 
+## Phase map
+
+Pointer-маппинг «фаза → секции». Source of truth по фазам — `system_design §7.2 Track A`.
+Колонки:
+
+- **Depends / Blocks** — внутри- и кросс-трек зависимости; читается планировщиком для параллелизации сабагентов.
+- **Core** — секции, без которых фазу не реализовать.
+- **Контракты** — типы из §2.4, которые трогает или вводит фаза.
+- **TDD seed** — failing test, с которого фаза стартует (Red в TDD-цикле).
+- **Cross-cutting** — секции, которые могут потребоваться при правках на стыке.
+
+| Фаза | Depends | Blocks | Core | Контракты (§2.4) | TDD seed | Cross-cutting |
+|---|---|---|---|---|---|---|
+| **A1** 3-tier shape + atomic groups + feature flag scaffolding | — | A2, A3, A4 | §2.1, §2.3, §5.1 | `Message`, `Tier1/2/3`, `AtomicGroup`, `FeatureFlags` | §9.1 cache-invariance prefix test | §2.2 data flow (skeleton) |
+| **A2** Type-Aware Offloader + Scratchpad + Recall | A1 | A5, A6 | §5 (all), §6 (all) | `PointerPlaceholder`, `CompactionContext`, `Thresholds.{T_SIZE,T_CUM}` | atomic-group roundtrip (offload → pointer → recall == original) + §9.1 не ломается | §2.3 модули, §5.3 digest strategies |
+| **A3** Task-Aware Observer + observation log | A1 | A5 | §4 (all) | `Observation`, `Thresholds.OBSERVER_THRESHOLD` | Tier-2 append-only (existing entries не мутируются) + post-extract clip §4.3 | §2.2 dispatch (conversational branch) |
+| **A4** Trajectory Classifier | A1 | A5, A6 | §3 (all), §2.2 dispatch | `TrajectoryClass`, `ClassifierFeatures` | hysteresis: смена `conversational → tool_heavy` требует 2 последовательных turn'а | §2.3 модули (classifier row), §3.3 disabled-mode |
+| **A5** Async Buffer + Reflection Layer | A2, A3, A4 | A6 | §7 (all), §8 (all) | `Thresholds.{BUFFER_TOKENS,BUFFER_ACTIVATION,REFLECTION_THRESHOLD}` | buffer consume-once + reflection — **единственная** operation, наблюдаемо ломающая §9 prefix | §8.3 cache invalidation handling |
+| **A6** AI SDK v6 middleware adapter | A5 + `investigations/ai-sdk-v6-surface.md` | G2 (UI), E1 (main sweep) | §2.2 data flow, §2.4 `Message`/`ContentPart` shape | (adapter, новых типов не вводит) | middleware passthrough сохраняет §9.1 на полном turn cycle | `docs/investigations/ai-sdk-v6-surface.md` (prereq) |
+
+**Parallelization:** `A2/A3/A4` параллельны после `A1`; `A5` ждёт всех трёх; `A6` — в конце трека.
+
+**Orthogonal / deferred:**
+- §10 Calibration Protocol — не нужно для A1–A6; включается в E (sweeps) при необходимости.
+- §1 Терминология — baseline, читаем один раз и держим в голове.
+
+**Как пользоваться.** Phase map — маршрутизатор контекста для plan-mode / агента-реализатора:
+перед фазой читаем только Core + Контракты + TDD seed (всё остальное в design doc — фон,
+открываем при необходимости через Cross-cutting). Depends/Blocks показывают где фазы
+параллелятся сабагентами. Сам план шагов и прогресс — отдельные артефакты: plan-mode
+разбивает фазу на task'и, прогресс трекается через TaskCreate / `implementation/<phase>.md`
+по `templates/implementation_template.md`. Pseudocode и контракты остаются в design
+doc как source of truth, не дублируются в implementation.
+
+---
+
 ## 1. Терминология
 
 Унифицированные термины, которые используются во всём проекте и в paper'е. До этого

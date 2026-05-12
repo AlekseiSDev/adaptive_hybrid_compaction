@@ -17,6 +17,40 @@
 
 ---
 
+## Phase map
+
+Pointer-маппинг «фаза → секции». Source of truth по фазам — `system_design §7.2 Track G`.
+Колонки:
+
+- **Depends / Blocks** — внутри- и кросс-трек зависимости; читается планировщиком для параллелизации сабагентов.
+- **Core** — секции, без которых фазу не реализовать.
+- **Контракты** — типы из §2.4 `A_ahc-algorithm.md`, которые трогает или потребляет фаза (Track G сам новых типов не вводит — он consumer).
+- **TDD seed** — exit criterion из §4, с которого фаза стартует (Red в TDD-цикле).
+- **Cross-cutting** — секции, которые могут потребоваться при правках на стыке.
+
+| Фаза | Depends | Blocks | Core | Контракты | TDD seed | Cross-cutting |
+|---|---|---|---|---|---|---|
+| **G1** Skeleton + AI SDK v6 chat | `investigations/ai-sdk-v6-surface.md` | G2 | §4.G1, §2 architecture, §3 UI shape | `Message`, `ContentPart` (text + image consumption) | end-to-end chat через UI, multi-turn, image URL передаётся (§4.G1 Exit) | §1 Scope (in/out boundary), §7 cost caps |
+| **G2** AHC integration | G1, A6 | G3 | §4.G2, §2 architecture (middleware mount), §6 persistence policy | `FeatureFlags`, `Scratchpad` (per-session lifecycle) | AHC active, compaction events происходят, recall tool работает (§4.G2 Exit) | §5 failure modes (scratchpad TTL, rate-limit), §7 cost / abuse |
+| **G3** Telemetry sidebar | G2, B2 (telemetry stream contract — см. `B_eval-harness.md §9.6`) | — | §4.G3, §3 UI shape (sidebar panel) | `TrajectoryClass`, `Observation`, `PointerPlaceholder` (read-only, для display) | live AHC stats обновляются per response, видно class/confidence/observations/scratchpad/recall (§4.G3 Exit) | §5 failure modes (provider 5xx mid-stream), `B_eval-harness.md §9` observability |
+
+**Parallelization:** внутри трека — strict sequential (`G1 → G2 → G3`: skeleton → integration → observability); параллелить нечего. Кросс-трек: G1 ждёт `ai-sdk-v6-surface` investigation, G2 ждёт A6, G3 ждёт B2.
+
+**Orthogonal / deferred:**
+- §8 Open questions — design-level uncertainty, разрешаются по ходу; не блокируют фазы.
+- §6 Persistence policy (post-MVP SQLite branch) — out of scope для G1–G3.
+- §7 Cost / abuse — baseline caps реализуются в G2, тюнинг — orthogonal.
+
+**Как пользоваться.** Phase map — маршрутизатор контекста для plan-mode / агента-реализатора:
+перед фазой читаем только Core + Контракты + TDD seed (всё остальное в design doc — фон,
+открываем при необходимости через Cross-cutting). Depends/Blocks показывают где фазы
+параллелятся сабагентами. Сам план шагов и прогресс — отдельные артефакты: plan-mode
+разбивает фазу на task'и, прогресс трекается через TaskCreate / `implementation/<phase>.md`
+по `templates/implementation_template.md`. Pseudocode и контракты остаются в design
+doc как source of truth, не дублируются в implementation.
+
+---
+
 ## 1. Scope
 
 - **In**:

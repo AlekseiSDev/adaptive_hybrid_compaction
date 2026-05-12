@@ -17,6 +17,40 @@
 
 ---
 
+## Phase map
+
+Pointer-маппинг «фаза → секции». Source of truth по фазам — `system_design §7.2 Track B`.
+Колонки:
+
+- **Depends / Blocks** — внутри- и кросс-трек зависимости; читается планировщиком для параллелизации сабагентов.
+- **Core** — секции, без которых фазу не реализовать.
+- **Контракты** — типы из §3, которые трогает или вводит фаза.
+- **TDD seed** — failing test, с которого фаза стартует (Red в TDD-цикле).
+- **Cross-cutting** — секции, которые могут потребоваться при правках на стыке.
+
+| Фаза | Depends | Blocks | Core | Контракты (§3) | TDD seed | Cross-cutting |
+|---|---|---|---|---|---|---|
+| **B1** Wire existing harness | — | B2, B3, C1/C2/C3, E1 | §2 run lifecycle, §4 persistence, §8 sweep YAML | `RunRecord`, `TurnRecord`, `Score`, `TokenUsage`, `ErrorRecord` | NDJSON append-safety + resume по `config_id` (повторный run пишет в ту же папку) | §1 scope |
+| **B2** Token/cache/latency telemetry + Langfuse | B1 | E1, G3 | §3 telemetry schema (full), §9 (all) | `CompactionEvent`, `RecallEvent`, `class_signal`, provider-reported `cache_read_input_tokens` | exporter no-op при `LANGFUSE_ENABLED=false`; provider tokens authoritative (не offline tokenizer) | §6 CostTracker (каркас здесь) |
+| **B3** Per-class breakdown | B1, B2 | F2 | §7 (all) | `class_signal` в `TurnRecord` | per-class aggregate матчится с mode-class на synthetic NDJSON; paired permutation по `task_id` | §5 stats pipeline |
+
+**Parallelization:** внутри Track B всё sequential — `B1 → B2 → B3` (B2 расширяет B1 telemetry, B3 consume'ит `class_signal` из B2). Cross-track: B1 разблокирует C1/C2/C3 (baseline interface потребляет `RunRecord`) параллельно с B2.
+
+**Orthogonal / deferred:**
+- §5 Statistical pipeline — pure functions поверх NDJSON; реализуется по необходимости (часть B2-tail или E pre-report).
+- §6 CostTracker — каркас в B2; реально активируется на E1 (circuit-breaker thresholds).
+- §9.6 связь с Track G — фактическая интеграция в G3; здесь только контракт telemetry stream.
+
+**Как пользоваться.** Phase map — маршрутизатор контекста для plan-mode / агента-реализатора:
+перед фазой читаем только Core + Контракты + TDD seed (всё остальное в design doc — фон,
+открываем при необходимости через Cross-cutting). Depends/Blocks показывают где фазы
+параллелятся сабагентами. Сам план шагов и прогресс — отдельные артефакты: plan-mode
+разбивает фазу на task'и, прогресс трекается через TaskCreate / `implementation/<phase>.md`
+по `templates/implementation_template.md`. Pseudocode и контракты остаются в design
+doc как source of truth, не дублируются в implementation.
+
+---
+
 ## 1. Scope
 
 - **In**:
