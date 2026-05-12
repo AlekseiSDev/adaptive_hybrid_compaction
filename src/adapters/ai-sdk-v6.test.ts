@@ -1,0 +1,155 @@
+import { describe, expect, test } from 'vitest'
+import type { LanguageModelV3, LanguageModelV3Message } from '@ai-sdk/provider'
+import { createAhcMiddleware } from './ai-sdk-v6.js'
+
+const stubModel = (): LanguageModelV3 =>
+  ({
+    specificationVersion: 'v3',
+    provider: 'stub',
+    modelId: 'stub-model',
+    supportedUrls: {},
+    doGenerate: () => {
+      throw new Error('stub: doGenerate not implemented')
+    },
+    doStream: () => {
+      throw new Error('stub: doStream not implemented')
+    },
+  }) as unknown as LanguageModelV3
+
+const sys: LanguageModelV3Message = { role: 'system', content: 'be helpful' }
+const user = (s: string): LanguageModelV3Message => ({
+  role: 'user',
+  content: [{ type: 'text', text: s }],
+})
+const asstToolCall = (id: string, name = 'search'): LanguageModelV3Message => ({
+  role: 'assistant',
+  content: [{ type: 'tool-call', toolCallId: id, toolName: name, input: {} }],
+})
+const toolResult = (id: string, output: unknown): LanguageModelV3Message => ({
+  role: 'tool',
+  content: [
+    {
+      type: 'tool-result',
+      toolCallId: id,
+      toolName: 'search',
+      output: { type: 'json', value: output as never },
+    },
+  ],
+})
+
+const baseParams = (prompt: LanguageModelV3Message[]) => ({
+  prompt,
+  tools: [] as never[],
+})
+
+describe('createAhcMiddleware — A6 LanguageModelV3Middleware', () => {
+  test('returned object has specificationVersion=v3 and a transformParams function', () => {
+    const mw = createAhcMiddleware({})
+    expect(mw.specificationVersion).toBe('v3')
+    expect(typeof mw.transformParams).toBe('function')
+  })
+
+  test('transformParams with simple system+user passes through (no compaction needed)', async () => {
+    const mw = createAhcMiddleware({})
+    const result = await mw.transformParams?.({
+      type: 'generate',
+      params: baseParams([sys, user('hello')]),
+      model: stubModel(),
+    })
+    expect(result).toBeDefined()
+    if (result === undefined) return
+    expect(result.prompt[0]?.role).toBe('system')
+    expect(result.prompt[result.prompt.length - 1]?.role).toBe('user')
+  })
+
+  test('tool-heavy history with TYPE_AWARE_OFFLOAD + RECALL_TOOL → recall tool injected', async () => {
+    const heavy = 'A'.repeat(8000)
+    const prompt: LanguageModelV3Message[] = [
+      sys,
+      user('search foo'),
+      asstToolCall('tu_1'),
+      toolResult('tu_1', { large: heavy }),
+      user('search bar'),
+      asstToolCall('tu_2'),
+      toolResult('tu_2', 'small-1'),
+      user('search baz'),
+      asstToolCall('tu_3'),
+      toolResult('tu_3', 'small-2'),
+    ]
+    const mw = createAhcMiddleware({
+      flags: {
+        TYPE_AWARE_OFFLOAD: true,
+        RECALL_TOOL: true,
+      },
+      thresholds: { K_RECENT: 20 },
+      configuredClass: 'tool_heavy',
+    })
+    const result = await mw.transformParams?.({
+      type: 'generate',
+      params: baseParams(prompt),
+      model: stubModel(),
+    })
+    expect(result).toBeDefined()
+    if (result === undefined) return
+    expect(result.tools).toBeDefined()
+    const tools = result.tools ?? []
+    const recallToolPresent = tools.some(
+      (t) => t.type === 'function' && t.name === 'recall_tool_result',
+    )
+    expect(recallToolPresent).toBe(true)
+  })
+
+  test('two calls with same sessionId → scratchpad persists', async () => {
+    const heavy = 'B'.repeat(8000)
+    const prompt: LanguageModelV3Message[] = [
+      sys,
+      user('q1'),
+      asstToolCall('tu_a'),
+      toolResult('tu_a', { large: heavy }),
+      user('q2'),
+      asstToolCall('tu_b'),
+      toolResult('tu_b', 'small'),
+      user('q3'),
+      asstToolCall('tu_c'),
+      toolResult('tu_c', 'small'),
+    ]
+    let sessionIdCount = 0
+    const mw = createAhcMiddleware({
+      flags: {
+        TYPE_AWARE_OFFLOAD: true,
+        RECALL_TOOL: true,
+      },
+      thresholds: { K_RECENT: 20 },
+      configuredClass: 'tool_heavy',
+      sessionId: () => {
+        sessionIdCount++
+        return 'sticky-session'
+      },
+    })
+    await mw.transformParams?.({
+      type: 'generate',
+      params: baseParams(prompt),
+      model: stubModel(),
+    })
+    const second = await mw.transformParams?.({
+      type: 'generate',
+      params: baseParams(prompt),
+      model: stubModel(),
+    })
+    expect(sessionIdCount).toBeGreaterThanOrEqual(2)
+    expect(second).toBeDefined()
+    if (second === undefined) return
+    // Recall tool should still be present on the second call (scratchpad persistent).
+    const secondTools = second.tools ?? []
+    const hasRecall = secondTools.some(
+      (t) => t.type === 'function' && t.name === 'recall_tool_result',
+    )
+    expect(hasRecall).toBe(true)
+  })
+
+  test('wrapStream / wrapGenerate left undefined → AI SDK calls underlying provider directly', () => {
+    const mw = createAhcMiddleware({})
+    expect(mw.wrapStream).toBeUndefined()
+    expect(mw.wrapGenerate).toBeUndefined()
+  })
+})
