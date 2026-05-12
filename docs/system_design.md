@@ -570,3 +570,88 @@ artifact и основа interactive demo на защите.
 - Image upload в UI — только image URL input.
 - Production observability dashboards beyond local Langfuse.
 - Cross-restart durability scratchpad'а (acceptable: rebuild from history).
+
+### 11.6 Repository layout
+
+Canonical layout. Зафиксирован чтобы track-агенты создавали файлы консистентно
+(не плодили анархию). Изменения структуры — отдельный коммит + запись в `decisions.md`.
+
+```
+adaptive_hybrid_compaction/
+├── README.md, CLAUDE.md                                  # public + operative agent instructions
+├── package.json, pnpm-lock.yaml                          # pnpm workspace
+├── tsconfig.json, eslint.config.js, vitest.config.ts
+├── .gitignore
+├── scripts/                                              # verify.sh (A1), per-class-report.ts (B3), plots/ (F2)
+├── docs/
+│   ├── index.md, system_design.md, decisions.md
+│   ├── ai-native-practices.md (historical), agent-pitfalls.md (lazy)
+│   ├── design/<X>_<track>.md                             # A_..G_ track-level design
+│   ├── implementation/<phase>.md                         # per-phase plan + progress (A1, A2, B1, …)
+│   ├── investigations/<topic>.md                         # root-cause analyses (lazy)
+│   └── templates/                                        # implementation, investigation
+├── src/
+│   ├── core/                                             # Track A — framework-agnostic AHC ядро
+│   │   ├── types.ts, featureFlags.ts, thresholds.ts      # A1 contracts
+│   │   ├── atomicGroup.ts, tiers.ts                      # A1
+│   │   ├── offloader.ts, scratchpad.ts, recallTool.ts    # A2
+│   │   ├── observer.ts                                   # A3
+│   │   ├── classifier.ts                                 # A4
+│   │   ├── asyncBuffer.ts, reflection.ts                 # A5
+│   │   └── index.ts                                      # explicit named re-exports (no `export *`)
+│   ├── adapters/
+│   │   └── ai-sdk-v6.ts                                  # A6
+│   ├── eval/                                             # Tracks B + C
+│   │   ├── types.ts, runner.ts, stats.ts, persistence.ts # B1/B2
+│   │   ├── adapters/<bench>.ts                           # bench task loaders
+│   │   └── baselines/                                    # Track C: mastra/, anthropic.ts, fullContext.ts
+│   └── ui/                                               # Track G — Next.js App Router
+├── eval/
+│   └── sweeps/                                           # Track E: main_e1.yaml, ablation_e2.yaml, cache_hit_e3.yaml
+├── benchmarks/
+│   ├── assistant_traj/                                   # Track D: tasks/, attachments/, rubrics/, judge_cache.json
+│   └── runs/<bench>/<config_id>/<seed>/                  # Track E: records.ndjson (gitignored) + summary.json + meta.json
+├── observability/                                        # B2/§9: docker-compose.yml, langfuse-dashboard.json
+├── references/                                           # Vendored upstream snapshot — read-only (см. references/README.md)
+└── report/                                               # Track F: финальный PDF + appendix-A.md
+```
+
+#### Dependency direction
+
+- `core` не импортит из `adapters` / `eval` / `ui` — **никогда**.
+- `adapters` → `core`. `eval` → `core` (через типы). `ui` → `adapters`.
+- `references/` никем не импортится в runtime — это port source (B1) и cite source (F4.1).
+
+Нарушения ловятся вручную до первого случая; при первом — поднимаем
+`eslint-plugin-boundaries` (см. `CLAUDE.md` Harness Rules).
+
+#### Track ownership
+
+| Директория | Owner |
+|---|---|
+| `src/core/` | A |
+| `src/adapters/` | A6 |
+| `src/eval/` (минус `baselines/`) | B |
+| `src/eval/baselines/` | C |
+| `src/ui/` | G |
+| `eval/sweeps/` | E |
+| `benchmarks/assistant_traj/` | D |
+| `benchmarks/runs/` | E (output) |
+| `observability/` | B2 |
+| `report/` | F |
+| `references/` | one-shot vendored — не правим |
+| `scripts/` | shared (track-агент добавляет свой helper в своей фазе) |
+| `docs/` | shared (см. `CLAUDE.md` Documentation Routing) |
+
+Не вторгайся в чужой track без явной необходимости. Кросс-track правка → координация
+через `decisions.md`.
+
+#### gitignored
+
+- Dependencies: `node_modules/`
+- Build: `dist/`, `.next/`, `*.tsbuildinfo`, `.turbo/`, `coverage/`, `.vitest-cache/`
+- Eval raw output: `benchmarks/runs/**/*.ndjson` (`summary.json` и `meta.json` коммитятся для воспроизводимости)
+- Logs / state: `*.log`, `*.pid`
+- Local services: `observability/data/`, `observability/.langfuse/`
+- Secrets: `.env`, `.env.local`
+- OS-junk: `.DS_Store`

@@ -1,0 +1,23 @@
+node_modules/
+dist/
+coverage/
+.DS_Store
+*.log
+.env
+.env.local
+.vitest-cache/
+
+# build artifacts
+.next/
+build/
+out/
+*.tsbuildinfo
+.turbo/
+
+# eval raw output (summary.json + meta.json коммитятся для воспроизводимости)
+benchmarks/runs/**/*.ndjson
+
+# local processes / state
+*.pid
+observability/data/
+observability/.langfuse/

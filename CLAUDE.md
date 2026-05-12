@@ -5,8 +5,9 @@
 - **Project:** AHC (Adaptive Hybrid Compaction) — middleware для context compaction
   агентских ассистентских систем на medium-distance траекториях (5–15 turns).
 - **Status:** дизайн-фаза, кода ещё нет. Стек разворачивается в Track A (см. system_design §7).
-- **Architecture:** layered TypeScript — `core/` (framework-agnostic) → `adapters/` (AI SDK v6
-  middleware и baselines) → `eval/` (telemetry, benchmark harness).
+- **Architecture:** layered TypeScript — `src/core/` (framework-agnostic) → `src/adapters/`
+  → `src/eval/` → `src/ui/`. Baselines живут в `src/eval/baselines/` (не `adapters`).
+  Полный layout — см. Repository Layout ниже / `system_design §11.6`.
 - **Key Technologies:** TypeScript, AI SDK v6 (primary integration), Vitest, OpenRouter
   (Gemini-3.1-Flash main actor; GPT-5.4 LLM-judge; Anthropic direct для cache-rate subset).
 - **Scope:** учебный MVP курса NLP, ~4 недели wall-clock. Не production-SDK.
@@ -14,6 +15,30 @@
   Создаётся в Track A1. Внутри скрипта закладываем pinpoint sub-commands (`typecheck-only`,
   `lint-only`, `test:unit`, `test:cache-invariance`) — полный verify перед коммитом, узкие
   команды для быстрого цикла во время разработки.
+
+## Repository Layout
+
+```
+src/{core,adapters,eval,ui}/        # code: A / A6 / B+C / G
+eval/sweeps/                        # sweep YAMLs (E)
+benchmarks/{assistant_traj,runs}/   # D bench + E output
+observability/                      # Langfuse stack (B2, opt-in)
+references/                         # vendored upstream snapshot (read-only)
+scripts/                            # verify.sh + helpers
+docs/                               # design + plans (см. Documentation Routing)
+report/                             # final PDF (F)
+```
+
+**Track ownership:** `src/core/`→A, `src/adapters/`→A6, `src/eval/` (минус `baselines/`)→B,
+`src/eval/baselines/`→C, `src/ui/`→G, `eval/sweeps/`→E, `benchmarks/assistant_traj/`→D,
+`benchmarks/runs/`→E (output), `observability/`→B2, `report/`→F.
+
+**Dependency rule:** `core` не импортит из `adapters` / `eval` / `ui` — **никогда**.
+`adapters` → `core`. `eval` → `core`. `ui` → `adapters`. Нарушения ловятся вручную; при
+первом — поднимаем `eslint-plugin-boundaries` (см. Harness Rules ниже).
+
+**Read-only:** `references/` — vendored snapshot, не правим (см. `references/README.md`).
+Канонический layout с подробностями + per-file map — `system_design §11.6`.
 
 ## Documentation Routing
 
