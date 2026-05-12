@@ -17,6 +17,47 @@
 
 ---
 
+## Outcomes
+
+> Что становится видимым артефактом и как это проверить (1-2 команды). Track-level —
+> для demo / acceptance gate (для пользователя / защиты). Per-phase — exit signal
+> для агента-реализатора, симметричный TDD seed на входе. G — UI-трек, verify
+> часто manual ("open localhost, do X, observe Y"); это ожидаемо (§4 exit criteria
+> сформулированы так), Playwright/Cypress automated tests out of scope MVP.
+
+### Track G (после G3)
+
+**Доступно:**
+- `src/ui/` — Next.js App Router project (collocated, single `package.json`),
+  runnable локально через `pnpm run dev:ui` (см. §1 In-scope).
+- Chat UI с text + image-by-URL input, multi-turn, history в browser localStorage.
+- Sidebar показывает live AHC state per response: `class`, `confidence`,
+  `observations` count, `scratchpad` size, `recall_events`, `compaction_events`,
+  active feature flags (§3 UI shape).
+- Backend `/api/chat` route с AHC middleware mount'нутым над OpenRouter provider
+  (Gemini-3.1-Flash default); scratchpad per-session in-memory с 1ч TTL (§4.G2).
+
+**Demo (e2e):** UI **сам** и есть demo — `pnpm run dev:ui` открывает localhost,
+пользователь ведёт multi-turn chat (image URL опционально), видит assistant response
++ AHC sidebar обновляется per response. Это deliverable для защиты; отдельного
+demo-скрипта нет.
+
+**Acceptance gate:** все три §4 exit criteria пройдены (G1 multi-turn chat работает
++ image URL передаётся; G2 AHC active, compaction events, recall tool работает;
+G3 sidebar live updates per response) + ручной smoke на `localhost`: 10-turn
+trajectory с tool-heavy фрагментом, sidebar показывает non-zero scratchpad и хотя
+бы один recall event + UI не падает при provider 5xx mid-stream (§5 failure mode).
+
+### Per-phase
+
+| Фаза | Artifact (что доступно после) | Verify (1-2 команды) |
+|---|---|---|
+| **G1** | `src/ui/` Next.js skeleton с `/api/chat` (passthrough на OpenRouter, no AHC); chat panel + text + image URL input; multi-turn через `useChat` (AI SDK v6) | `pnpm run dev:ui` → localhost: отправить 3-turn chat с image URL во втором turn, убедиться что image рендерится и provider response приходит (§4.G1 Exit) |
+| **G2** | AHC middleware mount'нут в `/api/chat`; feature flags из query params; per-session scratchpad `Map<sessionId, Scratchpad>` с TTL; recall tool инжектится когда scratchpad non-empty | `pnpm run dev:ui` → localhost с `?TYPE_AWARE_OFFLOAD=1`: 8-turn trajectory с heavy tool_result, в browser devtools network response видеть `compaction_event` и хотя бы один `recall_event` (§4.G2 Exit) |
+| **G3** | Backend injects `ahc_stats` envelope в response; sidebar рендерит class/confidence/observations/scratchpad/recall list + feature flag indicators; updates per response | `pnpm run dev:ui` → localhost: 5-turn chat, после каждого assistant response sidebar обновляется (class меняется при tool-heavy turn'е, scratchpad size растёт, recall events list пополняется) (§4.G3 Exit). При отсутствии B2 sidebar показывает client-side state only (§5 failure mode) |
+
+---
+
 ## Phase map
 
 Pointer-маппинг «фаза → секции». Source of truth по фазам — `system_design §7.2 Track G`.
@@ -54,7 +95,7 @@ doc как source of truth, не дублируются в implementation.
 ## 1. Scope
 
 - **In**:
-  - Single-page Next.js (App Router) chat UI, runnable locally (`npm run dev:ui`)
+  - Single-page Next.js (App Router) chat UI, runnable locally (`pnpm run dev:ui`)
   - Text input + image URL input (multimodal: pure-text + image-by-URL)
   - Multi-turn conversation; trajectory сохраняется в browser localStorage
   - Sidebar показывает live AHC state: detected class, observation count, scratchpad size,

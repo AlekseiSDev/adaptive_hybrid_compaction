@@ -8,10 +8,46 @@
 
 ## Meta
 
-- **Track:** D (D1–D4, 10 дней wall-clock)
+- **Track:** D (D1 schema → D2 real traces → D3 synthetic top-up → D4 judge)
+- **Wall-clock:** 10 дней
 - **Зависит от:** ничего внутри проекта (старт day 1)
 - **Блокирует:** E1 (нужен полный AssistantTraj для main sweep)
 - **Owner:** Aleksei (real traces source); harness construction — agent
+- **Связь:** `system_design §6.3` (eval-strategy для multimodal), `design/B_eval-harness.md` (RunRecord / NDJSON shape — D4 eval adapter эмитит в общий harness)
+
+---
+
+## Outcomes
+
+> Что становится видимым артефактом и как это проверить (1-2 команды). Track-level —
+> для demo / acceptance gate (для пользователя / защиты). Per-phase — exit signal
+> для агента-реализатора, симметричный TDD seed на входе.
+
+### Track D (после D4)
+
+**Доступно:**
+- `benchmarks/assistant_traj/tasks/*.json` — 30–40 multimodal заданий, conform к
+  `Task` JSON schema (§2), распределённых по target quotas (§1.1).
+- `benchmarks/assistant_traj/rubrics/<category>.md` — judge rubric per category (§6).
+- `eval/adapters/assistant-traj.ts` — eval dispatch (§5) + judge integration (§6.2 cache).
+- Доступно через harness как `bench: assistant_traj` в sweep YAML (Track E consume'ит).
+
+**Demo (e2e):** `pnpm tsx benchmarks/assistant_traj/validate.ts` — schema-validate
+всех task'ов; затем `pnpm tsx benchmarks/assistant_traj/judge.ts --task at_image_qa_001`
+прогоняет judge на одной human-labeled task'е и печатает `{score, justification,
+human_delta}`. Оба скрипта создаются в D1 / D4 как обязательные exit artifacts.
+
+**Acceptance gate:** schema validator зелёный на 100% tasks + judge calibration
+`|human - judge| ≤ 0.5` на ≥ 70% human-labeled subset (D §6.1, exit criterion D4).
+
+### Per-phase
+
+| Фаза | Artifact (что доступно после) | Verify (1-2 команды) |
+|---|---|---|
+| **D1** | `Task` JSON schema (§2) + storage layout (§7) зафиксированы; `benchmarks/assistant_traj/validate.ts` (создаётся в D1) round-trip'ит valid/invalid fixtures | `pnpm tsx benchmarks/assistant_traj/validate.ts --fixtures` + `./scripts/verify.sh test:unit` |
+| **D2** | Real + open-source traces в `tasks/` (~20–25 шт), anonymized по §4, conform к schema | `pnpm tsx benchmarks/assistant_traj/validate.ts` (schema green) + `pnpm exec vitest run benchmarks/assistant_traj/anonymization.test.ts` (PII regex set = 0 hits) |
+| **D3** | Synthetic top-up в `tasks/` (запускается только если `real + oss < 30`); 100% manual-review checklist (Aleksei sign-off в `provenance.review_signoff`) | `pnpm tsx benchmarks/assistant_traj/validate.ts` (schema green на synthetic) + **human gate**: каждая synthetic task имеет non-empty `review_signoff` (grep check) |
+| **D4** | `eval/adapters/assistant-traj.ts` + `benchmarks/assistant_traj/judge.ts` работают; `calibration/human_scores.json` с 10% sample; calibration κ достигнут | `pnpm tsx benchmarks/assistant_traj/judge.ts --calibrate` (выводит κ vs target из §6.1) + `./scripts/verify.sh` |
 
 ---
 

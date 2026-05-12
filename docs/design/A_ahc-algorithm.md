@@ -8,6 +8,53 @@ pseudocode и инварианты. Используется как рефере
 
 ---
 
+## Meta
+
+- **Track:** A (A1 shape + groups → A2 offloader → A3 observer → A4 classifier → A5 buffer + reflection → A6 AI SDK v6 adapter)
+- **Wall-clock:** 15 дней (3 + 3 + 3 + 2 + 2 + 2)
+- **Зависит от:** внутри проекта — ничего (foundational трек, старт day 1); внешний prereq для A6 — `docs/investigations/ai-sdk-v6-surface.md`
+- **Блокирует:** B2 (telemetry consume'ит `CompactionEvent`/`RecallEvent` из AHC), E1 (main sweep требует A6), G2 (UI mount на A6 middleware)
+- **Связь:** `system_design §7.2 Track A` (phase plan source), `system_design §6` (eval-protocol — что AHC должен поддержать), `design/B_eval-harness.md §3` (telemetry events, которые эмитит AHC), `decisions.md` (running log A-related решений — pnpm, JSON.stringify proxy для §9.1, AtomicGroup InflightToolUse)
+
+---
+
+## Outcomes
+
+> Что становится видимым артефактом и как это проверить (1-2 команды). Track-level —
+> для demo / acceptance gate (для пользователя / защиты). Per-phase — exit signal
+> для агента-реализатора, симметричный TDD seed на входе.
+
+### Track A (после A6)
+
+**Доступно:**
+- `src/core/index.ts` экспортирует public surface (§2.4): типы `Message / Tier1/2/3 /
+  AtomicGroup / FeatureFlags`, функции `compact() / recall()`, фабрику
+  `makeAhcMiddleware(flags)` совместимую с AI SDK v6 `LanguageModelV2Middleware`.
+- AHC можно навесить на любой `streamText / generateText` через middleware option;
+  Track G mount'ит ровно эту точку входа.
+
+**Demo (e2e):** `pnpm tsx scripts/demo-ahc.ts` — синтетический 10-turn trajectory
+через middleware; печатает per-turn `{class, observations, scratchpad_size,
+tokens_before, tokens_after, cache_read_input_tokens}`. Скрипт создаётся в A6 как
+обязательный exit artifact (не оптика — это "потрогать руками" для пользователя/защиты).
+
+**Acceptance gate:** `./scripts/verify.sh` зелёный + `pnpm tsx scripts/demo-ahc.ts`
+не падает + на последнем turn'е demo-trace есть non-empty `scratchpad` и хотя бы
+один `recall_event`.
+
+### Per-phase
+
+| Фаза | Artifact (что доступно после) | Verify (1-2 команды) |
+|---|---|---|
+| **A1** | `src/core/{types,featureFlags,thresholds,atomicGroup,tiers}.ts` + `index.ts` re-export; `tierize(messages)` даёт корректный 3-tier split | `./scripts/verify.sh test:cache-invariance` + `./scripts/verify.sh test:unit` |
+| **A2** | `compact(messages, ctx)` оффлоадит heavy tool_results в scratchpad с `PointerPlaceholder`; `recall(id)` возвращает оригинальный `AtomicGroup` | `pnpm exec vitest run src/core/offloader.test.ts` (atomic-group roundtrip) + `./scripts/verify.sh test:cache-invariance` |
+| **A3** | Observer extract'ит `Observation[]` из conversational turn'ов; post-extract clip срабатывает на `bufferActivation=0.8` | `pnpm exec vitest run src/core/observer.test.ts` |
+| **A4** | `classify(features)` → `TrajectoryClass` с hysteresis на смене | `pnpm exec vitest run src/core/classifier.test.ts` |
+| **A5** | `AsyncBuffer` + `Reflection` активируются по thresholds; reflection — единственная operation, наблюдаемо ломающая §9 prefix | `pnpm exec vitest run src/core/buffer.test.ts src/core/reflection.test.ts` |
+| **A6** | `makeAhcMiddleware(flags)` + `scripts/demo-ahc.ts` | `pnpm tsx scripts/demo-ahc.ts` + `./scripts/verify.sh` |
+
+---
+
 ## Phase map
 
 Pointer-маппинг «фаза → секции». Source of truth по фазам — `system_design §7.2 Track A`.

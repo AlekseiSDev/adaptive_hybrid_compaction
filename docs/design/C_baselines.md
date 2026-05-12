@@ -15,6 +15,43 @@
 
 ---
 
+## Outcomes
+
+> Что становится видимым артефактом и как это проверить (1-2 команды). Track-level —
+> для demo / acceptance gate (для пользователя / защиты). Per-phase — exit signal
+> для агента-реализатора, симметричный TDD seed на входе.
+
+### Track C (после C3)
+
+**Доступно:**
+- `src/eval/baselines/{mastra_om,anthropic_compact,full_context}.ts` + `index.ts`
+  re-export; каждый реализует `Baseline` interface из §1.
+- Harness ресолвит baseline по строковому ключу из sweep YAML
+  (`baseline: mastra_om | anthropic_compact | full_context`); selection wiring
+  живёт рядом с B1 harness factory.
+
+**Demo (smoke sweep):** `pnpm exec ahc-eval run eval/sweeps/smoke-baselines.yaml`
+— 3 baseline'а × 1 task; каждый task делает ≥ 1 turn. Для каждого baseline'а в
+NDJSON output ожидаем non-empty `response` и корректный `scratch` shape
+(`thread_id` для mastra_om, `compacted_history_id` для anthropic_compact, пустой
+для full_context). CLI `ahc-eval` создаётся в B1; если CLI ещё не готов на момент
+C3 — equivalent через `pnpm tsx scripts/run-sweep.ts eval/sweeps/smoke-baselines.yaml`.
+
+**Acceptance gate:** `./scripts/verify.sh` зелёный + step()-roundtrip integration
+test для каждого baseline'а проходит + smoke sweep NDJSON содержит запись с
+`baseline ∈ {mastra_om, anthropic_compact, full_context}` и соответствующим
+`scratch` shape per §1.
+
+### Per-phase
+
+| Фаза | Artifact (что доступно после) | Verify (1-2 команды) |
+|---|---|---|
+| **C1** | `src/eval/baselines/mastra_om.ts`; harness принимает `baseline: mastra_om`, `state.scratch.thread_id` сохраняется между turns; PG testcontainer поднимается per task | `pnpm exec vitest run src/eval/baselines/mastra_om.test.ts` (testcontainers integration, medium-weight: ~docker required, skip mark если нет docker) + `./scripts/verify.sh test:unit` |
+| **C2** | `src/eval/baselines/anthropic_compact.ts`; `compact_20260112` strategy attached; `telemetry.compaction_events[]` несёт `before/after` bytes | `pnpm exec vitest run src/eval/baselines/anthropic_compact.test.ts --live` (требует `ANTHROPIC_API_KEY`; recorded fixtures как fallback в `--no-live` режиме до момента когда API shape stable) |
+| **C3** | `src/eval/baselines/full_context.ts`; pass-through accumulation, `state.history.length == 2*N` после N turns | `pnpm exec vitest run src/eval/baselines/full_context.test.ts` |
+
+---
+
 ## Phase map
 
 Pointer-маппинг «фаза → секции». Source of truth по фазам — `system_design §7.2 Track C`.

@@ -17,6 +17,46 @@
 
 ---
 
+## Outcomes
+
+> Что становится видимым артефактом и как это проверить (1-2 команды). Track-level —
+> для demo / acceptance gate (для пользователя / защиты). Per-phase — exit signal
+> для агента-реализатора, симметричный TDD seed на входе.
+
+### Track B (после B3)
+
+**Доступно:**
+- `src/eval/` экспортирует run lifecycle (§2): `loadTasks → adapter.prepare →
+  runner.execute → grader.score → persist` поверх sweep YAML из `eval/sweeps/`.
+- NDJSON persistence в `benchmarks/runs/<bench>/<config_id>/<seed>/records.ndjson`
+  с полной telemetry schema из §3 (`RunRecord`/`TurnRecord` включая
+  `cache_read_input_tokens`, `compaction_events`, `recall_events`, `class_signal`).
+- Opt-in Langfuse exporter через `LANGFUSE_ENABLED=true` (no-op при `false`,
+  нулевой overhead на main sweep'ах).
+- Per-class breakdown report (`scripts/per-class-report.ts`) — accuracy split
+  по `trajectory_class` на AHC runs.
+
+**Demo (e2e):** `pnpm tsx scripts/eval.ts --sweep eval/sweeps/smoke.yaml` —
+synthetic 2-task config (1 baseline + 1 ahc_full, 1 seed), пишет
+`benchmarks/runs/<bench>/<config_id>/<seed>/records.ndjson` и summary.json. Скрипт
++ smoke sweep YAML создаются в B1 как обязательный exit artifact (не оптика —
+это "потрогать руками" пайплайн для пользователя/защиты).
+
+**Acceptance gate:** `./scripts/verify.sh` зелёный + `pnpm tsx scripts/eval.ts
+--sweep eval/sweeps/smoke.yaml` не падает + NDJSON содержит все required поля
+из §3 telemetry schema (включая `cache_read_input_tokens` на Anthropic-routed
+turn'ах и non-empty `compaction_events` на ahc_full config'е).
+
+### Per-phase
+
+| Фаза | Artifact (что доступно после) | Verify (1-2 команды) |
+|---|---|---|
+| **B1** | `src/eval/{runner,persist,types}.ts` + `scripts/eval.ts` + `eval/sweeps/smoke.yaml`; smoke run на 1-2 tasks пишет append-safe NDJSON в `benchmarks/runs/<bench>/<config_id>/<seed>/records.ndjson`; повторный run resume'ится в ту же папку | `pnpm exec vitest run src/eval/persist.test.ts` (NDJSON append + resume по `config_id`) + `pnpm tsx scripts/eval.ts --sweep eval/sweeps/smoke.yaml` |
+| **B2** | Telemetry fields (`cache_read_input_tokens`, `compaction_events`, `recall_events`, `class_signal`) присутствуют в `TurnRecord`; Langfuse exporter подключается только при `LANGFUSE_ENABLED=true`, иначе no-op | `pnpm exec vitest run src/eval/telemetry.test.ts` (provider tokens authoritative + exporter no-op при `LANGFUSE_ENABLED=false`) + `./scripts/verify.sh test:unit` |
+| **B3** | `scripts/per-class-report.ts` — CLI читает NDJSON, агрегирует mode-class per task, печатает accuracy split по `conversational/tool_heavy/mixed` с stderr | `pnpm exec vitest run src/eval/stats.test.ts` (per-class aggregate матчится с mode-class на synthetic NDJSON) + `pnpm tsx scripts/per-class-report.ts benchmarks/runs/<bench>/<config_id>` |
+
+---
+
 ## Phase map
 
 Pointer-маппинг «фаза → секции». Source of truth по фазам — `system_design §7.2 Track B`.

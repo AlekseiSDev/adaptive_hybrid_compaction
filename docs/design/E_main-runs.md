@@ -13,6 +13,45 @@
 - **Бюджет:** ~$170 (E1 ~$120 + E2 ~$30 + E3 ~$20)
 - **Зависит от:** A1–A6 (AHC ready), B1–B3 (harness), C1–C3 (baselines), D1–D4 (AssistantTraj)
 - **Блокирует:** Track F (нужны числа для отчёта)
+- **Связь:** `system_design §7.2 Track E` (phase plan source), `design/B_eval-harness.md §8` (sweep YAML schema), `design/B_eval-harness.md §6` (CostTracker — здесь активируется), `design/A_ahc-algorithm.md §2.1` (cache-hit target ≥ 60% — verified в E3)
+
+---
+
+## Outcomes
+
+> Что становится видимым артефактом и как это проверить (1-2 команды). Track-level —
+> для demo / acceptance gate (для пользователя / защиты). Per-phase — exit signal
+> для агента-реализатора, симметричный pre-flight gate на входе. E — execution layer,
+> Verify здесь — gating checks (pre-flight dry-run, post-run audit, cost-tracker), а
+> не unit-tests.
+
+### Track E (после E3)
+
+**Доступно:**
+- `eval/sweeps/{main_e1,ablation_e2,cache_hit_e3}.yaml` — sweep definitions, committed.
+- `benchmarks/runs/{main-sweep,ablations,cache-hit-subset}/` — per-(bench, config, seed)
+  NDJSON records (raw — в `.gitignore`), плюс committed `summary.json` + `meta.json`
+  для воспроизводимости.
+- Полный numeric backbone отчёта Track F: accuracy / tokens / cost / cache-hit split
+  по `(bench, baseline, seed)`, готовый к stat-aggregation.
+
+**Demo:** показать `summary.json` main sweep — accuracy / tokens / cost split по
+`(bench, baseline, seed)`; sweep — это и есть результат, demo = inspection summary.
+Альтернатива — re-aggregation: `pnpm tsx scripts/aggregate.ts benchmarks/runs/main-sweep/`
+re-derives `summary.json` из NDJSON (sanity-check для reviewer'а).
+
+**Acceptance gate:** §9 post-run audit checklist пройден целиком — все
+`summary.json` со `status: 'complete'`, `ErrorRecord` rate < 10% на любом
+`(bench, config)`, statistical pipeline пробрасывает main deltas, cost actual vs
+budget delta < 30%, cost-tracker circuit-breaker за run не triggered'ился.
+
+### Per-phase
+
+| Фаза | Artifact (что доступно после) | Verify (1-2 gating checks) |
+|---|---|---|
+| **E1** | `benchmarks/runs/main-sweep/` — 4 baselines × 4 benches × 2 seeds NDJSON + per-cell `summary.json`/`meta.json`; ~$120 spent | §8 pre-flight checklist PASS перед launch + §9 post-run audit PASS + `CostTracker` не halt'нул circuit-breaker |
+| **E2** | `benchmarks/runs/ablations/` — 4 AHC configs × 2 benches × 2 seeds NDJSON + summaries; ~$30 spent; ahc_full numbers в пределах stderr от E1 reference | §8 упрощённый pre-flight PASS + §9 post-run audit PASS + ahc_full sanity-cross-check с E1 |
+| **E3** | `benchmarks/runs/cache-hit-subset/` — n=10–15 tasks на Anthropic direct (Sonnet-4.6), `cache_read_input_tokens` field per turn; ~$20 spent | §8 упрощённый pre-flight PASS (dry-run: `cache_read_input_tokens > 0` на 2nd turn) + §9 post-run audit PASS |
 
 ---
 

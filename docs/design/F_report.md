@@ -11,9 +11,51 @@
 - **Track:** F (F1 structure → F2 figures + discussion → F3 polish)
 - **Wall-clock:** 5 дней
 - **Зависит от:** Track E (нужны все числа)
+- **Блокирует:** — (terminal трек, deliverable отчёта)
 - **Артефакт:** PDF + source (markdown / latex по template)
 - **Связь:** `system_design §2.3` (success criteria — что должно быть в Results),
   `system_design §6` (eval design — как описываем в Methods)
+
+---
+
+## Outcomes
+
+> Что становится видимым артефактом и как это проверить (1-2 команды). Track-level —
+> для demo / acceptance gate (для пользователя / защиты). Per-phase — exit signal
+> для агента-реализатора, симметричный TDD seed на входе. F — writing/polish трек:
+> verify — manual review checks + build commands, не tests.
+
+### Track F (после F3)
+
+**Доступно:**
+- `report/main.pdf` — финальный submission-ready PDF, 8–10 pages по NLP_Course_Template.
+- `report/main.tex` (или `.md` по выбранному template) — source отчёта.
+- `report/figures/` — все figures (PNG + PDF vector), сгенерированные deterministically
+  из NDJSON в `benchmarks/runs/` через `scripts/plots/*`.
+- `report/refs.bib` — BibTeX, `bibtex-tidy` clean.
+- Appendix A Reproducibility (§5) — repo link, verify command, sweep configs, pinned
+  models, seeds.
+- Submission tag в repo, синхронный с PDF.
+
+**Demo:** открыть `report/main.pdf` — это и есть deliverable. Build:
+`cd report && latexmk -pdf main.tex` (для latex template) или
+`pnpm run build:report` (helper, создаётся в F1 если markdown template). Figures
+regenerate: `pnpm tsx scripts/plots/<plot>.ts benchmarks/runs/<run-id>/` —
+deterministically переотрисовывает из NDJSON.
+
+**Acceptance gate:** §7 polish checklist 100% PASS (bibtex-tidy clean, page budget
+8–10 соблюдён, терминология consistent с `A_ahc-algorithm §1`); `report/main.pdf`
+builds без errors/warnings; все figures regenerate deterministically (no
+hand-edited values); submission tag pushed в repo, `./scripts/verify.sh` зелёный
+на этом tag'е.
+
+### Per-phase
+
+| Фаза | Artifact (что доступно после) | Verify (1-2 команды) |
+|---|---|---|
+| **F1** | `report/main.tex` (или `.md`) skeleton со всеми sections из §2, placeholder'ами на figures из §3, source mapping каждой section на конкретный artifact из Track E (no "TBD") | Manual review: каждая section в §2 имеет источник в Контракты-колонке F1; `grep -i "TBD\|TODO" report/main.*` пусто |
+| **F2** | Figures 1–5 из §3 сгенерированы в `report/figures/`; discussion sections (§6 talking points) заполнены реальными numbers из NDJSON | `pnpm tsx scripts/plots/pareto.ts benchmarks/runs/e1/` + аналогично для per_class/ablations/cache_hit — re-run даёт байт-идентичные PNG/PDF |
+| **F3** | `report/main.pdf` submission-ready, §7 polish checklist отмечен, submission tag в repo | `cd report && latexmk -pdf main.tex` без errors + `bibtex-tidy --check report/refs.bib` PASS + manual walk-through §7 checklist (9/9 boxes ticked) |
 
 ---
 
