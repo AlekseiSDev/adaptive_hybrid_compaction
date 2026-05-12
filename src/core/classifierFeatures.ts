@@ -1,11 +1,5 @@
-import type { ClassifierFeatures, ContentPart, Message } from './types.js'
-
-// Inline byte counter. A2 introduces shared `byteLengthOfContent` in tokenCounter.ts
-// and this implementation migrates to import from there.
-// TODO(A2): replace with `import { byteLengthOfContent } from './tokenCounter.js'`
-function defaultByteCounter(parts: readonly ContentPart[]): number {
-  return Buffer.byteLength(JSON.stringify(parts), 'utf8')
-}
+import { byteLengthOfContent } from './tokenCounter.js'
+import type { ClassifierFeatures, Message } from './types.js'
 
 const RECENT_TURNS_WINDOW = 3
 
@@ -26,14 +20,14 @@ export function computeFeatures(history: readonly Message[]): ClassifierFeatures
     if (message.metadata !== undefined) {
       if (message.metadata.turn_index > maxTurnIndex) maxTurnIndex = message.metadata.turn_index
     }
-    cumulativeBytes += defaultByteCounter(message.content)
+    cumulativeBytes += byteLengthOfContent(message.content)
     for (const part of message.content) {
       if (part.type === 'tool_use') {
         toolUsesTotal++
         const turn = message.metadata?.turn_index ?? 0
         toolUsesPerTurn.set(turn, (toolUsesPerTurn.get(turn) ?? 0) + 1)
       } else if (part.type === 'tool_result') {
-        toolResultSizes.push(defaultByteCounter([part]))
+        toolResultSizes.push(byteLengthOfContent([part]))
       } else if (part.type === 'image' || part.type === 'file') {
         multimodal = true
       }
