@@ -41,6 +41,16 @@ export {
   type TurnUsagePart,
 } from './telemetry.js'
 export { CostTracker, type ShouldHaltOpts, type ShouldHaltResult } from './cost.js'
+
+// B3 surface
+export {
+  modeClassOfTask,
+  pairedPermutation,
+  perClassBreakdown,
+  type ClassBucket,
+  type ClassStats,
+  type PairedPermutationResult,
+} from './stats.js'
 export {
   setupObservability,
   type ObservabilityHandle,
