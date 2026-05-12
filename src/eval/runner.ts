@@ -11,6 +11,7 @@ import {
 import { syntheticAdapter, syntheticGrader } from './adapters/synthetic.js'
 import { buildRunnerFromBaseline } from './baseline.js'
 import { fullContextBaseline } from './baselines/full_context.js'
+import { mastraOmBaseline } from './baselines/mastra_om.js'
 import { CostTracker } from './cost.js'
 import { createOpenRouterClient } from './llm.js'
 import { noopAhcBaseline, noopBaseline } from './runners/stub.js'
@@ -94,10 +95,24 @@ function makeFullContextRunner(): Runner {
   return buildRunnerFromBaseline(baseline)
 }
 
+function makeMastraOmRunner(): Runner {
+  const apiKey = process.env['OPENROUTER_API_KEY']
+  if (!apiKey) {
+    throw new Error(
+      'OPENROUTER_API_KEY env var is required for baseline=mastra_om (Mastra wraps OpenRouter via OpenAI-compatible config)',
+    )
+  }
+  const baseline = mastraOmBaseline({ apiKey })
+  return buildRunnerFromBaseline(baseline)
+}
+
 export const defaultRunnerRegistry: RunnerRegistry = {
   resolve: (config) => {
     if (config.baseline === 'full_context') {
       return makeFullContextRunner()
+    }
+    if (config.baseline === 'mastra_om') {
+      return makeMastraOmRunner()
     }
     const key = config.baseline ?? (config.ahc_flags ? 'noop_ahc' : null)
     if (key === null) {
