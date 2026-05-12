@@ -1,0 +1,227 @@
+import Anthropic from '@anthropic-ai/sdk'
+import type {
+  BetaCompactionBlock,
+  BetaContentBlock,
+  BetaMessage,
+  BetaMessageParam,
+  BetaTextBlockParam,
+} from '@anthropic-ai/sdk/resources/beta/messages/messages.js'
+import type { Model as AnthropicModel } from '@anthropic-ai/sdk/resources/messages/messages.js'
+import { composeTurnRecord, mapAnthropicUsage } from '../telemetry.js'
+import type {
+  Baseline,
+  CompactionEvent,
+  Instrumentation,
+  Message,
+  TurnRecord,
+} from '../types.js'
+
+// AnthropicNativeBaseline — server-side `compact_20260112` strategy on
+// `client.beta.messages`. Per docs/investigations/anthropic-compact-shape.md
+// the round-trip mechanism is BetaCompactionBlock echoed in subsequent
+// requests' `messages[]`, NOT session id as design/C_baselines.md §3
+// originally speculated.
+//
+// Vendor exception per system_design.md §6.1: this is the only non-Gemini
+// baseline because the compact_20260112 feature exists only on Anthropic.
+
+export type AnthropicCompactDeps = {
+  apiKey: string
+  model?: AnthropicModel
+  /**
+   * Trigger threshold (input tokens) for compaction. Default 4000 (low —
+   * compaction will fire on shorter convos for testability). Real sweeps may
+   * use Anthropic's default 150000.
+   */
+  triggerInputTokens?: number
+  /** Optional summarization instructions to influence compaction quality. */
+  instructions?: string
+  /** Max tokens per response. */
+  maxTokens?: number
+}
+
+const DEFAULT_MODEL: AnthropicModel = 'claude-sonnet-4-6'
+const DEFAULT_TRIGGER_INPUT_TOKENS = 4_000
+const DEFAULT_MAX_TOKENS = 1024
+
+type AnthropicScratch = {
+  model: AnthropicModel
+  compaction_blocks: BetaCompactionBlock[]
+}
+
+function extractTextContent(msg: Message): string {
+  return msg.content
+    .map((p) => (p.type === 'text' ? p.text : ''))
+    .filter((t) => t.length > 0)
+    .join('\n')
+}
+
+function coreMessageToBetaParam(msg: Message): BetaMessageParam | null {
+  if (msg.role === 'tool') return null
+  if (msg.role === 'system') return null // system goes via top-level `system` param
+  const text = extractTextContent(msg)
+  if (text.length === 0) return null
+  return {
+    role: msg.role,
+    content: [{ type: 'text', text } satisfies BetaTextBlockParam],
+  }
+}
+
+function approximateBytes(blocks: readonly BetaMessageParam[]): number {
+  let total = 0
+  for (const m of blocks) {
+    if (typeof m.content === 'string') {
+      total += m.content.length
+      continue
+    }
+    for (const block of m.content) {
+      if (block.type === 'text') total += block.text.length
+    }
+  }
+  return total
+}
+
+function extractCompactionBlocks(content: BetaContentBlock[]): BetaCompactionBlock[] {
+  return content.filter((b): b is BetaCompactionBlock => b.type === 'compaction')
+}
+
+function extractAssistantText(content: BetaContentBlock[]): string {
+  const parts: string[] = []
+  for (const block of content) {
+    if (block.type === 'text') parts.push(block.text)
+  }
+  return parts.join('\n')
+}
+
+export function anthropicCompactBaseline(deps: AnthropicCompactDeps): Baseline {
+  const client = new Anthropic({ apiKey: deps.apiKey })
+  const model: AnthropicModel = deps.model ?? DEFAULT_MODEL
+  const trigger = deps.triggerInputTokens ?? DEFAULT_TRIGGER_INPUT_TOKENS
+  const maxTokens = deps.maxTokens ?? DEFAULT_MAX_TOKENS
+
+  return {
+    name: 'anthropic_compact',
+    prepare: (task) => {
+      const scratch: AnthropicScratch = {
+        model,
+        compaction_blocks: [],
+      }
+      return {
+        task_id: task.id,
+        history: [],
+        scratch: { ...scratch },
+      }
+    },
+
+    step: async (state, userMsg, opts) => {
+      const scratchUnknown = state.scratch
+      if (!scratchUnknown) {
+        throw new Error('AnthropicCompactBaseline.step: missing scratch (call prepare first)')
+      }
+      const scratch = scratchUnknown as unknown as AnthropicScratch
+      const turn_index = state.history.filter((m) => m.role === 'user').length
+
+      // Outgoing messages = prior compaction blocks (echoed for round-trip) +
+      // history + new user msg. Compaction blocks ride as a synthetic user
+      // message at the front — Anthropic recognizes the block type.
+      const historyBeta: BetaMessageParam[] = []
+      if (scratch.compaction_blocks.length > 0) {
+        historyBeta.push({
+          role: 'user',
+          content: scratch.compaction_blocks.map((b) => ({
+            type: 'compaction' as const,
+            content: b.content,
+            encrypted_content: b.encrypted_content,
+          })),
+        })
+      }
+      for (const m of state.history) {
+        const beta = coreMessageToBetaParam(m)
+        if (beta) historyBeta.push(beta)
+      }
+      const userBeta = coreMessageToBetaParam(userMsg)
+      if (userBeta) historyBeta.push(userBeta)
+
+      const beforeBytes = approximateBytes(historyBeta)
+
+      const start = Date.now()
+      const response: BetaMessage = await client.beta.messages.create({
+        model: scratch.model,
+        max_tokens: maxTokens,
+        messages: historyBeta,
+        context_management: {
+          edits: [
+            {
+              type: 'compact_20260112' as const,
+              trigger: { type: 'input_tokens' as const, value: trigger },
+              ...(deps.instructions !== undefined ? { instructions: deps.instructions } : {}),
+            },
+          ],
+        },
+      })
+      const wall_clock_ms = Date.now() - start
+
+      const newCompactionBlocks = extractCompactionBlocks(response.content)
+      const responseText = extractAssistantText(response.content)
+      const responseMsg: Message = {
+        role: 'assistant',
+        content: [{ type: 'text', text: responseText }],
+      }
+
+      // Emit compaction_event when server-side compaction fired this turn.
+      // afterBytes ≈ size of compaction block content (the compacted summary)
+      // plus the unchanged trailing messages — approximation, sufficient for
+      // post-hoc analysis per design §3.1.
+      if (newCompactionBlocks.length > 0) {
+        const compactedContentBytes = newCompactionBlocks.reduce(
+          (sum, b) => sum + (b.content?.length ?? 0),
+          0,
+        )
+        const event: CompactionEvent = {
+          type: 'reflection',
+          turn_index,
+          before_bytes: beforeBytes,
+          after_bytes: compactedContentBytes,
+        }
+        const instrumentation: Instrumentation | undefined = opts?.instrumentation
+        if (instrumentation) {
+          instrumentation({ kind: 'compaction', payload: event })
+        }
+      }
+
+      const usagePart = mapAnthropicUsage(
+        {
+          input_tokens: response.usage.input_tokens,
+          output_tokens: response.usage.output_tokens,
+          ...(response.usage.cache_read_input_tokens !== null
+            ? { cache_read_input_tokens: response.usage.cache_read_input_tokens }
+            : {}),
+          ...(response.usage.cache_creation_input_tokens !== null
+            ? { cache_creation_input_tokens: response.usage.cache_creation_input_tokens }
+            : {}),
+        },
+        { wall_clock_ms, turn_index },
+      )
+      const telemetry: TurnRecord = composeTurnRecord(usagePart, {})
+
+      const nextScratch: AnthropicScratch = {
+        model: scratch.model,
+        compaction_blocks:
+          newCompactionBlocks.length > 0
+            ? newCompactionBlocks
+            : scratch.compaction_blocks,
+      }
+
+      return {
+        response: responseMsg,
+        state: {
+          ...state,
+          history: [...state.history, userMsg, responseMsg],
+          scratch: { ...nextScratch },
+        },
+        telemetry,
+        cost_usd: 0,
+      }
+    },
+  }
+}

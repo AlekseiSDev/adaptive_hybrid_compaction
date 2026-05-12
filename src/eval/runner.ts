@@ -10,6 +10,7 @@ import {
 } from './persist.js'
 import { syntheticAdapter, syntheticGrader } from './adapters/synthetic.js'
 import { buildRunnerFromBaseline } from './baseline.js'
+import { anthropicCompactBaseline } from './baselines/anthropic_compact.js'
 import { fullContextBaseline } from './baselines/full_context.js'
 import { mastraOmBaseline } from './baselines/mastra_om.js'
 import { CostTracker } from './cost.js'
@@ -106,6 +107,17 @@ function makeMastraOmRunner(): Runner {
   return buildRunnerFromBaseline(baseline)
 }
 
+function makeAnthropicCompactRunner(): Runner {
+  const apiKey = process.env['ANTHROPIC_API_KEY']
+  if (!apiKey) {
+    throw new Error(
+      'ANTHROPIC_API_KEY env var is required for baseline=anthropic_compact (vendor exception — server-side compact_20260112 lives only on Anthropic; see decisions.md 2026-05-13)',
+    )
+  }
+  const baseline = anthropicCompactBaseline({ apiKey })
+  return buildRunnerFromBaseline(baseline)
+}
+
 export const defaultRunnerRegistry: RunnerRegistry = {
   resolve: (config) => {
     if (config.baseline === 'full_context') {
@@ -113,6 +125,9 @@ export const defaultRunnerRegistry: RunnerRegistry = {
     }
     if (config.baseline === 'mastra_om') {
       return makeMastraOmRunner()
+    }
+    if (config.baseline === 'anthropic_compact') {
+      return makeAnthropicCompactRunner()
     }
     const key = config.baseline ?? (config.ahc_flags ? 'noop_ahc' : null)
     if (key === null) {
