@@ -3,7 +3,7 @@ import { defaultFeatureFlags, type FeatureFlags } from './featureFlags.js'
 import * as core from './index.js'
 
 describe('FeatureFlags defaults', () => {
-  test('defaultFeatureFlags exposes all 8 flags as false', () => {
+  test('defaultFeatureFlags exposes all 8 flags with REFLECTION=true (§8 spec)', () => {
     const expectedKeys: readonly (keyof FeatureFlags)[] = [
       'TASK_AWARE_EXTRACTION',
       'TYPE_AWARE_OFFLOAD',
@@ -16,7 +16,11 @@ describe('FeatureFlags defaults', () => {
     ]
     const keys = Object.keys(defaultFeatureFlags).sort()
     expect(keys).toEqual([...expectedKeys].sort())
-    expect(Object.values(defaultFeatureFlags).every((v) => !v)).toBe(true)
+    expect(defaultFeatureFlags.REFLECTION).toBe(true)
+    const otherFlagsAllFalse = expectedKeys
+      .filter((k) => k !== 'REFLECTION')
+      .every((k) => !defaultFeatureFlags[k])
+    expect(otherFlagsAllFalse).toBe(true)
   })
 
   test('defaults accessible from core index re-export', () => {

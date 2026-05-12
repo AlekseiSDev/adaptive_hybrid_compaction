@@ -16,6 +16,6 @@ export const defaultFeatureFlags: FeatureFlags = {
   ASYNC_OBSERVER: false,
   RECALL_TOOL: false,
   SCHEMA_AWARE_DIGEST: false,
-  REFLECTION: false,
+  REFLECTION: true,
   CALIBRATION_AUTO: false,
 }

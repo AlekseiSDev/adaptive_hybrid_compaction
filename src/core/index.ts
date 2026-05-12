@@ -40,6 +40,28 @@ export {
 } from './observer.js'
 export { OBSERVER_PROMPT_TEMPLATE, parseObservations } from './observerPrompt.js'
 export type {
+  ClassifierSignalEvent,
+  CompactionEvent,
+  CompactionEventType,
+  CoreEvent,
+  EventEmitter,
+  RecallEvent,
+} from './events.js'
+export { compact, type CompactDeps, type CompactInput, type CompactResult } from './compact.js'
+export { assembleContext, renderObservationsAsNote } from './assembleContext.js'
+export {
+  AsyncBuffer,
+  type PreparedCompaction,
+  type PreCompactDeps,
+} from './asyncBuffer.js'
+export {
+  reflect,
+  type ReflectDeps,
+  type ReflectionReason,
+  type ReflectionResult,
+} from './reflection.js'
+export { REFLECTOR_PROMPT_TEMPLATE } from './reflectorPrompt.js'
+export type {
   AtomicGroup,
   ClassifierFeatures,
   CompactionContext,

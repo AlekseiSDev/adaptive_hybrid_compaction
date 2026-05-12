@@ -3,15 +3,17 @@
 // uses canonical (sorted-key) JSON so JS property insertion order does not affect
 // the byte stream — the same logical Tier-1 / Tier-2 produces identical bytes
 // regardless of how it was constructed.
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test, vi } from 'vitest'
+import { compact } from './compact.js'
 import { compactWithOffload } from './offloader.js'
 import { createInMemoryScratchpad } from './scratchpad.js'
 import { defaultFeatureFlags } from './featureFlags.js'
 import { defaultThresholds } from './thresholds.js'
 import { serializeForCache } from './serializeForCache.js'
 import { tierize } from './tiers.js'
-import { byteLengthOfContent } from './tokenCounter.js'
-import type { AtomicGroup, Message } from './types.js'
+import { byteLengthOfContent, charsOver4TokenCounter } from './tokenCounter.js'
+import type { LLMCaller } from './llm.js'
+import type { AtomicGroup, Message, Observation, Tier2 } from './types.js'
 
 const sysMsg: Message = { role: 'system', content: [{ type: 'text', text: 'be helpful' }] }
 const userMsg = (s: string, turn: number): Message => ({
@@ -92,5 +94,80 @@ describe('Cache invariance (§9.1) — bytewise via serializeForCache', () => {
     const tier2Marker = baselineText.indexOf('"tier2":')
     expect(tier2Marker).toBeGreaterThan(0)
     expect(afterText.slice(0, tier2Marker)).toBe(baselineText.slice(0, tier2Marker))
+  })
+
+  test('within-epoch (no reflection): two consecutive compact() runs preserve Tier-1 prefix bytewise', async () => {
+    const { tier1, tier2, tier3 } = tierize(baseHistory)
+    const scratchpad = createInMemoryScratchpad<AtomicGroup>()
+    const turnA = await compact({
+      tier1,
+      tier2,
+      tier3,
+      scratchpad,
+      flags: defaultFeatureFlags, // REFLECTION=true by default but tier2 is tiny
+      configuredClass: 'mixed',
+      thresholds: defaultThresholds,
+      deps: { byteCounter: byteLengthOfContent, tokenCounter: charsOver4TokenCounter },
+    })
+    const turnB = await compact({
+      tier1: turnA.newTier1,
+      tier2: turnA.newTier2,
+      tier3: turnA.newTier3,
+      scratchpad,
+      flags: defaultFeatureFlags,
+      configuredClass: 'mixed',
+      thresholds: defaultThresholds,
+      deps: { byteCounter: byteLengthOfContent, tokenCounter: charsOver4TokenCounter },
+    })
+    const bytesA = serializeForCache({ tier1: turnA.newTier1, tier2: turnA.newTier2 })
+    const bytesB = serializeForCache({ tier1: turnB.newTier1, tier2: turnB.newTier2 })
+    const textA = bytesA.toString('utf8')
+    const tier2Marker = textA.indexOf('"tier2":')
+    expect(tier2Marker).toBeGreaterThan(0)
+    expect(bytesB.toString('utf8').slice(0, tier2Marker)).toBe(textA.slice(0, tier2Marker))
+    // Reflection should NOT have fired
+    expect(
+      turnA.events
+        .concat(turnB.events)
+        .some((e) => e.kind === 'compaction' && e.type === 'reflection'),
+    ).toBe(false)
+  })
+
+  test('across-reflection: forced reflection emits exactly one reflection event', async () => {
+    // Force reflection via tiny REFLECTION_THRESHOLD so any non-empty Tier-2 trips it.
+    const lowReflectionThresholds = { ...defaultThresholds, REFLECTION_THRESHOLD: 1 }
+    const oneObs: Observation = {
+      timestamp: 1700000000,
+      confidence: 'high',
+      statement: 'pre-existing observation',
+      sourceTurn: 0,
+    }
+    const tier2WithObs: Tier2 = {
+      observations: [oneObs],
+      pointers: [],
+      classSignal: { class: 'mixed', confidence: 0, updatedAt: 0 },
+    }
+    const { tier1, tier3 } = tierize(baseHistory)
+    const llmCaller = vi.fn<LLMCaller>().mockResolvedValue({
+      text: '- 1700000000 (high) reflected: one consolidated fact',
+    })
+    const result = await compact({
+      tier1,
+      tier2: tier2WithObs,
+      tier3,
+      scratchpad: createInMemoryScratchpad<AtomicGroup>(),
+      flags: defaultFeatureFlags, // REFLECTION=true by default
+      configuredClass: 'mixed',
+      thresholds: lowReflectionThresholds,
+      deps: {
+        byteCounter: byteLengthOfContent,
+        tokenCounter: charsOver4TokenCounter,
+        llmCaller,
+      },
+    })
+    const reflectionEvents = result.events.filter(
+      (e) => e.kind === 'compaction' && e.type === 'reflection',
+    )
+    expect(reflectionEvents).toHaveLength(1)
   })
 })
