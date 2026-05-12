@@ -52,7 +52,7 @@ report/                             # final PDF (F)
 | `docs/design/<track>.md` | Track-level design (B eval-harness / C baselines / D assistant-traj / E main-runs / F report) — перед фазой соответствующего трека |
 | `docs/decisions.md` | Перед предложением альтернативы существующему паттерну |
 | `docs/agent-pitfalls.md` | Если файл есть — читай при работе в упомянутых зонах |
-| `docs/implementation/<phase>.md` | При работе над конкретной фазой; создаётся по шаблону перед стартом фазы |
+| `docs/templates/track_design_template.md` | Если заводится **новый** трек / долгая инициатива, у которой ещё нет `design/<X>.md` — скаффолд по этому шаблону (гибрид system_design framing + design doc детализации). |
 
 ## Operating Model: 4-step pipeline
 
@@ -63,18 +63,24 @@ report/                             # final PDF (F)
 
 Изменения scope обновляют эти доки **в той же ветке**, что и код, нарушающий старую спеку.
 
-### 1. Implementation plan — перед каждой фазой
+### 1. Перед стартом фазы
 
-Перед стартом фазы (A1, A2, B1, …):
+Pre-work агента перед стартом фазы (A1, A2, B1, …):
 
 1. Прочитай относящуюся секцию `system_design.md §7.2` и relevant
    `docs/design/<track>.md` (A_ahc-algorithm для A, B_eval-harness для B, …).
 2. Прочитай `decisions.md` — не противоречь принятым решениям.
 3. Изучи код в затронутых директориях (ls, grep, прочитай ключевые файлы).
 4. Запусти существующие тесты — baseline должен быть зелёным.
-5. Создай `docs/implementation/<phase>.md` по `docs/templates/implementation_template.md`:
-   scope, step plan, exit criteria, **TDD hook на каждый шаг**, verification.
-6. Покажи план человеку. Дождись подтверждения. Не пиши код раньше.
+
+Дальше план фазы приходит из `/plan-mode` (триггерит пользователь). План содержит:
+scope, step plan с TDD seed на каждый шаг, exit criteria, verification — структуру
+см. в `Phase map` соответствующего `design/<track>.md`. Агент валидирует план против
+шагов 1-2 (spec + decisions) перед началом кодинга. Дождись подтверждения плана.
+Не пиши код раньше.
+
+Если инициатива новая и `design/<track>.md` для неё нет — заскаффолди design doc
+по `docs/templates/track_design_template.md` одним PR с system_design scope row.
 
 Если корень проблемы или подход неясен — сначала investigation
 (`docs/templates/investigation_template.md`), потом план.
@@ -87,11 +93,11 @@ report/                             # final PDF (F)
 Red       → failing test, описывающий желаемое поведение или инвариант
 Green     → минимальный код, чтобы тест прошёл
 Refactor  → чистка без изменения поведения; все тесты остаются зелёными
-Verify    → ./scripts/verify.sh; результат — в implementation/<phase>.md
+Verify    → ./scripts/verify.sh; final-phase результат — в commit message
 ```
 
 **Не пиши код раньше теста.** Если тест не получается сформулировать — требование
-не сформулировано; возвращаемся в implementation doc.
+не сформулировано; возвращаемся к плану из `/plan-mode`.
 
 При баг-фиксе — сначала failing test, который воспроизводит баг.
 
@@ -100,8 +106,9 @@ telemetry без бизнес-логики.
 
 ### 3. Verification
 
-После каждого нетривиального шага — `./scripts/verify.sh`. Результат записывается в
-implementation doc (раздел Verification). Если check не запускался — фиксируй gap явно.
+После каждого нетривиального шага — `./scripts/verify.sh`. Финальный результат фазы
+фиксируется в commit message (что прогнал, что зелёное). Если check не запускался —
+фиксируй gap явно в commit message.
 
 ## Code Style
 
@@ -135,8 +142,9 @@ implementation doc (раздел Verification). Если check не запуск
 - **Поиск/research >3 запросов по репо или `docs/`** — делегируй `Explore`-сабагенту.
   Не засоряй parent context сырым `grep`/`find` (особенно по `system_design.md`,
   `A_ahc-algorithm.md`, `decisions.md` — они длинные).
-- **Long-running планирование фазы или нетривиальной задачи** — `Plan`-сабагент, результат
-  фиксируется в `docs/implementation/<phase>.md` через шаблон.
+- **Long-running планирование фазы или нетривиальной задачи** — `Plan`-сабагент или
+  `/plan-mode` (триггерит пользователь); результат автосохраняется в `~/.claude/plans/*.md`
+  и виден между сессиями.
 - Sub-agent получает структурированный prompt с конкретным вопросом и нужными ссылками —
   не parent context целиком.
 - Custom multi-agent harness (planner/coder/evaluator поверх AHC) **не строим** — встроенных

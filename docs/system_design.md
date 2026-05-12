@@ -587,7 +587,7 @@ adaptive_hybrid_compaction/
 │   ├── index.md, system_design.md, decisions.md
 │   ├── ai-native-practices.md (historical), agent-pitfalls.md (lazy)
 │   ├── design/<X>_<track>.md                             # A_..G_ track-level design
-│   ├── implementation/<phase>.md                         # per-phase plan + progress (A1, A2, B1, …)
+│   ├── implementation/<phase>.md                         # historical (A1, A2, A4); новые не создаём — план фазы живёт в /plan-mode
 │   ├── investigations/<topic>.md                         # root-cause analyses (lazy)
 │   └── templates/                                        # implementation, investigation
 ├── src/
