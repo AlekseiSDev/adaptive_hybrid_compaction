@@ -31,7 +31,7 @@
 |---|---|---|
 | 1. Introduction | ~0.5 page | `system_design §1.1, 1.2, 1.4`; framing problem + contribution |
 | 2. Related Work | ~1 page | Mem0/Letta/Zep (cited from existing paper.pdf), LLMLingua, Mastra OM, native compact, codex#14589 |
-| 3. Model Description | ~1.5 page | `ahc-algorithm.md` — 3-tier, classifier, observer, offloader. Includes block diagram (figure 1) |
+| 3. Model Description | ~1.5 page | `A_ahc-algorithm.md` — 3-tier, classifier, observer, offloader. Includes block diagram (figure 1) |
 | 4. Dataset | ~1 page | `system_design §6.2, 6.3` — 4 benches + AssistantTraj construction details |
 | 5. Experiments / Setup | ~0.5 page | `system_design §6.1, 6.4, 6.5` — provider, metrics, baselines |
 | 6. Results | ~2 pages | Main table + Pareto plots + per-class breakdown + ablation grid |
@@ -124,7 +124,7 @@ A. Reproducibility
 - [ ] All numbers в таблицах consistent с NDJSON (spot check 5% manually)
 - [ ] No "TODO" / "TBD" / placeholder в final text
 - [ ] refs.bib проверен (нет broken cites, `bibtex-tidy` PASS)
-- [ ] Терминология consistent (см. `ahc-algorithm.md §1` / `system_design §1.1`)
+- [ ] Терминология consistent (см. `A_ahc-algorithm.md §1` / `system_design §1.1`)
 - [ ] Abstract фиксирует main contribution + headline numbers
 - [ ] Code в repo open-able (README с quick start, license note)
 - [ ] Negative results disclosed где applicable

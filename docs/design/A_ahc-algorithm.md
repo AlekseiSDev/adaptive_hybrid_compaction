@@ -214,7 +214,7 @@ type Thresholds = {
 ```
 
 `ToolDefinition` и `ToolResultPayload` форматы — определяются адаптером (AI SDK v6
-shape для primary integration; см. `docs/design/eval-harness.md` для baseline-wrappers).
+shape для primary integration; см. `docs/design/B_eval-harness.md` для baseline-wrappers).
 Core не делает предположений о их структуре.
 
 ---

@@ -12,8 +12,8 @@
 - **Wall-clock:** 4 дня
 - **Зависит от:** существующий harness в `mle/results/` paper'a (B1 — port)
 - **Блокирует:** Track E (main runs)
-- **Связь:** `system_design §6` (metrics + benchmarks), `design/baselines.md`
-  (baseline integration), `design/assistant-traj.md` (AssistantTraj adapter)
+- **Связь:** `system_design §6` (metrics + benchmarks), `design/C_baselines.md`
+  (baseline integration), `design/D_assistant-traj.md` (AssistantTraj adapter)
 
 ---
 
@@ -28,8 +28,8 @@
   - Configuration matrix / sweep definitions
 - **Out**:
   - Bench-specific task loading (живёт в `src/eval/adapters/<bench>.ts`)
-  - Baseline implementations (см. `design/baselines.md`)
-  - AssistantTraj task construction (см. `design/assistant-traj.md`)
+  - Baseline implementations (см. `design/C_baselines.md`)
+  - AssistantTraj task construction (см. `design/D_assistant-traj.md`)
 
 ---
 
@@ -119,6 +119,13 @@ type ErrorRecord = {
 }
 ```
 
+**Token usage source**: provider response headers (OpenRouter `usage.{prompt_tokens,
+completion_tokens}` для main actor Gemini-3.1-Flash; Anthropic direct `usage.{input_tokens,
+output_tokens,cache_read_input_tokens}` для cache-hit subset E3). Не используем offline
+tokenizer (`@anthropic-ai/tokenizer` или аналоги) — для не-Anthropic моделей они дают
+wrong numbers. NDJSON хранит provider-reported counts как authoritative; Langfuse (см. §9)
+consume'ит тот же event stream через OpenTelemetry adapter, не считает токены сам.
+
 ---
 
 ## 4. Persistence
@@ -135,7 +142,7 @@ benchmarks/runs/
 
 NDJSON выбран, чтобы append'ить безопасно во время run и parse'ить post-hoc tooling'ом
 без load-all-in-memory. `config_id` стабилен (deterministic hash), повторный run тех же
-params пишет в ту же папку → replication явный, resume тривиальный (см. `design/main-runs.md §6`).
+params пишет в ту же папку → replication явный, resume тривиальный (см. `design/E_main-runs.md §6`).
 
 ---
 
@@ -233,14 +240,83 @@ budget_usd: 120
 - `ablation_e2` — 4 AHC configs × 2 benches × 2 seeds (E2)
 - `cache_hit_e3` — Anthropic direct API subset, 10–15 tasks (E3)
 
-Детали orchestration — `design/main-runs.md`.
+Детали orchestration — `design/E_main-runs.md`.
+
+---
+
+## 9. Observability — Langfuse integration
+
+Цель: real-time inspection AHC во время development и eval runs. Self-hosted Langfuse,
+opt-in (runs работают без observability, если она не поднята). Встроено в Track B
+как часть B2, не отдельный трек.
+
+### 9.1 Stack
+
+```
+docker-compose.yml
+  langfuse-web   # UI на :3001
+  langfuse-pg    # internal storage; не пересекается с runtime AHC / Mastra
+```
+
+Запускается отдельной командой: `docker-compose up langfuse -d`. Не required для
+`verify.sh` или runs — но рекомендуется во время A2–A6 development и при interactive
+debug Track G UI.
+
+### 9.2 Telemetry export
+
+AI SDK v6 имеет встроенный OpenTelemetry support; конфигурируем экспорт к Langfuse
+OTLP endpoint:
+
+```typescript
+import { LangfuseExporter } from 'langfuse-vercel'   // verify package at B2 start
+
+const tracer = new OpenTelemetryTracer({
+  exporters: [new LangfuseExporter({ host: 'http://localhost:3001' })],
+})
+```
+
+Core AHC дополнительно эмитит custom events через `instrumentation` callback
+(см. §3 telemetry schema):
+- `compaction_event` (observer / offload / reflection) с before/after bytes
+- `classifier_signal` (class, confidence, features snapshot)
+- `recall_event` (recall_id, reason)
+
+Эти events попадают в Langfuse как span attributes, видимые в trace view.
+
+### 9.3 Run-time enable / disable
+
+ENV var `LANGFUSE_ENABLED` (default `false`). Если `false` — exporter не подключается,
+no-op, нулевой overhead. Это важно для CI runs и для main sweep'ов (E1/E2), где не
+хотим side traffic.
+
+### 9.4 Dashboard config
+
+Pre-built dashboard конфиг в `observability/langfuse-dashboard.json` (export via
+Langfuse UI после initial setup). Tracks:
+- Token usage per turn (input / output / cache_read)
+- Compaction event frequency
+- Classifier class distribution over time
+- Recall tool usage rate
+
+### 9.5 Failure modes
+
+| Failure | Mitigation |
+|---|---|
+| Langfuse недоступен (down / network) | Exporter timeouts, НЕ блокирует run. Logged as warning. |
+| Очень большой trace (long traj) | Sampling: 100% для dev, 10% для production runs |
+| Schema mismatch (Langfuse upgrade) | Pin docker image tag; upgrade — separate investigation |
+
+### 9.6 Связь с Track G
+
+Track G UI consume'ит ту же telemetry, что и eval harness — единый поток событий из
+`core/`. UI отображает их inline (sidebar); Langfuse — для post-hoc analysis. Один
+источник, два consumer'а.
 
 ---
 
 ## Open questions
 
-1. Token counter source: `@anthropic-ai/tokenizer` или request usage headers? Решение — B2.
-2. Judge cache (для AssistantTraj LLM-judge) — persist на диск или re-run каждый раз?
+1. Judge cache (для AssistantTraj LLM-judge) — persist на диск или re-run каждый раз?
    Решение — D4 после первых 10 judge runs (зависит от стабильности judge output'a).
-3. Concurrent run safety — file locks на NDJSON append'ы или single-writer assumption?
+2. Concurrent run safety — file locks на NDJSON append'ы или single-writer assumption?
    Default — single-writer; if E1/E2 параллельно → revisit.

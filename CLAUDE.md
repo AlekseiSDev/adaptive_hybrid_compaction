@@ -23,21 +23,18 @@
 |---|---|
 | `docs/index.md` | При сомнении куда смотреть |
 | `docs/system_design.md` | Перед любой нетривиальной задачей — цели, scope, phase plan, eval-protocol, принятые решения |
-| `docs/ahc-algorithm.md` | Track A design — перед работой в `src/core/`; 3-tier shape, classifier, offloader, observer, public types (§2.4), инварианты (§9 cache invariance, §2.3/§5.1 atomic groups, §5.4/§6.1 pointer roundtrip) |
+| `docs/design/A_ahc-algorithm.md` | Track A design — перед работой в `src/core/`; 3-tier shape, classifier, offloader, observer, public types (§2.4), инварианты (§9 cache invariance, §2.3/§5.1 atomic groups, §5.4/§6.1 pointer roundtrip) |
 | `docs/design/<track>.md` | Track-level design (B eval-harness / C baselines / D assistant-traj / E main-runs / F report) — перед фазой соответствующего трека |
-| `docs/ai-native-practices.md` | При сомнении в процессе или конвенции; описывает pipeline и harness-дисциплину |
 | `docs/decisions.md` | Перед предложением альтернативы существующему паттерну |
 | `docs/agent-pitfalls.md` | Если файл есть — читай при работе в упомянутых зонах |
 | `docs/implementation/<phase>.md` | При работе над конкретной фазой; создаётся по шаблону перед стартом фазы |
 
 ## Operating Model: 4-step pipeline
 
-Берём из manifesto-подхода, см. `docs/ai-native-practices.md §2`.
-
 ### 0. Research / Spec — уже зафиксированы
 
 - `system_design.md` — что строим, цели, eval-protocol, phase plan.
-- `ahc-algorithm.md` — алгоритмическое ядро.
+- `A_ahc-algorithm.md` — алгоритмическое ядро.
 
 Изменения scope обновляют эти доки **в той же ветке**, что и код, нарушающий старую спеку.
 
@@ -45,8 +42,8 @@
 
 Перед стартом фазы (A1, A2, B1, …):
 
-1. Прочитай относящуюся секцию `system_design.md §7.2` и track-level design:
-   `ahc-algorithm.md` для Track A; `docs/design/<track>.md` для B/C/D/E/F.
+1. Прочитай относящуюся секцию `system_design.md §7.2` и relevant
+   `docs/design/<track>.md` (A_ahc-algorithm для A, B_eval-harness для B, …).
 2. Прочитай `decisions.md` — не противоречь принятым решениям.
 3. Изучи код в затронутых директориях (ls, grep, прочитай ключевые файлы).
 4. Запусти существующие тесты — baseline должен быть зелёным.
@@ -112,7 +109,7 @@ implementation doc (раздел Verification). Если check не запуск
 
 - **Поиск/research >3 запросов по репо или `docs/`** — делегируй `Explore`-сабагенту.
   Не засоряй parent context сырым `grep`/`find` (особенно по `system_design.md`,
-  `ahc-algorithm.md`, `decisions.md` — они длинные).
+  `A_ahc-algorithm.md`, `decisions.md` — они длинные).
 - **Long-running планирование фазы или нетривиальной задачи** — `Plan`-сабагент, результат
   фиксируется в `docs/implementation/<phase>.md` через шаблон.
 - Sub-agent получает структурированный prompt с конкретным вопросом и нужными ссылками —
@@ -140,7 +137,7 @@ implementation doc (раздел Verification). Если check не запуск
 - **Не дублируй существующий helper / соглашение.** Перед созданием нового модуля или
   helper'а — grep по существующему коду, результаты приложи в plan.
 - **Не пиши код раньше теста на core-логике.** См. TDD discipline выше.
-- **Не правь `system_design.md` или `ahc-algorithm.md` молча.** Если scope или инвариант
+- **Не правь `system_design.md` или `A_ahc-algorithm.md` молча.** Если scope или инвариант
   меняется — отдельный коммит с обоснованием, обновляем доку одновременно с кодом.
 - **Не добавляй фичи "на всякий случай".** MVP scope короткий; всё, что не в
   `system_design.md §7`, требует обоснования.

@@ -9,7 +9,7 @@
 
 - **Track:** C (C1 Mastra OM → C2 Anthropic native → C3 Full context)
 - **Wall-clock:** 3.5 дня
-- **Зависит от:** B1 (harness baseline), `design/eval-harness.md` (RunRecord shape)
+- **Зависит от:** B1 (harness baseline), `design/B_eval-harness.md` (RunRecord shape)
 - **Блокирует:** Track E (нужны все 3 для sweep E1)
 - **Связь:** `system_design §6.5` (baseline list + rationale)
 
@@ -36,9 +36,9 @@ type BaselineState = {
 }
 ```
 
-`Conversation` и `Message` — из `core/types.ts` (см. `ahc-algorithm.md §2.4`).
+`Conversation` и `Message` — из `core/types.ts` (см. `A_ahc-algorithm.md §2.4`).
 Baseline владеет собственным state — harness вызывает `step` per turn, агрегирует
-`TurnRecord`'ы в `RunRecord` через telemetry pipeline (см. `design/eval-harness.md §2`).
+`TurnRecord`'ы в `RunRecord` через telemetry pipeline (см. `design/B_eval-harness.md §2`).
 
 ---
 
@@ -204,7 +204,7 @@ Wall-clock: 2 дня.
 Harness sees все три через `Baseline` interface. AHC оборачивается аналогично, но
 живёт в `src/adapters/ai-sdk-v6.ts` и подключается через ту же contract pattern.
 
-`config_id` (см. `design/eval-harness.md §4`) для baselines:
+`config_id` (см. `design/B_eval-harness.md §4`) для baselines:
 - `full_context__gemini-3.1-flash`
 - `anthropic_compact__sonnet-4-6`
 - `mastra_om__gemini-3.1-flash__pg__v6.x.y`

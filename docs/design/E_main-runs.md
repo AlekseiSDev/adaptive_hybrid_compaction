@@ -1,7 +1,7 @@
 # Track E Design — Main Runs (Sweeps + Ablations)
 
 > Track-level design для финальных экспериментов: main sweep, ablations, cache-hit subset.
-> Phase plan — `system_design §7.2 Track E`. Тонкий слой над `design/eval-harness.md`:
+> Phase plan — `system_design §7.2 Track E`. Тонкий слой над `design/B_eval-harness.md`:
 > orchestration, cost management, replication, failure recovery, pre-flight checklists.
 
 ---
@@ -21,7 +21,7 @@
 - **In**: run orchestration, sweep execution policy, cost monitoring, replication,
   failure recovery, cache-hit subset на Anthropic direct API.
 - **Out**: harness implementation (Track B), baseline impl (Track C), статистика
-  (живёт в `eval/stats.ts`, см. `design/eval-harness.md §5`).
+  (живёт в `eval/stats.ts`, см. `design/B_eval-harness.md §5`).
 
 ---
 
@@ -63,7 +63,7 @@ Anthropic direct API (E3) — rate-limit более strict, concurrency 2.
 
 ## 4. Cost tracking
 
-`CostTracker` (см. `design/eval-harness.md §6`) запускается на каждом sweep'е.
+`CostTracker` (см. `design/B_eval-harness.md §6`) запускается на каждом sweep'е.
 Дополнительно для Track E:
 
 ```typescript
@@ -102,7 +102,7 @@ Final results — mean ± stderr across seeds. Statsig — paired permutation p 
 
 ## 6. Failure recovery
 
-NDJSON persistence (см. `design/eval-harness.md §4`) делает resume тривиальным:
+NDJSON persistence (см. `design/B_eval-harness.md §4`) делает resume тривиальным:
 
 ```bash
 $ npm run sweep -- --plan main_e1 --resume
