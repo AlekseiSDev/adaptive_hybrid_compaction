@@ -11,7 +11,9 @@
   (Gemini-3.1-Flash main actor; GPT-5.4 LLM-judge; Anthropic direct для cache-rate subset).
 - **Scope:** учебный MVP курса NLP, ~4 недели wall-clock. Не production-SDK.
 - **Primary Verification Command:** `./scripts/verify.sh` (typecheck + lint + unit + cache-invariance).
-  Создаётся в Track A1.
+  Создаётся в Track A1. Внутри скрипта закладываем pinpoint sub-commands (`typecheck-only`,
+  `lint-only`, `test:unit`, `test:cache-invariance`) — полный verify перед коммитом, узкие
+  команды для быстрого цикла во время разработки.
 
 ## Documentation Routing
 
@@ -100,6 +102,21 @@ implementation doc (раздел Verification). Если check не запуск
 
 Перед добавлением — прочитай файл, не дублируй уже зафиксированное. Существующий список
 решений в `system_design.md §8` — historical; новые идут в `decisions.md`.
+
+## Sub-agents
+
+Встроенные сабагенты Claude Code как **context firewall**: parent держит план, child
+возвращает только структурированный результат.
+
+- **Поиск/research >3 запросов по репо или `docs/`** — делегируй `Explore`-сабагенту.
+  Не засоряй parent context сырым `grep`/`find` (особенно по `system_design.md`,
+  `ahc-algorithm.md`, `decisions.md` — они длинные).
+- **Long-running планирование фазы или нетривиальной задачи** — `Plan`-сабагент, результат
+  фиксируется в `docs/implementation/<phase>.md` через шаблон.
+- Sub-agent получает структурированный prompt с конкретным вопросом и нужными ссылками —
+  не parent context целиком.
+- Custom multi-agent harness (planner/coder/evaluator поверх AHC) **не строим** — встроенных
+  Explore/Plan хватает на MVP scope.
 
 ## Harness Rules
 
