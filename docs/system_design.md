@@ -338,8 +338,21 @@ numbers процитированы; повторно интегрировать 
   reflector LLM prompt. Async-aware tests.
 
 - **A6. AI SDK v6 middleware adapter (2 дня).** Обёртка core логики в
-  `LanguageModelV2Middleware`-совместимый API, интеграция с AI SDK v6 custom tools API,
-  e2e test с toy агентом.
+  `LanguageModelV2Middleware`-совместимый API. **Surface** (предположительный, требует
+  верификации в день старта против актуального v6 release notes):
+  - Hook `transformParams` — точка интеграции; core.compact(messages, ctx) возвращает
+    modified messages-array до отправки в provider.
+  - Recall Tool инжектируется через extension `tools` массива в `transformParams`,
+    когда `scratchpad.size() > 0`. Tool definition стабильна → не ломает cache prefix.
+  - `wrapStream` пропускает stream без модификации — compaction уже сработала до stream.
+  - Scratchpad живёт в closure адаптера, persistent across calls в рамках одной session;
+    session boundary определяется вызывающим (AI SDK v6 Agent class).
+  - Tool_use_id tracking — атомарные группы строятся по этим id, как в §5.1 algorithm doc.
+
+  **Investigation prerequisite**: перед A6 — короткая investigation
+  (`docs/investigations/ai-sdk-v6-surface.md`), проверяющая что v6 stable expose'ит эти
+  hooks в ожидаемой форме; если surface поменялся, ревизим scope A6 до фактической интеграции.
+  E2e test с toy агентом + custom tool — exit criterion.
 
 **Track B — Eval harness**
 
@@ -447,6 +460,8 @@ Wall-clock ~4 недели при 2–3 часах работы в день с C
 | AI SDK v6 ещё стабилизируется | Закрепить версию в package.json; не использовать experimental APIs |
 | Cache hit замер vendor-specific | Документировать как Anthropic-specific; не делать сильных vendor-portable claims |
 | Reflection cache invalidation на long traj | Замерить как часто триггерится; если > 1 раз на 15-turn traj — пересмотреть threshold |
+| Cost overrun в E1/E2 — runaway $/task | Circuit-breaker в eval harness: если рост cumulative $ за первые 20 задач × 4 = projected > 1.5× budget, halt и revisit. Aggregated cost в telemetry (см. `design/eval-harness.md`). |
+| AI SDK v6 stable surface ≠ ожидаемому в A6 | Investigation `docs/investigations/ai-sdk-v6-surface.md` перед A6; если ломается — реврайт scope A6, остальные Track A фазы не блокированы (core framework-agnostic) |
 
 ### 9.1 Open questions (требуют решения по ходу)
 

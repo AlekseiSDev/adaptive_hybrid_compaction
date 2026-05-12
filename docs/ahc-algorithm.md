@@ -94,6 +94,129 @@ input: history (Tier1 + Tier2 + Tier3 + new_user_msg)
 | Async Buffer | Tier-3 | заранее prepared observations | Background, между turns |
 | Reflection Layer | Tier-2 entire log | переписанный Tier-2 | Редко (когда Tier-2 > 40K tokens) |
 
+### 2.4 Public types (cross-module contracts)
+
+Канонические типы, на которые опираются core-модули. Реализуются в `src/core/types.ts`
+и re-export'ятся через `src/core/index.ts`. Это **контракт**: изменение полей —
+breaking change, требует обновления зависимых модулей и записи в `decisions.md`.
+
+```typescript
+// Message — мульти-modal формат, совместимый с AI SDK v6 message shape.
+// Сохраняем provider-neutral; convertion в Anthropic/OpenAI делается в адаптерах.
+type Role = 'system' | 'user' | 'assistant' | 'tool'
+
+type ContentPart =
+  | { type: 'text'; text: string }
+  | { type: 'image'; mimeType: string; data: string }       // base64 or URL ref
+  | { type: 'file'; mimeType: string; data: string }
+  | { type: 'tool_use'; tool_use_id: string; name: string; input: unknown }
+  | { type: 'tool_result'; tool_use_id: string; output: unknown; isError?: boolean }
+
+type Message = {
+  role: Role
+  content: ContentPart[]
+  metadata?: {
+    turn_index: number
+    step_index: number
+    is_offloaded_pointer?: boolean   // marks pointer-placeholder messages
+  }
+}
+
+// Tiers — slice'ы одной conversation. Не отдельные массивы в runtime,
+// а pointer-based views поверх единого журнала (см. §3.1 system_design).
+type Tier1 = {
+  systemPrompt: Message
+  toolDefinitions: ToolDefinition[]
+  firstUserMessages: Message[]    // N=1 default
+}
+
+type Tier2 = {
+  observations: Observation[]      // append-only log entries
+  pointers: PointerPlaceholder[]   // offloaded tool_result placeholders
+  classSignal: { class: TrajectoryClass; confidence: number; updatedAt: number }
+}
+
+type Tier3 = {
+  recent: Message[]                // последние K turns (K=6 default)
+  inflight: AtomicGroup[]          // незавершённые tool_use/tool_result пары
+}
+
+// AtomicGroup — см. §5.1; здесь — формальный тип.
+type AtomicGroup = {
+  group_id: string                 // hash(tool_use_id + turn_index)
+  tool_use: Message
+  tool_result: Message
+  reasoning_chunk?: Message
+  turn_index: number
+}
+
+// Observation — output Task-Aware Observer'а, append'ится в Tier-2.
+type Observation = {
+  timestamp: number
+  confidence: 'high' | 'med' | 'low'
+  statement: string
+  subDetails?: string[]
+  sourceTurn: number
+}
+
+// PointerPlaceholder — заменяет offloaded tool_result в Tier-2 view.
+type PointerPlaceholder = {
+  recall_id: string                // совпадает с group_id
+  tool_name: string
+  original_size_bytes: number
+  digest: string                   // см. §5.3 digest generation strategies
+  turn_index: number
+}
+
+// FeatureFlags — см. §5.1 system_design. Single source of truth.
+type FeatureFlags = {
+  TASK_AWARE_EXTRACTION: boolean
+  TYPE_AWARE_OFFLOAD: boolean
+  TRAJECTORY_CLASSIFIER: boolean
+  ASYNC_OBSERVER: boolean
+  RECALL_TOOL: boolean
+  SCHEMA_AWARE_DIGEST: boolean
+  REFLECTION: boolean
+  CALIBRATION_AUTO: boolean
+}
+
+type TrajectoryClass = 'conversational' | 'tool_heavy' | 'mixed'
+
+// ClassifierFeatures — см. §3.1 ниже; продублирован здесь для полноты contract.
+type ClassifierFeatures = {
+  tool_call_density: number
+  avg_tool_result_size: number
+  recent_tool_density: number
+  user_turn_ratio: number
+  multimodal_flag: boolean
+  cumulative_tokens: number
+  turns_total: number
+}
+
+// CompactionContext — передаётся в should_offload (см. §5.2) и observer triggers.
+type CompactionContext = {
+  flags: FeatureFlags
+  groups_after_this: number
+  cumulative_kept_tool_result_bytes: number
+  current_class: TrajectoryClass
+  thresholds: Thresholds
+}
+
+type Thresholds = {
+  OBSERVER_THRESHOLD: number        // default 8000
+  T_SIZE: number                    // default 4096
+  T_CUM: number                     // default 24000
+  K_RECENT: number                  // default 6
+  BUFFER_TOKENS: number             // default 0.2
+  BUFFER_ACTIVATION: number         // default 0.8
+  REFLECTION_THRESHOLD: number      // default 40000
+}
+```
+
+`ToolDefinition` и `ToolResultPayload` форматы — определяются адаптером (AI SDK v6
+shape для primary integration; см. `docs/design/eval-harness.md` для baseline-wrappers).
+Core не делает предположений о их структуре.
+
 ---
 
 ## 3. Trajectory Classifier

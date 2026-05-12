@@ -1,0 +1,222 @@
+# Track C Design — Baselines Integration
+
+> Track-level design для трёх baseline wrappers, гоняющихся в общем eval harness.
+> Реализуется в `src/eval/baselines/`. Phase plan — `system_design §7.2 Track C`.
+
+---
+
+## Meta
+
+- **Track:** C (C1 Mastra OM → C2 Anthropic native → C3 Full context)
+- **Wall-clock:** 3.5 дня
+- **Зависит от:** B1 (harness baseline), `design/eval-harness.md` (RunRecord shape)
+- **Блокирует:** Track E (нужны все 3 для sweep E1)
+- **Связь:** `system_design §6.5` (baseline list + rationale)
+
+---
+
+## 1. Common baseline contract
+
+```typescript
+interface Baseline {
+  readonly name: string
+  prepare(task: Task): BaselineState
+  step(state: BaselineState, userMsg: Message): Promise<{
+    response: Message
+    state: BaselineState
+    telemetry: TurnRecord
+  }>
+  finalize?(state: BaselineState): Promise<void>   // optional cleanup
+}
+
+type BaselineState = {
+  task_id: string
+  history: Message[]                    // baseline-managed
+  scratch?: Record<string, unknown>     // baseline-specific (e.g. mastra thread_id)
+}
+```
+
+`Conversation` и `Message` — из `core/types.ts` (см. `ahc-algorithm.md §2.4`).
+Baseline владеет собственным state — harness вызывает `step` per turn, агрегирует
+`TurnRecord`'ы в `RunRecord` через telemetry pipeline (см. `design/eval-harness.md §2`).
+
+---
+
+## 2. Full Context baseline (C3)
+
+Тривиальный pass-through: всё history → provider → response.
+
+```typescript
+class FullContextBaseline implements Baseline {
+  readonly name = 'full_context'
+
+  async step(state, userMsg) {
+    state.history.push(userMsg)
+    const response = await provider.complete({
+      model: state.scratch.model,
+      messages: state.history,
+    })
+    state.history.push(response.message)
+    return {
+      response: response.message,
+      state,
+      telemetry: collectTelemetry(response),
+    }
+  }
+}
+```
+
+Назначение — upper-bound accuracy + sanity check'и. Если AHC проигрывает full context
+на > 20% на каком-то бенче — что-то сломано в core compaction. Wall-clock: 0.5 дня.
+
+### 2.1 Failure modes
+
+| Failure | Mitigation |
+|---|---|
+| Context window exceeded (long traj) | Запись `ErrorRecord{kind:'api_error'}`; task terminated; expected на τ-bench tail |
+| API rate-limit | Exponential backoff up to 3 retries; затем `ErrorRecord` |
+
+---
+
+## 3. Anthropic native `compact_20260112` (C2)
+
+Wrapper над Anthropic Messages API с server-side компакцией. Прозрачно для wrapper
+— Anthropic держит compacted history internally.
+
+```typescript
+class AnthropicNativeBaseline implements Baseline {
+  readonly name = 'anthropic_compact'
+
+  async step(state, userMsg) {
+    const resp = await anthropic.messages.create({
+      model: 'claude-sonnet-4-6',
+      messages: state.history.concat(userMsg),
+      metadata: { compact_strategy: 'compact_20260112' },
+      tools: state.scratch.tools,
+    })
+    // Anthropic возвращает compacted_history_id в response.metadata;
+    // на следующем step мы можем передавать delta + id вместо полного history.
+    state.scratch.compacted_history_id = resp.metadata?.compacted_history_id
+    return { response: resp.message, state, telemetry: collectTelemetry(resp) }
+  }
+}
+```
+
+**Verify at C2 start**: точная shape `compact_20260112` API на момент старта (2026-05-12+).
+Если API изменилась — investigation doc, ревизим scope.
+
+### 3.1 Что важно замерить отдельно
+
+Drop tool_results после compaction (codex#14589 показал 0% survival): логировать
+`compaction_events[].type='reflection'` с before/after bytes, чтобы post-hoc видно
+было насколько агрессивно server-side compaction резал tool outputs.
+
+### 3.2 Failure modes
+
+| Failure | Mitigation |
+|---|---|
+| `compact_20260112` strategy unavailable / deprecated | Investigation doc; potentially drop baseline или switch на newest strategy |
+| Server-side state lost (compacted_history_id expired) | Fallback на full history передачу; log warning |
+
+Wall-clock: 1 день.
+
+---
+
+## 4. Mastra OM (C1, main competitor)
+
+Mastra OM как library, не отдельный сервис. Default config с observational memory enabled.
+
+```typescript
+import { Mastra, Agent, Memory } from '@mastra/core'
+
+class MastraOMBaseline implements Baseline {
+  readonly name = 'mastra_om'
+  private agent: Agent
+
+  constructor(config: MastraConfig) {
+    const memory = new Memory({
+      storage: config.storage,            // см. §4.1
+      observer: defaultObserver,
+    })
+    this.agent = new Agent({ memory, model: config.model })
+  }
+
+  async prepare(task) {
+    return {
+      task_id: task.task_id,
+      history: [],
+      scratch: { thread_id: `mastra_${task.task_id}` },
+    }
+  }
+
+  async step(state, userMsg) {
+    // Mastra owns conversation state internally via thread_id;
+    // мы передаём только incoming userMsg, agent читает history из memory.
+    const resp = await this.agent.generate({
+      thread_id: state.scratch.thread_id,
+      message: userMsg,
+    })
+    return { response: resp.message, state, telemetry: collectTelemetry(resp) }
+  }
+
+  async finalize(state) {
+    // Optional: cleanup thread, dump memory snapshot для debug
+  }
+}
+```
+
+### 4.1 Storage
+
+Mastra Memory требует storage adapter. Опции:
+- **PG via testcontainers** — ephemeral; startup overhead ~1s per task. Default,
+  если SQLite не работает.
+- **SQLite** — если Mastra v6 поддерживает; cheaper, no docker dependency.
+
+**Verify at C1 start**: какие storage adapter'ы exposed в `@mastra/core` на момент C1.
+Если только PG — testcontainers. Если SQLite — preferred (faster CI).
+
+### 4.2 Deterministic replay
+
+Mastra Observer вызывает LLM → недетерминизм. Меры:
+- `temperature=0` на provider calls (где Mastra exposed это).
+- Замораживаем Mastra version в `package.json` точечно (без caret).
+- Полный bit-identical replay не гарантирован → для replication полагаемся на
+  2 seeds + bootstrap CI, не на exact reproducibility.
+
+### 4.3 Config snapshot
+
+Записываем full Mastra config в `RunRecord.scratch.mastra_config` для reproducibility.
+
+### 4.4 Failure modes
+
+| Failure | Mitigation |
+|---|---|
+| PG testcontainers не поднимается на CI | Local-only run; CI skip с явным флагом |
+| Mastra Observer falls (provider error during compaction) | Mastra обычно fall back на trimming; log compaction_event с пометкой |
+| Thread state corruption между tasks | Unique thread_id per task; finalize cleanup; никогда не reuse'им |
+
+Wall-clock: 2 дня.
+
+---
+
+## 5. Cross-baseline integration в harness
+
+Harness sees все три через `Baseline` interface. AHC оборачивается аналогично, но
+живёт в `src/adapters/ai-sdk-v6.ts` и подключается через ту же contract pattern.
+
+`config_id` (см. `design/eval-harness.md §4`) для baselines:
+- `full_context__gemini-3.1-flash`
+- `anthropic_compact__sonnet-4-6`
+- `mastra_om__gemini-3.1-flash__pg__v6.x.y`
+
+---
+
+## Open questions
+
+1. Mastra version pin — выбрать stable major перед C1 (зависит от того, что доступно).
+2. Anthropic native compact session-id передача между turns — точная shape API
+   (verify at C2 start).
+3. Full context на τ-bench retail medium — будут ли context-window-exceeded errors?
+   Если > 30% tasks — добавить sliding-window fallback как separate variant? **No**:
+   `system_design §6.5` явно дропнул sliding-window; вместо этого фиксируем errors
+   как negative result в Discussion.

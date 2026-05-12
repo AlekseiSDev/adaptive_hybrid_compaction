@@ -23,11 +23,12 @@
 |---|---|
 | `docs/index.md` | При сомнении куда смотреть |
 | `docs/system_design.md` | Перед любой нетривиальной задачей — цели, scope, phase plan, eval-protocol, принятые решения |
-| `docs/ahc-algorithm.md` | Перед работой в `src/core/` — 3-tier shape, classifier, offloader, observer; источник правды для инвариантов (§9 cache invariance, §2.3/§5.1 atomic groups, §5.4/§6.1 pointer roundtrip) |
+| `docs/ahc-algorithm.md` | Track A design — перед работой в `src/core/`; 3-tier shape, classifier, offloader, observer, public types (§2.4), инварианты (§9 cache invariance, §2.3/§5.1 atomic groups, §5.4/§6.1 pointer roundtrip) |
+| `docs/design/<track>.md` | Track-level design (B eval-harness / C baselines / D assistant-traj / E main-runs / F report) — перед фазой соответствующего трека |
 | `docs/ai-native-practices.md` | При сомнении в процессе или конвенции; описывает pipeline и harness-дисциплину |
 | `docs/decisions.md` | Перед предложением альтернативы существующему паттерну |
 | `docs/agent-pitfalls.md` | Если файл есть — читай при работе в упомянутых зонах |
-| `docs/implementation/<phase>.md` | При работе над конкретной фазой Track A/B/C/D |
+| `docs/implementation/<phase>.md` | При работе над конкретной фазой; создаётся по шаблону перед стартом фазы |
 
 ## Operating Model: 4-step pipeline
 
@@ -44,7 +45,8 @@
 
 Перед стартом фазы (A1, A2, B1, …):
 
-1. Прочитай относящуюся секцию `system_design.md §7.2` и связанный модуль в `ahc-algorithm.md`.
+1. Прочитай относящуюся секцию `system_design.md §7.2` и track-level design:
+   `ahc-algorithm.md` для Track A; `docs/design/<track>.md` для B/C/D/E/F.
 2. Прочитай `decisions.md` — не противоречь принятым решениям.
 3. Изучи код в затронутых директориях (ls, grep, прочитай ключевые файлы).
 4. Запусти существующие тесты — baseline должен быть зелёным.
