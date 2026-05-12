@@ -1,3 +1,4 @@
+// B1 surface
 export {
   appendRecord,
   computeConfigId,
@@ -8,6 +9,7 @@ export {
   writeSummary,
 } from './persist.js'
 export {
+  computeTotalTasks,
   defaultAdapterRegistry,
   defaultRunnerRegistry,
   runSweep,
@@ -18,7 +20,39 @@ export {
   type RunSweepResult,
 } from './runner.js'
 export { syntheticAdapter, syntheticGrader } from './adapters/synthetic.js'
+
+// B2 surface
+export { buildRunnerFromBaseline } from './baseline.js'
+export { fullContextBaseline, type FullContextDeps } from './baselines/full_context.js'
+export {
+  costFromUsage,
+  createOpenRouterClient,
+  OPENROUTER_PRICING,
+  type ModelPricing,
+  type OpenRouterClientOptions,
+} from './llm.js'
+export {
+  aggregateTurnEvents,
+  composeTurnRecord,
+  mapAnthropicUsage,
+  mapOpenRouterUsage,
+  type TurnEventsPart,
+  type TurnTimingHints,
+  type TurnUsagePart,
+} from './telemetry.js'
+export { CostTracker, type ShouldHaltOpts, type ShouldHaltResult } from './cost.js'
+export {
+  setupObservability,
+  type ObservabilityHandle,
+  type SetupObservabilityOptions,
+} from './observability/langfuse.js'
+
 export type {
+  AnthropicUsage,
+  Baseline,
+  BaselineState,
+  BaselineStepOptions,
+  BaselineStepResult,
   Bench,
   BenchAdapter,
   CompactionEvent,
@@ -26,6 +60,15 @@ export type {
   Conversation,
   ErrorRecord,
   Grader,
+  Instrumentation,
+  InstrumentationEvent,
+  LLMClient,
+  LLMMessage,
+  LLMRequest,
+  LLMResponse,
+  LLMResponseError,
+  Message,
+  OpenRouterUsage,
   RecallEvent,
   RunMeta,
   RunRecord,
@@ -38,6 +81,7 @@ export type {
   SweepPlan,
   Task,
   TokenUsage,
+  TrajectoryClass,
   TurnRecord,
   WorkUnit,
 } from './types.js'

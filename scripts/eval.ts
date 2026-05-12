@@ -3,6 +3,7 @@ import { execSync } from 'node:child_process'
 import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { parse as parseYaml } from 'yaml'
+import { setupObservability } from '../src/eval/observability/langfuse.js'
 import {
   defaultAdapterRegistry,
   defaultRunnerRegistry,
@@ -55,8 +56,12 @@ function gitSha(): string {
   }
 }
 
-function printSummary(plan: SweepPlan, result: RunSweepResult): void {
-  console.log(`[${plan.name}] sweep complete: ${result.configs.length} (config × seed) entries`)
+function printSummary(plan: SweepPlan, result: RunSweepResult, langfuseEnabled: boolean): void {
+  const status = result.halted ? `HALTED (${result.halt_reason ?? 'unknown'})` : 'complete'
+  console.log(
+    `[${plan.name}] sweep ${status}: ${String(result.configs.length)} (config × seed) entries; ` +
+      `total_cost=$${result.total_cost_usd.toFixed(4)}; langfuse=${langfuseEnabled ? 'enabled' : 'disabled'}`,
+  )
   for (const c of result.configs) {
     console.log(
       `  bench=${c.bench} config_id=${c.config_id} seed=${String(c.seed)} ` +
@@ -71,11 +76,16 @@ async function main(): Promise<void> {
   const raw = parseYaml(await readFile(absSweep, 'utf8')) as unknown
   const plan = validateSweep(raw, absSweep)
   const rootDir = resolve(process.cwd(), 'benchmarks/runs')
-  const result = await runSweep(plan, defaultAdapterRegistry, defaultRunnerRegistry, {
-    rootDir,
-    gitSha: gitSha(),
-  })
-  printSummary(plan, result)
+  const obs = setupObservability()
+  try {
+    const result = await runSweep(plan, defaultAdapterRegistry, defaultRunnerRegistry, {
+      rootDir,
+      gitSha: gitSha(),
+    })
+    printSummary(plan, result, obs.enabled)
+  } finally {
+    await obs.dispose()
+  }
 }
 
 main().catch((err: unknown) => {

@@ -1,0 +1,7 @@
+name: smoke_full_context
+benches: [synthetic]
+configs:
+  - id: full_context
+    baseline: full_context
+seeds: [42]
+budget_usd: 0.5

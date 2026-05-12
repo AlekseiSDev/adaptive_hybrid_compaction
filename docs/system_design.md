@@ -361,11 +361,23 @@ numbers процитированы; повторно интегрировать 
   `references/mle-harness/code/` в `src/eval/` — что есть переиспользуем, расширения
   под AHC-specific метрики.
 
-- **B2. Token / cache / latency telemetry + Langfuse observability (2 дня).** Замеры
-  `cache_read_input_tokens` (где доступно), wall-clock latency, recall_usage_rate,
-  per-class breakdown logging. **Langfuse integration**: `docker-compose.yml` stack +
-  AI SDK v6 OpenTelemetry exporter (см. `design/B_eval-harness.md §9`). Opt-in через
-  `LANGFUSE_ENABLED=true`; runs работают без Langfuse, если он не поднят.
+- **B2. Telemetry + Langfuse + LLMClient + ships `full_context` (3-4 дня — extended
+  per `decisions.md 2026-05-13`).** Расширен от исходных 2 дней по explicit user choice:
+  - Telemetry pipeline (`cache_read_input_tokens`, `compaction_events`, `recall_events`,
+    `class_signal` в `TurnRecord`); `ProviderUsageMapper` для OpenRouter + Anthropic shapes.
+  - `Baseline` interface (per `design/C_baselines.md §1`) + `buildRunnerFromBaseline`
+    helper — мост между per-turn baselines и outer Runner (B1).
+  - `LLMClient` + OpenRouter raw fetch wrapper (`src/eval/llm.ts`); pricing snapshot const.
+  - `full_context` baseline (`src/eval/baselines/full_context.ts`) ships in B2 inline —
+    де-факто закрывает Track C C3 (см. Track C ниже).
+  - **CostTracker активирован** в `runSweep` (не каркас): observe + shouldHalt по 1.5×
+    projected budget после 20 tasks, halt = clean break + resumable.
+  - **Full OpenTelemetry pipeline**: `@langfuse/otel@^5.3.0` (v5 SDK rewrite —
+    supersedes deprecated `langfuse-vercel`); `LangfuseSpanProcessor` attach'ится
+    при `LANGFUSE_ENABLED=true`, иначе NoopTracerProvider (нулевой overhead).
+    Spans: `eval.sweep` / `eval.config_seed` / `eval.task` / `eval.turn`.
+  - **Out:** `ahc_core` runner — deferred to A6 / отдельная фаза (single integration
+    path через `createAhcMiddleware`, не eval-side mini-adapter).
 
 - **B3. Per-class breakdown reporting (1 день).** Скрипт, который для AHC показывает
   accuracy split по detected trajectory_class — это важно для Discussion в отчёте.
@@ -378,7 +390,9 @@ numbers процитированы; повторно интегрировать 
 - **C2. Anthropic native compact wrapper (1 день).** Wrapper над Anthropic Messages API
   с `compact_20260112` strategy, чтобы прогонять в том же harness.
 
-- **C3. Full context baseline (0.5 дня).** Тривиальный wrapper без компакции для upper-bound.
+- ~~**C3. Full context baseline (0.5 дня).**~~ **Ships in B2** (см. `decisions.md 2026-05-13` B2 entries):
+  тривиальный wrapper без компакции для upper-bound; реализован в `src/eval/baselines/full_context.ts`
+  с использованием B2 `LLMClient`. Track C wall-clock сократился 3.5 → 2.5 дня.
 
 **Track D — Custom benchmark construction**
 

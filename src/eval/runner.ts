@@ -9,14 +9,22 @@ import {
   writeSummary,
 } from './persist.js'
 import { syntheticAdapter, syntheticGrader } from './adapters/synthetic.js'
+import { buildRunnerFromBaseline } from './baseline.js'
+import { fullContextBaseline } from './baselines/full_context.js'
+import { CostTracker } from './cost.js'
+import { createOpenRouterClient } from './llm.js'
+import { noopAhcBaseline, noopBaseline } from './runners/stub.js'
+import { aggregateTurnEvents } from './telemetry.js'
 import type {
   Bench,
   BenchAdapter,
   ConfigDef,
   Grader,
+  InstrumentationEvent,
   RunRecord,
   Runner,
   SweepPlan,
+  TurnRecord,
 } from './types.js'
 
 export type AdapterRegistry = {
@@ -43,31 +51,17 @@ export type RunSweepConfigResult = {
 
 export type RunSweepResult = {
   configs: RunSweepConfigResult[]
+  halted: boolean
+  halt_reason?: string
+  total_cost_usd: number
 }
 
-const STUB_RUNNERS: Record<string, Runner> = {
-  noop_baseline: {
-    name: 'noop_baseline',
-    execute: (_conv, ctx) =>
-      Promise.resolve({
-        text: String(ctx.task.expected),
-        turns: [],
-        errors: [],
-        totals: { input: 0, output: 0 },
-        cost_usd: 0,
-      }),
-  },
-  noop_ahc: {
-    name: 'noop_ahc',
-    execute: (_conv, ctx) =>
-      Promise.resolve({
-        text: String(ctx.task.expected),
-        turns: [],
-        errors: [],
-        totals: { input: 0, output: 0 },
-        cost_usd: 0,
-      }),
-  },
+// Stub runners are wrapped from Baseline impls in src/eval/runners/stub.ts
+// (Step 10 refactor — consistency with Baseline contract; tests in
+// src/eval/runner.test.ts cover behavior).
+const STUB_RUNNER_FACTORIES: Record<string, () => Runner> = {
+  noop_baseline: () => buildRunnerFromBaseline(noopBaseline()),
+  noop_ahc: () => buildRunnerFromBaseline(noopAhcBaseline()),
 }
 
 export const defaultAdapterRegistry: AdapterRegistry = {
@@ -79,16 +73,70 @@ export const defaultAdapterRegistry: AdapterRegistry = {
   },
 }
 
+const FULL_CONTEXT_DEFAULT_MODEL = 'google/gemini-3.1-flash'
+
+function makeFullContextRunner(): Runner {
+  const apiKey = process.env['OPENROUTER_API_KEY']
+  if (!apiKey) {
+    throw new Error(
+      'OPENROUTER_API_KEY env var is required for baseline=full_context (real LLM wire)',
+    )
+  }
+  const llmClient = createOpenRouterClient({
+    apiKey,
+    appName: 'AHC',
+    httpReferer: 'https://github.com/AlekseiSDev/adaptive_hybrid_compaction',
+  })
+  const baseline = fullContextBaseline({
+    llmClient,
+    model: FULL_CONTEXT_DEFAULT_MODEL,
+  })
+  return buildRunnerFromBaseline(baseline)
+}
+
 export const defaultRunnerRegistry: RunnerRegistry = {
   resolve: (config) => {
+    if (config.baseline === 'full_context') {
+      return makeFullContextRunner()
+    }
     const key = config.baseline ?? (config.ahc_flags ? 'noop_ahc' : null)
     if (key === null) {
       throw new Error(`config ${config.id}: must declare baseline or ahc_flags`)
     }
-    const runner = STUB_RUNNERS[key]
-    if (!runner) throw new Error(`unknown runner: ${key}`)
-    return runner
+    const factory = STUB_RUNNER_FACTORIES[key]
+    if (!factory) throw new Error(`unknown runner: ${key}`)
+    return factory()
   },
+}
+
+export async function computeTotalTasks(
+  plan: SweepPlan,
+  adapters: AdapterRegistry,
+): Promise<number> {
+  let total = 0
+  for (const bench of plan.benches) {
+    const { adapter } = adapters.resolve(bench)
+    for (const seed of plan.seeds) {
+      const tasks = await adapter.loadTasks(seed)
+      total += tasks.length * plan.configs.length
+    }
+  }
+  return total
+}
+
+function enrichTurnsWithEvents(
+  turns: readonly TurnRecord[],
+  events: readonly InstrumentationEvent[],
+): TurnRecord[] {
+  return turns.map((turn) => {
+    const part = aggregateTurnEvents(events, turn.turn_index)
+    return {
+      ...turn,
+      recall_events: [...turn.recall_events, ...part.recall_events],
+      compaction_events: [...turn.compaction_events, ...part.compaction_events],
+      ...(part.class_signal !== undefined ? { class_signal: part.class_signal } : {}),
+    }
+  })
 }
 
 export async function runSweep(
@@ -98,8 +146,13 @@ export async function runSweep(
   options: RunSweepOptions,
 ): Promise<RunSweepResult> {
   const configResults: RunSweepConfigResult[] = []
+  const costTracker = new CostTracker()
+  const totalTasks = await computeTotalTasks(plan, adapters)
 
-  for (const bench of plan.benches) {
+  let halted = false
+  let halt_reason: string | undefined
+
+  outer: for (const bench of plan.benches) {
     const { adapter, grader } = adapters.resolve(bench)
     for (const config of plan.configs) {
       const runner = runners.resolve(config)
@@ -117,11 +170,19 @@ export async function runSweep(
             n_skipped += 1
             continue
           }
+          const events: InstrumentationEvent[] = []
           const conv = adapter.prepare(task)
           const started_at = Date.now()
-          const response = await runner.execute(conv, { bench, config, seed, task })
+          const response = await runner.execute(conv, {
+            bench,
+            config,
+            seed,
+            task,
+            instrumentation: (e) => events.push(e),
+          })
           const score = grader.score(task, response)
           const completed_at = Date.now()
+          const enrichedTurns = enrichTurnsWithEvents(response.turns, events)
           const record: RunRecord = {
             run_id: randomUUID(),
             bench,
@@ -133,11 +194,40 @@ export async function runSweep(
             score,
             totals: response.totals,
             cost_usd: response.cost_usd,
-            turns: response.turns,
+            turns: enrichedTurns,
             errors: response.errors,
           }
           await appendRecord(runDir, record)
           n_completed += 1
+
+          costTracker.observe(record)
+          const decision = costTracker.shouldHalt({
+            budget_usd: plan.budget_usd,
+            total_tasks: totalTasks,
+          })
+          if (decision.halt) {
+            halted = true
+            halt_reason = decision.reason
+            console.warn(`[runSweep] halting: ${decision.reason}`)
+            await writeMeta(runDir, {
+              config,
+              bench,
+              seed,
+              git_sha: options.gitSha ?? 'unknown',
+              timestamp: new Date().toISOString(),
+            })
+            const allRecords = await readAllRecords(runDir)
+            await writeSummary(runDir, { bench, config_id, seed }, allRecords)
+            configResults.push({
+              bench,
+              config_id,
+              seed,
+              n_completed,
+              n_skipped,
+              runDir,
+            })
+            break outer
+          }
         }
 
         await writeMeta(runDir, {
@@ -162,5 +252,10 @@ export async function runSweep(
     }
   }
 
-  return { configs: configResults }
+  return {
+    configs: configResults,
+    halted,
+    ...(halt_reason !== undefined ? { halt_reason } : {}),
+    total_cost_usd: costTracker.totalUsd,
+  }
 }

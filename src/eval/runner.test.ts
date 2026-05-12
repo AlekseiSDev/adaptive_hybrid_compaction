@@ -7,6 +7,8 @@ import {
   defaultAdapterRegistry,
   defaultRunnerRegistry,
   runSweep,
+  type AdapterRegistry,
+  type RunnerRegistry,
 } from './runner.js'
 import type { SweepPlan } from './types.js'
 
@@ -84,6 +86,141 @@ describe('runSweep — lifecycle smoke (synthetic + stub runners)', () => {
       // Line count unchanged from first run.
       expect(ndjson.trim().split('\n')).toHaveLength(2)
     }
+  })
+})
+
+describe('runSweep — Instrumentation aggregation (B2)', () => {
+  test('events emitted via ctx.instrumentation are merged into TurnRecord by turn_index', async () => {
+    const customAdapter: AdapterRegistry = {
+      resolve: () => ({
+        adapter: {
+          name: 'synthetic',
+          loadTasks: () => Promise.resolve([{ id: 'tsk-1', input: 'x', expected: 'y' }]),
+          prepare: (task) => ({
+            messages: [{ role: 'user', content: [{ type: 'text', text: String(task.input) }] }],
+          }),
+        },
+        grader: { score: () => ({ primary: 1 }) },
+      }),
+    }
+    const customRunner: RunnerRegistry = {
+      resolve: () => ({
+        name: 'emit',
+        execute: (_conv, ctx) => {
+          ctx.instrumentation?.({
+            kind: 'compaction',
+            payload: { type: 'offload', turn_index: 0, before_bytes: 1000, after_bytes: 200 },
+          })
+          ctx.instrumentation?.({
+            kind: 'class_signal',
+            turn_index: 0,
+            class: 'tool_heavy',
+            confidence: 0.85,
+          })
+          return Promise.resolve({
+            text: 'y',
+            turns: [
+              {
+                turn_index: 0,
+                input_tokens: 10,
+                output_tokens: 5,
+                wall_clock_ms: 1,
+                recall_events: [],
+                compaction_events: [],
+              },
+            ],
+            errors: [],
+            totals: { input: 10, output: 5 },
+            cost_usd: 0.01,
+          })
+        },
+      }),
+    }
+    const plan: SweepPlan = {
+      name: 'instr-test',
+      benches: ['synthetic'],
+      configs: [{ id: 'emit', baseline: 'emit' }],
+      seeds: [0],
+      budget_usd: 10,
+    }
+    const result = await runSweep(plan, customAdapter, customRunner, {
+      rootDir: workspace,
+      gitSha: 't',
+    })
+    const cfg = result.configs[0]
+    expect(cfg).toBeDefined()
+    if (!cfg) return
+    const ndjson = await readFile(join(cfg.runDir, 'records.ndjson'), 'utf8')
+    const lines = ndjson.trim().split('\n')
+    expect(lines).toHaveLength(1)
+    const record = JSON.parse(lines[0] ?? '') as {
+      turns: {
+        compaction_events: { type: string }[]
+        class_signal?: { class: string; confidence: number }
+      }[]
+    }
+    expect(record.turns[0]?.compaction_events).toHaveLength(1)
+    expect(record.turns[0]?.compaction_events[0]?.type).toBe('offload')
+    expect(record.turns[0]?.class_signal).toEqual({ class: 'tool_heavy', confidence: 0.85 })
+  })
+})
+
+describe('runSweep — CostTracker halt (B2)', () => {
+  test('high cost_usd triggers halt after 20 tasks; subsequent tasks not executed', async () => {
+    let executions = 0
+    // Adapter returns 30 tasks; with 1 config, total_tasks = 30.
+    const adapter: AdapterRegistry = {
+      resolve: () => ({
+        adapter: {
+          name: 'synthetic',
+          loadTasks: () =>
+            Promise.resolve(
+              Array.from({ length: 30 }, (_, i) => ({
+                id: 't' + String(i),
+                input: 'x',
+                expected: 'y',
+              })),
+            ),
+          prepare: (task) => ({
+            messages: [{ role: 'user', content: [{ type: 'text', text: String(task.input) }] }],
+          }),
+        },
+        grader: { score: () => ({ primary: 1 }) },
+      }),
+    }
+    // Each task costs $5; budget=$1; total_tasks=30; mean=$5; projected=$150 > 1.5×1=1.5 → halt at 20.
+    const runner: RunnerRegistry = {
+      resolve: () => ({
+        name: 'expensive',
+        execute: () => {
+          executions += 1
+          return Promise.resolve({
+            text: 'y',
+            turns: [],
+            errors: [],
+            totals: { input: 0, output: 0 },
+            cost_usd: 5,
+          })
+        },
+      }),
+    }
+    const plan: SweepPlan = {
+      name: 'halt-test',
+      benches: ['synthetic'],
+      configs: [{ id: 'exp', baseline: 'expensive' }],
+      seeds: [0],
+      budget_usd: 1,
+    }
+    const result = await runSweep(plan, adapter, runner, {
+      rootDir: workspace,
+      gitSha: 't',
+    })
+    expect(result.halted).toBe(true)
+    expect(result.halt_reason).toContain('projected')
+    // Halt fires when shouldHalt first returns true — task_count must reach 20 before check.
+    // So executions == 20 (the 20th task triggers the halt; no 21st).
+    expect(executions).toBe(20)
+    expect(result.total_cost_usd).toBe(100)
   })
 })
 
