@@ -16,6 +16,8 @@ out/
 
 # eval raw output (summary.json + meta.json коммитятся для воспроизводимости)
 benchmarks/runs/**/*.ndjson
+# synthetic smoke output is B1 dev-noise, not a real bench
+benchmarks/runs/synthetic/
 
 # local processes / state
 *.pid

@@ -1,0 +1,43 @@
+export {
+  appendRecord,
+  computeConfigId,
+  readAllRecords,
+  readCompletedTaskIds,
+  runDirFor,
+  writeMeta,
+  writeSummary,
+} from './persist.js'
+export {
+  defaultAdapterRegistry,
+  defaultRunnerRegistry,
+  runSweep,
+  type AdapterRegistry,
+  type RunnerRegistry,
+  type RunSweepConfigResult,
+  type RunSweepOptions,
+  type RunSweepResult,
+} from './runner.js'
+export { syntheticAdapter, syntheticGrader } from './adapters/synthetic.js'
+export type {
+  Bench,
+  BenchAdapter,
+  CompactionEvent,
+  ConfigDef,
+  Conversation,
+  ErrorRecord,
+  Grader,
+  RecallEvent,
+  RunMeta,
+  RunRecord,
+  RunSummary,
+  Runner,
+  RunnerContext,
+  RunnerResponse,
+  Score,
+  SweepConfig,
+  SweepPlan,
+  Task,
+  TokenUsage,
+  TurnRecord,
+  WorkUnit,
+} from './types.js'

@@ -1,0 +1,9 @@
+name: smoke
+benches: [synthetic]
+configs:
+  - id: noop_baseline
+    baseline: noop_baseline
+  - id: noop_ahc
+    ahc_flags: {}
+seeds: [42]
+budget_usd: 1
