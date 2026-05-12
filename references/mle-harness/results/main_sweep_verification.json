@@ -1,0 +1,63 @@
+{
+  "checks": {
+    "all_5_strategies_complete": {
+      "pass": true,
+      "expected": 600,
+      "actual": 600,
+      "n_items": 120
+    },
+    "no_silent_truncation": {
+      "pass": true,
+      "rate_in_bound": 1.0,
+      "n_flagged": 0,
+      "flagged_examples": [],
+      "policy": "budget-claiming<=1.2x budget; full_context==original; rolling<=original"
+    },
+    "judge_cache_effectiveness": {
+      "pass": true,
+      "n_judge_calls": 900,
+      "n_cache_hits": 117,
+      "hit_rate": 0.13,
+      "note": "Hit-rate >0 only on re-runs; first-run will be 0 unless duplicate item-strategy pairs."
+    },
+    "cost_reconciliation": {
+      "pass": true,
+      "main_spend_usd": 42.9523,
+      "note": "OpenRouter dashboard endpoint not queried in this run; harness sum reported."
+    },
+    "bootstrap_ci_widths": {
+      "pass": true,
+      "widths_pp": [
+        {
+          "strategy": "full_context",
+          "width_pp": 16.66
+        },
+        {
+          "strategy": "naive_truncation",
+          "width_pp": 14.16
+        },
+        {
+          "strategy": "rolling_summary",
+          "width_pp": 18.33
+        },
+        {
+          "strategy": "type_aware",
+          "width_pp": 18.33
+        },
+        {
+          "strategy": "task_aware",
+          "width_pp": 15.83
+        }
+      ],
+      "too_wide": []
+    },
+    "type_aware_user_fallback_rate": {
+      "pass": true,
+      "n_with_fallback": 120,
+      "n_total": 120,
+      "rate": 1.0,
+      "note": "Fallback rate of ~1 means user_total > 8k budget always, expected for LongMemEval_S long histories."
+    }
+  },
+  "overall_pass": true
+}

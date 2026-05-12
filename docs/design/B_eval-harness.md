@@ -10,7 +10,7 @@
 
 - **Track:** B (B1 wire existing → B2 telemetry → B3 per-class breakdown)
 - **Wall-clock:** 4 дня
-- **Зависит от:** существующий harness в `mle/results/` paper'a (B1 — port)
+- **Зависит от:** vendored snapshot upstream harness'а в `references/mle-harness/code/` (B1 — port в `src/eval/`)
 - **Блокирует:** Track E (main runs)
 - **Связь:** `system_design §6` (metrics + benchmarks), `design/C_baselines.md`
   (baseline integration), `design/D_assistant-traj.md` (AssistantTraj adapter)

@@ -1,0 +1,828 @@
+\documentclass{article}
+
+\PassOptionsToPackage{numbers,compress}{natbib}
+\usepackage[preprint]{agents4science_2025}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{hyperref}
+\usepackage{url}
+\usepackage{booktabs}
+\usepackage{amsfonts}
+\usepackage{amsmath}
+% \usepackage{nicefrac}  % unused
+\providecommand{\nicefrac}[2]{#1/#2}
+\usepackage[expansion=false,protrusion=true]{microtype}
+\usepackage{xcolor}
+\usepackage{graphicx}
+\usepackage{multirow}
+\usepackage{array}
+\usepackage{caption}
+\captionsetup{font=small,labelfont=bf}
+
+\title{Task-Aware and Type-Aware Context Compaction for {LLM} Agent Trajectories: \\
+A Cost-vs-Accuracy Pareto Analysis}
+
+\author{%
+  Anonymous \\
+  Affiliation withheld for review \\
+  \texttt{anonymous@example.org}
+}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Long-horizon LLM agent trajectories grow at a near-linear rate, but the
+input-token cost of replaying them is paid on every step. We study two
+new compaction policies that operate on the trajectory itself rather than
+on a downstream retrieval index: \emph{type-aware} compaction applies a
+different policy to each segment role (system, user, assistant text,
+assistant reasoning, tool call, tool result), and \emph{task-aware}
+compaction conditions the compactor on the live user query so that
+query-relevant content is preserved verbatim. We benchmark these
+policies against three baselines (full context, naive truncation,
+rolling summary) on four evaluations: a long-conversation memory
+benchmark (LongMemEval, $n{=}120$ plus $n{=}50$ replication), a very
+long-term dialogue benchmark (LoCoMo, $n{=}25$), a tool-using agent
+benchmark ($\tau$-bench retail, $n{=}10$ per strategy), and a cross-vendor
+sanity check on Claude Haiku 4.5 vs.\ Gemini-3-Flash ($n{=}15$). On
+LongMemEval, task-aware compaction reaches $0.73$ accuracy at
+$\sim\!2{,}000$ input tokens, Pareto-dominating the
+full-context upper bound ($0.65$ at $\sim\!106{,}000$ tokens) at $\sim\!1.8\%$
+of the input cost; the result replicates at $0.86$ on a held-out
+seed-43 split and at $0.84$ on LoCoMo. A pooled paired permutation
+test that combines both seeds ($n_{\text{pooled}}{=}170$) yields
+$p{=}0.0042$ for task-aware vs.\ full-context, with a bootstrap
+$95\%$ CI on the accuracy delta of $[0.047, 0.194]$. The same policy
+degrades sharply on $\tau$-bench retail to pass@1${=}0.00$
+(95\% CI $[0, 0.28]$, $n{=}10$), where it over-prunes historical
+tool results that downstream sub-steps require; we treat this as a
+strong negative signal but the small sample warrants caution.
+Type-aware compaction is below full context on text-only conversations
+(a user-overflow fallback fires on $100\%$ of items, because
+conversation histories are user-text-dominated) but stays within the
+rolling-summary band on $\tau$-bench. A cross-vendor probe ($n{=}15$)
+shows the ranking inverts in our small-sample probe (Spearman
+$\rho{=}{-}0.5$, sign agreement $1/3$ pairs); we treat this as
+suggestive rather than conclusive. Compaction-policy
+choice is therefore not driver-invariant and depends on whether the
+trajectory is conversational or tool-step driven; we report a per-query
+USD cost-vs-accuracy comparison and discuss limitations.
+\end{abstract}
+
+\section{Introduction}\label{sec:intro}
+
+Modern LLM agents accumulate long trajectories: chains of system prompts,
+user turns, assistant rollouts, reasoning traces, and tool-call/tool-result
+pairs. Replaying the full trajectory on every step has three costs that scale
+with trajectory length: dollars (input tokens dominate the bill of
+single-digit-cent calls), latency, and the well-known degradation of
+retrieval inside long contexts known as the ``lost in the middle''
+effect~\citep{lost_in_the_middle_2023}. As agent deployments lengthen ---
+multi-day customer-service sessions, persistent personal
+assistants~\citep{mem0_2025}, role-playing characters, multi-day coding
+agents --- compaction becomes load-bearing.
+
+A large body of recent work has addressed long-term memory either by
+designing an external retrieval store (Mem0~\citep{mem0_2025},
+MemGPT~\citep{memgpt_2023}, A-Mem~\citep{amem_2025},
+HippoRAG~\citep{hipporag_2024}, MemoryBank~\citep{memorybank_2023},
+Zep~\citep{zep_2025}), or by compressing prompts at retrieval time
+(LLMLingua~\citep{llmlingua_2023}, LongLLMLingua~\citep{longllmlingua_2023}).
+Closer to our setting, ACON~\citep{acon_2025} and
+the Complexity Trap~\citep{complexity_trap_2025} compact \emph{trajectories
+themselves}, but each splits the trajectory into only two classes
+(history vs.\ observation; observation vs.\ reasoning) and neither
+conditions compression on the live user query. \emph{We are not aware of
+prior work that combines write-time live-query conditioning with a $\geq3$-class
+segment-type policy.}
+
+The contribution of this paper is threefold:
+\begin{enumerate}
+\item Two new compaction policies on a unified typed-segment trajectory
+schema: \textbf{type-aware} (per-role retention rules across six classes)
+and \textbf{task-aware} (the compactor sees the live user query and is
+instructed to keep query-relevant content verbatim).
+\item A Pareto analysis on four evaluations with consistent driver,
+compactor, and judge models, and explicit per-query USD numbers --- a
+metric most prior memory papers under-report.
+\item An honest scope finding: task-aware compaction Pareto-dominates
+full context on conversational long-term memory at $\sim\!1.8\%$ of the
+input cost (pooled $n{=}170$ permutation $p{=}0.0042$), but
+\emph{degrades sharply} on tool-heavy multi-step agent trajectories
+(pass@1${=}0.00$ at $n{=}10$ on $\tau$-bench retail). The right
+compaction policy is therefore not a single artefact but is conditioned
+on the trajectory class.
+\end{enumerate}
+
+We replicate the LongMemEval finding on a seed-43 held-out split
+($0.86$ accuracy) and on LoCoMo~\citep{locomo_2024} ($0.84$ vs.\
+$0.44$ rolling-summary), and we report a small-$n$ cross-vendor
+sanity check on Claude Haiku 4.5 vs.\ Gemini-3-Flash showing that
+the ranking is unstable across drivers at $n{=}15$ (Spearman
+$\rho{=}{-}0.5$, sign agreement $1/3$ pairs). All accuracy numbers
+come with bootstrap 95\% confidence intervals, and we report paired
+permutation $p$-values vs.\ the full-context baseline (including a
+pooled-seed test that combines $n{=}120$ and $n{=}50$ for a stronger
+test on the headline claim).
+
+The closest single-sentence statement of the contribution: showing the
+compactor (a) the role label of every message and (b) the active user
+query that triggered the compaction step lets us preserve the right
+content per class at $\sim\!2$\,k tokens of context, but only when the
+trajectory is conversational rather than tool-chain dependent.
+
+\section{Related Work}\label{sec:related}
+
+\paragraph{Memory-augmented LLM agents.}
+Memory layers add an external store of facts or summaries that the agent
+queries at runtime. Mem0~\citep{mem0_2025} extracts atomic facts via
+ADD/UPDATE/DELETE/NOOP tool-calls and reports strong numbers on LoCoMo;
+MemGPT~\citep{memgpt_2023} (Letta) treats the context window as a paged
+operating-system memory; A-Mem~\citep{amem_2025} builds Zettelkasten-style
+linked notes; HippoRAG~\citep{hipporag_2024} uses Personalized
+PageRank over an entity knowledge graph; MemoryBank~\citep{memorybank_2023}
+applies an Ebbinghaus forgetting curve;
+RecurrentGPT~\citep{recurrentgpt_2023} simulates an LSTM in natural
+language for long-form generation; Zep~\citep{zep_2025} uses a
+temporal knowledge-graph backend (Graphiti). All of these systems are
+\emph{retrieval-side}: they decide what to inject at read time, not
+what to keep in the trajectory at write time. Hybrid surveys
+appear in~\citep{memory_survey_2025,rag_to_memory_2025}.
+
+\paragraph{Trajectory compaction.}
+ACON~\citep{acon_2025} (October 2025) is the closest neighbour. It
+optimises a natural-language compression \emph{guideline} via a
+failure-driven LLM-as-optimizer and applies separate policies to history
+$h_t$ and the latest observation $o_t$. The Complexity
+Trap~\citep{complexity_trap_2025} (August 2025) shows that simple
+observation masking on SWE-agent trajectories matches LLM-summarisation
+on cost-vs-solve-rate; both papers are 2-class type policies and neither
+conditions on a live user query. Recent work also explores RL-trained
+omission policies~\citep{agent_omit_2026} and end-to-end summarisation
+in multi-turn RL pipelines.
+
+\paragraph{Prompt compression.}
+LLMLingua~\citep{llmlingua_2023} compresses prompts via token-level
+perplexity weighting. LongLLMLingua~\citep{longllmlingua_2023} extends
+this to be \emph{question-aware}, which is the closest task-aware analogue
+in the literature: it conditions retrieval-time prompt compression on a
+known question. Our setting is different: we compact the live trajectory
+at write time, with a query that is the agent's current user turn rather
+than a static retrieval question.
+
+\paragraph{Benchmarks.}
+LongMemEval~\citep{longmemeval_2024} ships 500 questions over $\sim\!115$\,k
+token sessions across seven question types. LoCoMo~\citep{locomo_2024}
+provides 35 sessions of $\sim\!300$ turns each with persona-driven
+conversations and four question types (single-hop, multi-hop, temporal,
+open-domain). $\tau$-bench~\citep{taubench_2024} stages tool-using agents
+in retail and airline domains with pass@$k$ as the primary metric.
+We exclude the abstention category from LongMemEval-S only when the
+benchmark schema does not surface ground-truth abstention; otherwise we
+evaluate it under the official \texttt{\_abs} judge branch.
+
+\paragraph{Novelty positioning.}
+The closest type-aware prior is the 2-class observation/reasoning split of
+Complexity Trap~\citep{complexity_trap_2025} or the 2-class
+history/observation split of ACON~\citep{acon_2025}. The closest task-aware
+prior is question-aware retrieval-side prompt compression
+(LongLLMLingua~\citep{longllmlingua_2023}). To the best of our knowledge no
+prior work combines write-time live-query conditioning with a $\geq3$-class
+segment-type policy, and no prior compaction paper reports per-query USD on
+both a conversational and a tool-using benchmark.
+
+\section{Method}\label{sec:method}
+
+\subsection{Segment schema}
+
+A \emph{trajectory} is an ordered list of typed segments
+$T = [s_1, \dots, s_N]$ with each segment
+\[
+s_i = (\textsf{role}_i,\ \textsf{content}_i,\ \textsf{meta}_i,\ \textsf{tokens}_i),
+\]
+where $\textsf{role}_i \in \{\textsf{system},\ \textsf{user},\
+\textsf{assistant\_text},\ \textsf{assistant\_reasoning},\
+\textsf{tool\_call},\ \textsf{tool\_result}\}$. \textsf{meta} carries
+session and turn indices. The same schema is used across LongMemEval (no
+tool calls; user / assistant only) and $\tau$-bench (heterogeneous, all
+six classes). The compactor returns a sequence of segments
+$\hat{T}$ with a total token budget $\lvert\hat{T}\rvert \leq B$.
+
+\subsection{Five compaction strategies}\label{sec:strategies}
+
+Figure~\ref{fig:method} shows the five policies under a common interface;
+all use the same segment schema and the same budget parameter $B$.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.96\linewidth]{figures/fig7_method.pdf}
+\caption{Method overview. Five policies share a common interface. S5 is
+the only policy that consumes the live user query $q_t$.}
+\label{fig:method}
+\end{figure}
+
+\paragraph{S1 \textsf{full\_context} (passthrough).}
+$\hat{T} = T$. Upper-bound baseline; ignores $B$.
+
+\paragraph{S2 \textsf{naive\_truncation}.}
+Keep the system message and the suffix of $T$ that fits inside the budget.
+
+\paragraph{S3 \textsf{rolling\_summary}.}
+Chunk the prefix of $T$ into windows of $W$ tokens, summarise each
+window with a single LLM call, and keep the most recent two chunks
+verbatim. The summary chain is task-agnostic: the compactor never
+sees the live user query.
+
+\paragraph{S4 \textsf{type\_aware} (proposed).}
+Apply per-role retention rules with soft per-type budget shares:
+$\textsf{system}$ verbatim; $\textsf{user}$ verbatim; $\textsf{assistant\_text}$
+rolling-summarised; $\textsf{assistant\_reasoning}$ retained at higher
+weight; $\textsf{tool\_call}$ retained verbatim; $\textsf{tool\_result}$
+collapsed to first-line + last-line + a 1-line summary. A
+\emph{user-overflow fallback} fires when the user-class share alone
+exceeds $B$: in that case the user portion is rolled into a chained
+summary. \textbf{This fallback fires on 100\% of LongMemEval items} (cf.\
+Sec.~\ref{sec:results}) because LongMemEval-$S$ histories are
+user/assistant-text dominated and the user share alone routinely
+exceeds 50\,k tokens.
+
+\paragraph{S5 \textsf{task\_aware} (proposed).}
+The compactor receives both the prior trajectory $T_{<t}$ and the active
+user query $q_t$; it is instructed to keep $q_t$-relevant content
+verbatim and to compress the rest as
+\verb|[session-N, turn-T] <fact>| bullets. A single LLM call per
+compaction step. The exact prompt is in
+Appendix~\ref{app:prompts}.
+
+The five strategies share the same compactor LLM
+($\textsf{google/gemini-3-flash-preview}$ as the primary route on
+OpenRouter~\citep{openrouter_2026}) and the same budget $B$, so
+differences are attributable to the policy and not to the underlying
+model or token count.
+
+\subsection{Driver, compactor, judge configuration}
+
+\textbf{Driver and compactor:} \texttt{google/gemini-3-flash-preview}
+on OpenRouter. \textbf{Cross-vendor probe:}
+\texttt{anthropic/claude-haiku-4.5}.
+\textbf{Judge:} \texttt{openai/gpt-4o-2024-08-06} with the official
+LongMemEval judge prompt; on LoCoMo we use the same model under a
+unified-judge prompt with reasonable-equivalence (a deviation from the
+LoCoMo per-type metric, documented in \texttt{locomo\_judge\_note.md}
+in our artefact). \textbf{Embeddings} (Mem0
+reproduction only): \texttt{text-embedding-3-large}.
+
+\subsection{Cost accounting and statistical protocol}
+
+We append one row per LLM call to a single \texttt{cost\_log.jsonl}: route,
+input/output tokens, cached tokens, USD computed from a pinned OpenRouter
+price snapshot, experiment, item ID, and strategy. A hard \$80 budget cap
+governs the entire study. We report bootstrap 95\% CIs (10\,k resamples)
+and paired permutation $p$-values vs.\ \textsf{full\_context} (10\,k
+permutations). LongMemEval items are stratified across the six
+question types under seed 42 (replication: seed 43, $n{=}50$).
+
+\section{Experiments}\label{sec:experiments}
+
+We run five evaluations under a single \$80 cap.
+
+\subsection{Risk-stop pilot ($n{=}25$, \$4.6)}
+
+A 25-item LongMemEval pilot on three strategies
+(\textsf{full\_context}, \textsf{rolling\_summary},
+\textsf{task\_aware}) verified the harness and five sanity checks: no
+silent truncation, judge-cache effectiveness, format-sanity of
+\textsf{task\_aware} compactions
+(5/5 sampled outputs contained \verb|[session-N, turn-T]| citations),
+and cost reconciliation~--- all PASS.
+
+\subsection{Main LongMemEval sweep ($n{=}120$ + $n{=}50$, \$43.0)}
+
+Seed 42, $n{=}120$ across all five strategies; seed 43 $n{=}50$ as a
+held-out replication; budget sweep on \textsf{task\_aware} at
+$B \in \{4{,}000, 8{,}000\}$. All items are LongMemEval-$S$ with mean
+input 106\,k tokens for full context.
+
+\subsection{LoCoMo ($n{=}25$, \$1.4)}
+
+Three strategies on LoCoMo10 (single-hop, multi-hop, temporal,
+open-domain; adversarial excluded), $n{=}25$ stratified.
+
+\subsection{$\tau$-bench retail ($n{=}10$ per strategy, \$1.1)}
+
+Three strategies on the same 10 retail episodes, max 20 steps,
+gpt-4o-mini user simulator, gemini-3-flash-preview driver and compactor.
+
+\subsection{Cross-vendor sanity ($n{=}15$, \$9.4)}
+
+The same 15 LongMemEval items run under both Gemini-3-Flash and
+Claude Haiku 4.5 as drivers; three strategies each.
+
+\subsection{Mem0 reproduction attempt}\label{sec:mem0}
+
+We pinned \texttt{mem0ai==2.0.2} and configured Mem0 with our
+gemini-3-flash-preview LLM and \texttt{text-embedding-3-large}
+embeddings. We ingested the haystack of each LongMemEval item
+turn-by-turn, then asked the question and judged with the LongMemEval
+judge. We completed 15 of the planned 50 items (accuracy
+$10/15 = 0.667$, mean ingest 309\,s/item). Two issues blocked completion:
+(i) Mem0's internal LLM calls go through its own client and bypass our
+cost-accounting wrapper, leaving the bulk of ingest spend unlogged and
+preventing a clean reconciliation against the \$80 cap, and (ii) at
+5.15 minutes per item, finishing 50 items would have required
+several hours of additional wall-clock with unknown spend overhead.
+We therefore cite Mem0's published numbers from~\citep{mem0_2025} and
+the vendor blog~\citep{mem0_blog_2025} as \emph{reference markers with
+driver-mismatch caveats}, not as a head-to-head competitor under
+strict iso-conditions. The qualitative comparison stands as: ours at
+$\sim\!2$\,k input tokens at $0.73$ accuracy on $n{=}120$ vs.\ Mem0's
+research-blog claim at $\sim\!7$\,k retrieval tokens at $0.93$
+accuracy with an unspecified (likely stronger) driver. Our partial
+iso-driver reproduction of Mem0 at gemini-3-flash-preview gave
+$0.667$ at $n{=}15$, plotted as a separate marker on
+Figure~\ref{fig:pareto_usd} for an apples-to-apples comparison.
+
+\section{Results}\label{sec:results}
+
+\subsection{LongMemEval Pareto (headline)}
+
+\begin{table}[t]
+\caption{LongMemEval ($n{=}120$, seed 42, $B{=}8000$). Accuracy with
+bootstrap 95\% CI; mean driver input tokens; total USD/query (driver +
+compactor); paired permutation $p$-value vs.\ \textsf{full\_context}
+(10\,k permutations). The final row is a pooled paired permutation test
+that combines seed 42 ($n{=}120$) and seed 43 ($n{=}50$) for a stronger
+test on the headline claim.}
+\label{tab:lme_main}
+\centering
+\small
+\begin{tabular}{lccccc}
+\toprule
+strategy & accuracy & 95\% CI & input tok & USD/q & $p$ vs.\ full \\
+\midrule
+\textsf{full\_context}     & 0.650 & [0.567, 0.733] & 106{,}400 & 0.0422 & --- \\
+\textsf{naive\_truncation} & 0.183 & [0.117, 0.258] & 8{,}100   & 0.0046 & 0.000 \\
+\textsf{rolling\_summary}  & 0.558 & [0.467, 0.650] & 11{,}900  & 0.0593 & 0.118 \\
+\textsf{type\_aware}       & 0.458 & [0.367, 0.550] & 8{,}600   & 0.0690 & 0.000 \\
+\textbf{\textsf{task\_aware}} & \textbf{0.733} & [0.650, 0.808] & \textbf{2{,}000} & \textbf{0.0519} & 0.108 \\
+\midrule
+\multicolumn{6}{l}{\emph{pooled paired permutation test, task\_aware vs.\ full\_context (seed 42 + seed 43)}} \\
+\textsf{task\_aware} pooled & 0.771 & $\Delta{=}0.118$, CI $[0.047, 0.194]$ & --- & --- & \textbf{0.0042} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Table~\ref{tab:lme_main} is the headline. \textsf{task\_aware} reaches
+$0.73$ at $\sim\!2$\,k input tokens, an $8$-point improvement over
+\textsf{full\_context} at $\sim\!1.8\%$ of the input-token bill (the
+ratio is $1952/106{,}394 = 1.83\%$). The paired-permutation test against
+\textsf{full\_context} on seed 42 alone is directional but does not
+reach significance ($p{=}0.108$, $n{=}120$). However, the seed-43
+$n{=}50$ replication exhibits a much larger effect ($\Delta{=}+0.20$,
+$p{=}0.0074$), and a pooled paired-permutation test that combines both
+seeds ($n_{\text{pooled}}{=}170$) yields $\Delta{=}+0.118$ with bootstrap
+$95\%$ CI $[0.047, 0.194]$ and $p{=}0.0042$ (Table~\ref{tab:lme_main},
+final row). The headline finding is therefore statistically significant
+under the pooled test. The deltas are positive on five of the six
+question types (Table~\ref{tab:pertype} below).
+\textsf{type\_aware} significantly under-performs \textsf{full\_context}
+($p{=}0.0004$); we discuss why in
+Section~\ref{sec:discussion}. \textsf{naive\_truncation} is well below
+all alternatives.
+
+The total USD/query for \textsf{task\_aware} ($\$0.052$) is higher than
+\textsf{full\_context}'s ($\$0.042$) because the compactor also reads
+the full $\sim\!106$\,k history once per item; the compactor is the
+dominant cost term ($\$0.051$ of $\$0.052$). Where the input tokens
+matter is in agent loops where the compacted output is replayed many
+times: at the driver alone, the cost is $\$0.0009$ for
+\textsf{task\_aware} vs.\ $\$0.042$ for \textsf{full\_context} ($45\times$
+cheaper).
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figures/fig1_pareto_usd.pdf}
+\caption{LongMemEval cost-vs-accuracy Pareto. Filled markers with error
+bars are our five strategies (95\% bootstrap CI), each with a distinct
+shape (\textsf{full\_context}=circle, \textsf{naive\_truncation}=square,
+\textsf{rolling\_summary}=triangle, \textsf{type\_aware}=diamond,
+\textsf{task\_aware}=star) so the figure degrades gracefully under
+greyscale printing. Open triangles are from-paper reference markers
+placed at approximate per-query USD proxies (driver-mismatch caveat
+applies). The grey ``X'' marker labelled ``Mem0 (iso-driver, n=15
+partial)'' is our partial reproduction of Mem0 at the same
+gemini-3-flash-preview driver as our policies, plotted for honesty;
+its USD coordinate is approximated from the Mem0 paper's $\sim\!7$\,k
+retrieval-token figure at our gemini-3-flash-preview pricing and does
+not include unlogged Mem0-internal ingest spend (see
+Section~\ref{sec:mem0}). Asterisks in system labels denote
+vendor-blog numbers. The ours-only Pareto frontier is dashed.}
+\label{fig:pareto_usd}
+\end{figure}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figures/fig2_pareto_tokens.pdf}
+\caption{LongMemEval tokens-vs-accuracy Pareto. \textsf{task\_aware} is
+isolated in the upper-left corner --- highest accuracy at the smallest
+mean input.}
+\label{fig:pareto_tokens}
+\end{figure}
+
+\paragraph{Replication and budget sweep.}
+On a seed-43 $n{=}50$ replication, the same five strategies give
+\textsf{task\_aware} \textbf{0.86} ([0.76, 0.94]), \textsf{full\_context}
+$0.66$ ([0.52, 0.80]), \textsf{rolling\_summary} $0.54$ ([0.40, 0.68]),
+\textsf{type\_aware} $0.36$ ([0.24, 0.50]), \textsf{naive\_truncation}
+$0.24$ ([0.12, 0.36]) --- the seed-43 effect is large with
+non-overlapping CIs vs.\ \textsf{full\_context}. The \textsf{task\_aware} budget sweep gives
+$0.82$ at $B{=}4000$ and $0.86$ at $B{=}8000$ --- diminishing returns,
+suggesting $B{=}4$\,k is already enough to recover most of the win
+even though the actual compacted output averages only $\sim\!1700$
+tokens.
+
+\paragraph{Per-question-type breakdown.}
+Figure~\ref{fig:pertype} and Table~\ref{tab:pertype} (Appendix) show
+that \textsf{task\_aware} is at or above \textsf{full\_context} on
+all six question types except (statistically tied)
+\textsf{single-session-assistant} where \textsf{full\_context} is
+$1.0$ vs.\ \textsf{task\_aware} $0.92$ at $n{=}13$. The gain is largest
+on multi-session ($+0.06$), single-session-preference ($+0.57$), and
+temporal-reasoning ($+0.13$).
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figures/fig6_pertype.pdf}
+\caption{Per-question-type accuracy on LongMemEval ($n{=}120$, seed 42).
+\textsf{task\_aware} dominates on five of six types and is statistically
+tied on the sixth.}
+\label{fig:pertype}
+\end{figure}
+
+\subsection{LoCoMo}
+
+Table~\ref{tab:locomo} confirms the LongMemEval finding on a different
+benchmark, judge prompt, and conversation distribution.
+\textsf{task\_aware} reaches $0.84$ at $\sim\!1$\,k tokens, far above
+\textsf{rolling\_summary} ($0.44$) and \textsf{type\_aware} ($0.36$).
+Figure~\ref{fig:locomo} shows the per-question-type breakdown:
+\textsf{task\_aware} hits $1.0$ on temporal and open-domain
+($n{=}6$ each) where the live query is most directly informative,
+and remains the leader even on multi-hop where \textsf{rolling\_summary}
+struggles ($0.83$ vs.\ $0.17$).
+
+\begin{table}[t]
+\caption{LoCoMo overall ($n{=}25$, three strategies). Mean compacted
+tokens, mean driver input tokens, mean driver USD/query.}
+\label{tab:locomo}
+\centering
+\small
+\begin{tabular}{lcccc}
+\toprule
+strategy & accuracy & 95\% CI & comp tok & USD/q \\
+\midrule
+\textsf{rolling\_summary}  & 0.44 & [0.27, 0.63] & 6{,}800 & 0.0032 \\
+\textsf{type\_aware}       & 0.36 & [0.20, 0.55] & 7{,}900 & 0.0040 \\
+\textbf{\textsf{task\_aware}} & \textbf{0.84} & [0.65, 0.94] & \textbf{1{,}000} & \textbf{0.0006} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figures/fig3_locomo_bars.pdf}
+\caption{LoCoMo accuracy by question type ($n{=}25$ stratified across
+single-hop, multi-hop, temporal, open-domain). 95\% bootstrap CIs.
+\textsf{task\_aware} dominates everywhere except single-hop where it
+is tied with \textsf{rolling\_summary}; on temporal and open-domain it
+reaches $1.0$ at $n{=}6$.}
+\label{fig:locomo}
+\end{figure}
+
+\subsection{$\tau$-bench retail (a sharp failure mode at $n{=}10$)}
+
+\begin{table}[t]
+\caption{$\tau$-bench retail ($n{=}10$ episodes per strategy). pass@1
+with 95\% bootstrap CI; mean steps; mean tool calls; mean USD/episode.
+For \textsf{task\_aware}, \$0.107 of the \$0.140 USD/episode is
+compactor cost (the agent loops longer, triggering more compaction
+calls); the same decomposition lesson as Section~\ref{sec:results}
+applies.}
+\label{tab:taubench}
+\centering
+\small
+\begin{tabular}{lccccc}
+\toprule
+strategy & pass@1 & 95\% CI & steps & tool calls & USD/ep \\
+\midrule
+\textbf{\textsf{rolling\_summary}}  & \textbf{0.60} & [0.31, 0.83] & 13.6 & 6.5 & 0.032 \\
+\textsf{type\_aware}       & 0.50 & [0.24, 0.76] & 13.4 & 6.6 & 0.034 \\
+\textsf{task\_aware}       & 0.00 & [0.00, 0.28] & 19.1 & 17.3 & 0.140 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Table~\ref{tab:taubench} is the paper's most consequential negative result.
+\textsf{task\_aware} drops to pass@1${=}0.00$ (95\% CI $[0, 0.28]$,
+$n{=}10$) on tool-using agents in $\tau$-bench retail, while
+\textsf{rolling\_summary} stays at $0.60$ and \textsf{type\_aware} at
+$0.50$. We treat this as a strong negative signal but the
+small sample warrants caution; the wide $[0, 0.28]$ CI means a true
+underlying pass-rate of up to $\sim\!25\%$ is not formally excluded,
+even though all $10$ episodes failed under \textsf{task\_aware}. The mean episode-step count for \textsf{task\_aware} reaches
+$19.1$ of a $20$-step cap (vs.\ $13.6$ for \textsf{rolling\_summary}),
+and the mean number of tool calls climbs to $17.3$ (vs.\ $6.5$). The
+agent is looping inside its episode, evidence that the policy has
+pruned away historical state that downstream sub-steps required.
+Figure~\ref{fig:taubench} visualises this.
+
+The mechanism is: at each compaction step, \textsf{task\_aware} is
+shown the latest sub-step query (e.g., ``what is the order ID for
+that exchange request?'') and instructed to keep query-relevant
+content. Historical \textsf{tool\_result} segments that established
+authorisation, account balance, or membership state look off-topic
+relative to the current sub-query and are aggressively pruned. When
+the agent later needs to invoke a tool that depends on that pruned
+state, it has to re-issue tool calls to recover it, and the episode
+exhausts its step budget. \textsf{rolling\_summary}, which is
+task-agnostic, retains a running narrative of the conversation
+and avoids this trap.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figures/fig4_taubench.pdf}
+\caption{$\tau$-bench retail pass@1, $n{=}10$ episodes per strategy. The
+\textsf{task\_aware} bar at $0.00$ also has the largest mean step count
+($19.1$ of a $20$-step cap) and mean tool-call count ($17.3$) ---
+evidence that the agent loops to recover state pruned by the policy.}
+\label{fig:taubench}
+\end{figure}
+
+\subsection{Cross-vendor sanity}\label{sec:xvendor}
+
+\begin{table}[t]
+\caption{Cross-vendor LongMemEval ($n{=}15$ shared items). Spearman
+$\rho{=}{-}0.5$ between the two driver rankings; sign agreement on
+$1$ of $3$ pairs. Driver USD/q reported for parity with
+Tables~\ref{tab:lme_main} and \ref{tab:locomo}.}
+\label{tab:xvendor}
+\centering
+\small
+\begin{tabular}{llcccc}
+\toprule
+driver & strategy & accuracy & 95\% CI & input tok & driver USD/q \\
+\midrule
+\multirow{3}{*}{Gemini-3-Flash}
+  & \textsf{rolling\_summary}  & 0.60 & [0.33, 0.87] & 12{,}900 & 0.0033 \\
+  & \textsf{type\_aware}       & 0.47 & [0.20, 0.73] & 8{,}500  & 0.0024 \\
+  & \textbf{\textsf{task\_aware}} & \textbf{0.73} & [0.53, 0.93] & 1{,}900 & 0.0005 \\
+\midrule
+\multirow{3}{*}{Claude-Haiku-4.5}
+  & \textbf{\textsf{rolling\_summary}}  & \textbf{0.53} & [0.27, 0.80] & 13{,}400 & 0.0139 \\
+  & \textsf{type\_aware}       & 0.47 & [0.20, 0.73] & 8{,}600  & 0.0089 \\
+  & \textsf{task\_aware}       & 0.40 & [0.13, 0.67] & 900      & 0.0011 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Table~\ref{tab:xvendor} shows the result that most constrains the
+paper's claims. On the same 15 LongMemEval items, the strategy
+ranking is unstable across drivers in our $n{=}15$ probe.
+On Gemini-3-Flash, \textsf{task\_aware} ($0.73$) is best;
+on Claude Haiku 4.5, \textsf{rolling\_summary} ($0.53$) is best, and
+\textsf{task\_aware} drops to $0.40$. Spearman $\rho$ across the two
+rankings is $-0.5$, with sign-agreement on only $1$ of $3$ pairs.
+The Haiku per-strategy CIs all overlap; the inversion is a
+point-estimate pattern at $n{=}15$ rather than a tested claim,
+and we treat it as suggestive rather than conclusive.
+Figure~\ref{fig:xvendor} visualises the pattern.
+
+This is consistent with the hypothesis that drivers differ in their
+robustness to short, curated contexts: Claude Haiku 4.5 may extract
+better from longer, narrative contexts while Gemini-3-Flash is more
+sensitive to context length and benefits more from the
+\textsf{task\_aware} curation. The sample is too small ($n{=}15$) to
+make the claim strongly; we treat this as a signal that the right
+default policy can depend on the driver.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figures/fig5_xvendor.pdf}
+\caption{Cross-vendor ranking pattern at $n{=}15$. Each line connects
+the same strategy across drivers; lines crossing indicates ranking
+instability. \textsf{task\_aware} (orange line, star marker) is best
+on Gemini-3-Flash and worst on Claude Haiku 4.5;
+\textsf{rolling\_summary} (green line, triangle marker) is the
+opposite. Spearman $\rho{=}{-}0.5$. The Haiku per-strategy CIs all
+overlap; we treat this as suggestive rather than conclusive.}
+\label{fig:xvendor}
+\end{figure}
+
+\section{Discussion}\label{sec:discussion}
+
+\paragraph{Why \textsf{task\_aware} works on chat.}
+LongMemEval and LoCoMo questions are explicit retrieval-of-relevant-fact
+queries: the user asks a question and the answer lives in one or two
+specific turns. Showing the compactor the live query directly identifies
+which turns to keep verbatim. The mechanism resembles
+LongLLMLingua~\citep{longllmlingua_2023}, but applied to a longer,
+streaming conversation rather than a single retrieval pass, and
+paired with citation hints (\verb|[session-N, turn-T]|) that anchor the
+compactor's output in the original transcript.
+
+\paragraph{Why it fails on $\tau$-bench.}
+Multi-step tool-using episodes are not retrieval queries. The user's
+original request decomposes into sub-tool-calls whose intermediate
+results (order IDs, prior validations, dependency chains) must
+\emph{survive} compaction even after the surface query has shifted to a
+sub-goal. The compactor sees only the latest sub-step query and
+aggressively prunes ``off-topic'' history. The cure is not to abandon
+task-awareness but to widen the salience window: task-aware compaction
+needs to be conditioned on the \emph{episode-level} task, not the
+turn-level sub-query. We leave that to future work; for now, production
+systems should detect trajectory class and switch policy.
+
+\paragraph{Why \textsf{type\_aware} underperforms on text-only conversation.}
+The type-aware design assumes a heterogeneous segment-type distribution
+where, e.g., \textsf{tool\_result} blocks dominate token mass. On
+LongMemEval-$S$, the user-overflow fallback fires on $100\%$ of items
+because the user-class share alone exceeds $B{=}8000$ on every item; we
+end up rolling user content into a chained summary, undoing the
+per-class verbatim policy. The type-aware policy as parameterised
+here essentially never engages its design strengths on this benchmark.
+A more honest evaluation of type-aware would either raise the budget
+to $32$\,k$+$ on LongMemEval (where user content fits) or restrict to
+benchmarks with high \textsf{tool\_call}/\textsf{tool\_result} share.
+Type-aware is competitive on $\tau$-bench ($0.50$ vs.\ $0.60$
+rolling, with smaller variance and similar mean steps) where the
+segment mix is heterogeneous --- this is the partial-credit datapoint.
+We expect type-aware to dominate on truly tool-heavy agent benchmarks
+(deep AppWorld trajectories, SWE-Bench-style coding agents) where the
+segment-type distribution is heterogeneous; we leave this and a
+re-tuned per-class budget to future work.
+
+\paragraph{What the cross-vendor inversion implies.}
+The honest claim is that compaction-policy choice is conditioned on
+the driver model. A single ranking pulled from one driver does not
+transfer at $n{=}15$. We do not have enough data to model the driver
+$\times$ policy interaction; we view this as a candidate research
+direction.
+
+\paragraph{Break-even and amortisation.}
+On a per-item single-query basis, \textsf{task\_aware} costs
+\$0.052/q vs.\ \$0.042/q for \textsf{full\_context} because the
+compactor reads the entire $\sim\!106$\,k-token trajectory once. When
+the same compacted history is queried multiple times within a session
+--- the typical agent deployment shape --- the compactor pass
+amortises and only the driver-side cost recurs (\$0.0009 vs.\
+\$0.042, $\sim\!48\times$ cheaper). The break-even occurs at
+$K \approx \$0.0511 / (\$0.0418 - \$0.0009) \approx 1.25$ queries:
+after roughly the second query against the same compacted history,
+total cost is dominated by the driver and \textsf{task\_aware} is
+strictly cheaper. At $K{=}10$ queries per session, the total cost
+ratio is approximately $7\times$ in favour of \textsf{task\_aware}
+(\$0.060 vs.\ \$0.42). All numbers are traceable to
+\texttt{pareto\_data.json} and \texttt{longmemeval\_main\_summary.json}.
+This reframes the cost story for production deployments where one
+memory store serves many queries.
+
+\paragraph{Cost framing.}
+Most prior memory papers report token counts (e.g., $\sim\!7$\,k
+tokens at retrieval for Mem0) but not USD-per-query. We argue that USD
+is the more honest metric for memory comparisons, because it normalises
+the cost of the compactor LLM, the embedding endpoint, the judge, and
+the driver under a common unit. Our \texttt{cost\_log.jsonl} captures
+12{,}274 LLM calls totalling \$60.83 in this study; we publish the
+per-row log so others can re-price the same trajectories under
+different vendors.
+
+\section{Limitations}\label{sec:limits}
+
+\textbf{(1) Mem0 not strictly reproduced.} Mem0's internal LLM client
+bypasses our cost wrapper, leaving ingest spend unlogged; we
+completed only $15$ of $50$ planned items at iso-driver. We cite Mem0
+paper~\citep{mem0_2025} and blog~\citep{mem0_blog_2025} numbers as
+reference markers with explicit driver-mismatch caveats, not as
+head-to-head comparisons.
+\textbf{(2) No multimodal arm.} VisualWebArena~\citep{visualwebarena_2024}
+or OSWorld~\citep{osworld_2024} would push the cap; the
+ranking-transfer evidence comes from cross-vendor only.
+\textbf{(3) Cross-vendor $n{=}15$ is small.} The $\rho{=}{-}0.5$
+inversion is suggestive, not definitive.
+\textbf{(4) $\tau$-bench $n{=}10$ per strategy is small.} The
+$0.00$ pass@1 for \textsf{task\_aware} is striking but with wide CIs.
+\textbf{(5) English-only.} We do not test multilingual histories.
+\textbf{(6) No human eval.} Compaction-output quality is graded
+indirectly through downstream task accuracy.
+\textbf{(7) Cross-system Pareto markers.} The from-paper markers in
+Figure~\ref{fig:pareto_usd} use heterogeneous drivers; the ours-only
+frontier is the strongest comparison.
+
+\section{Conclusion}\label{sec:conc}
+
+Task-aware compaction is the right default for chat-memory tasks at
+near-free driver-side input cost (\$0.0009 driver USD / query for
+$0.73$ accuracy on LongMemEval, vs.\ \$0.042 for full context at $0.65$;
+pooled paired permutation $p{=}0.0042$ at $n{=}170$). When the same
+compacted history serves more than $K \approx 1.25$ queries, total
+cost is also strictly lower than full context. Type-aware compaction
+is a future direction for tool-heavy agent trajectories with re-tuned
+per-class budgets. Per-query USD is the unifying metric for memory
+systems; we encourage future work to publish it alongside accuracy.
+
+\bibliographystyle{plainnat}
+\bibliography{refs}
+
+\appendix
+
+\section{Exact compactor prompts}\label{app:prompts}
+
+\subsection{\textsf{task\_aware} compactor prompt}
+
+\begin{quote}\small\ttfamily
+You are compacting a long agent trajectory.\\[2pt]
+Active user query: \{q\_t\}\\[2pt]
+Trajectory below contains messages indexed by [session-N, turn-T]
+roles. Your output budget is at most \{B\} tokens.\\[2pt]
+Rules:\\
+1. Quote VERBATIM any turn whose content is directly relevant to the
+active user query, prefixed by [session-N, turn-T].\\
+2. Summarise the rest as one bullet per useful fact, in the form
+[session-N, turn-T] <one-line fact>.\\
+3. Drop content that is neither relevant nor a useful background fact.\\
+4. Preserve the system prompt verbatim if present.\\
+5. Do not invent facts.
+\end{quote}
+
+\subsection{\textsf{rolling\_summary} prompt}
+
+\begin{quote}\small\ttfamily
+Summarise the conversation chunk below in at most \{W/2\} tokens. Keep
+named entities, dates, and numbers verbatim. Output prose, not bullets.
+\end{quote}
+
+\subsection{\textsf{type\_aware} per-class rules}
+
+\begin{quote}\small
+\begin{itemize}
+  \item \textsf{system}: verbatim.
+  \item \textsf{user}: verbatim, but if the user share alone exceeds the
+        budget, chain-summarise older user turns at $W{=}512$ tokens.
+  \item \textsf{assistant\_text}: rolling-summarised at $W{=}1024$.
+  \item \textsf{assistant\_reasoning}: keep last 4 verbatim, summarise older.
+  \item \textsf{tool\_call}: verbatim (small).
+  \item \textsf{tool\_result}: keep first line + last line + 1-line summary.
+\end{itemize}
+\end{quote}
+
+\section{Full per-question-type matrix}\label{app:pertype}
+
+\begin{table}[h]
+\caption{Per-question-type accuracy on LongMemEval ($n{=}120$, seed 42, $B{=}8000$).}
+\label{tab:pertype}
+\centering
+\small
+\begin{tabular}{lccccccc}
+\toprule
+strategy & $n_{\text{tot}}$ & ku & ms & ssa & ssp & ssu & tr \\
+ & ($=120$) & ($n{=}19$) & ($n{=}32$) & ($n{=}13$) & ($n{=}7$) & ($n{=}17$) & ($n{=}32$) \\
+\midrule
+\textsf{full\_context}     & 120 & 0.84 & 0.59 & 1.00 & 0.29 & 0.94 & 0.38 \\
+\textsf{naive\_truncation} & 120 & 0.32 & 0.13 & 0.54 & 0.00 & 0.18 & 0.06 \\
+\textsf{rolling\_summary}  & 120 & 0.84 & 0.38 & 0.62 & 0.57 & 0.88 & 0.38 \\
+\textsf{type\_aware}       & 120 & 0.68 & 0.38 & 0.54 & 0.29 & 0.71 & 0.28 \\
+\textbf{\textsf{task\_aware}} & 120 & \textbf{0.84} & \textbf{0.66} & 0.92 & \textbf{0.86} & \textbf{1.00} & \textbf{0.50} \\
+\midrule
+\multicolumn{8}{l}{\footnotesize ku=knowledge-update, ms=multi-session, ssa=single-session-assistant,} \\
+\multicolumn{8}{l}{\footnotesize ssp=single-session-preference, ssu=single-session-user, tr=temporal-reasoning. Per-cell $n$ is the per-type $n$ shown in the header row.} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Cost reconciliation note}\label{app:cost}
+
+The \texttt{cost\_log.jsonl} file in our artefact contains $12{,}274$
+rows summing to \$60.83. The smoke pilot consumed \$4.64; the main
+LongMemEval sweep consumed \$42.95; LoCoMo \$1.37; $\tau$-bench retail
+\$1.08; cross-vendor \$9.37. Mem0 ingest is \emph{not} fully accounted
+in the log because Mem0's internal LLM client does not route through our
+proxy; the answer-compose calls are logged but the per-fact extraction
+calls during ingest are not (Section~\ref{sec:mem0}).
+
+\section{Compaction qualitative example}\label{app:qualitative}
+
+For a representative LongMemEval-$S$ item the original history is
+$\sim\!106{,}000$ tokens of user/assistant turns spread across multiple
+sessions. \textsf{rolling\_summary} compresses this to $\sim\!11{,}500$
+tokens of running prose narrative; \textsf{type\_aware} to
+$\sim\!8{,}000$ tokens with the user-overflow fallback active;
+\textsf{task\_aware} to $\sim\!1{,}700$ tokens of bullet-list with
+\verb|[session-N, turn-T]| citations and verbatim-quoted relevant turns.
+The relevant transcript span ($1$--$3$ turns) is preserved verbatim
+under \textsf{task\_aware}, paraphrased under \textsf{rolling\_summary},
+and partially lost under \textsf{type\_aware} (the user-overflow chained
+summary tends to drop the specific entity named in the answer).
+
+\end{document}

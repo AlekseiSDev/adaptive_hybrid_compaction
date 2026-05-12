@@ -1,0 +1,112 @@
+{
+  "per_strategy": {
+    "rolling_summary": {
+      "n": 25,
+      "accuracy": 0.44,
+      "ci95_low": 0.2667,
+      "ci95_high": 0.6293,
+      "mean_compacted_tokens": 6773.4,
+      "mean_driver_input_tokens": 7114.6,
+      "mean_driver_usd": 0.003204
+    },
+    "type_aware": {
+      "n": 25,
+      "accuracy": 0.36,
+      "ci95_low": 0.2025,
+      "ci95_high": 0.5548,
+      "mean_compacted_tokens": 7897.7,
+      "mean_driver_input_tokens": 8942.7,
+      "mean_driver_usd": 0.00404
+    },
+    "task_aware": {
+      "n": 25,
+      "accuracy": 0.84,
+      "ci95_low": 0.6535,
+      "ci95_high": 0.936,
+      "mean_compacted_tokens": 1013.4,
+      "mean_driver_input_tokens": 1163.0,
+      "mean_driver_usd": 0.000613
+    }
+  },
+  "per_strategy_per_type": {
+    "rolling_summary": {
+      "single-hop": {
+        "n": 7,
+        "accuracy": 0.2857,
+        "ci95_low": 0.0822,
+        "ci95_high": 0.6411
+      },
+      "multi-hop": {
+        "n": 6,
+        "accuracy": 0.1667,
+        "ci95_low": 0.0301,
+        "ci95_high": 0.5635
+      },
+      "temporal": {
+        "n": 6,
+        "accuracy": 0.6667,
+        "ci95_low": 0.3,
+        "ci95_high": 0.9032
+      },
+      "open-domain": {
+        "n": 6,
+        "accuracy": 0.6667,
+        "ci95_low": 0.3,
+        "ci95_high": 0.9032
+      }
+    },
+    "type_aware": {
+      "single-hop": {
+        "n": 7,
+        "accuracy": 0.2857,
+        "ci95_low": 0.0822,
+        "ci95_high": 0.6411
+      },
+      "multi-hop": {
+        "n": 6,
+        "accuracy": 0.1667,
+        "ci95_low": 0.0301,
+        "ci95_high": 0.5635
+      },
+      "temporal": {
+        "n": 6,
+        "accuracy": 0.6667,
+        "ci95_low": 0.3,
+        "ci95_high": 0.9032
+      },
+      "open-domain": {
+        "n": 6,
+        "accuracy": 0.3333,
+        "ci95_low": 0.0968,
+        "ci95_high": 0.7
+      }
+    },
+    "task_aware": {
+      "single-hop": {
+        "n": 7,
+        "accuracy": 0.5714,
+        "ci95_low": 0.2505,
+        "ci95_high": 0.8418
+      },
+      "multi-hop": {
+        "n": 6,
+        "accuracy": 0.8333,
+        "ci95_low": 0.4365,
+        "ci95_high": 0.9699
+      },
+      "temporal": {
+        "n": 6,
+        "accuracy": 1.0,
+        "ci95_low": 0.6097,
+        "ci95_high": 1.0
+      },
+      "open-domain": {
+        "n": 6,
+        "accuracy": 1.0,
+        "ci95_low": 0.6097,
+        "ci95_high": 1.0
+      }
+    }
+  },
+  "n_total_rows": 75
+}

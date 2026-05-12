@@ -1,0 +1,59 @@
+{
+  "per_strategy": {
+    "full_context": {
+      "n": 25,
+      "accuracy": 0.72,
+      "mean_driver_input_tokens": 106444,
+      "mean_compacted_tokens": 102874,
+      "p50_driver_latency_s": 4.1,
+      "p95_driver_latency_s": 5.71,
+      "mean_compact_time_s": 0.0
+    },
+    "rolling_summary": {
+      "n": 25,
+      "accuracy": 0.64,
+      "mean_driver_input_tokens": 11640,
+      "mean_compacted_tokens": 11188,
+      "p50_driver_latency_s": 1.88,
+      "p95_driver_latency_s": 3.14,
+      "mean_compact_time_s": 0.05
+    },
+    "task_aware": {
+      "n": 25,
+      "accuracy": 0.8,
+      "mean_driver_input_tokens": 1878,
+      "mean_compacted_tokens": 1628,
+      "p50_driver_latency_s": 1.48,
+      "p95_driver_latency_s": 2.06,
+      "mean_compact_time_s": 0.01
+    }
+  },
+  "total_items": 25,
+  "elapsed_s": 6.742046356201172,
+  "full_context_per_type": {
+    "temporal-reasoning": {
+      "n": 7,
+      "acc": 0.4286
+    },
+    "single-session-assistant": {
+      "n": 3,
+      "acc": 1.0
+    },
+    "single-session-user": {
+      "n": 3,
+      "acc": 1.0
+    },
+    "multi-session": {
+      "n": 7,
+      "acc": 0.7143
+    },
+    "knowledge-update": {
+      "n": 4,
+      "acc": 0.75
+    },
+    "single-session-preference": {
+      "n": 1,
+      "acc": 1.0
+    }
+  }
+}

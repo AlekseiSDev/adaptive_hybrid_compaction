@@ -95,6 +95,13 @@ Tooling: matplotlib (Python) для plots; TikZ или imported SVG для diagr
 
 ### 4.1 Из existing paper.pdf (cited, not re-run)
 
+Source files в `references/`:
+- `references/paper/paper.pdf` — PDF для прямых cite'ов.
+- `references/paper/refs.bib` — BibTeX seed для нашего `refs.bib`.
+- `references/mle-harness/results/` — raw NDJSON, `per_type_table.md`, `pareto_data.json`,
+  `peer_review.md` для верификации чисел при необходимости.
+
+Что цитируем:
 - Task-aware / Type-aware baseline numbers (existing paper).
 - Mem0/Letta/Zep cross-session memory framing.
 - LLMLingua-2 prompt compression.

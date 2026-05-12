@@ -1,0 +1,479 @@
+{
+  "ours_longmemeval_main": {
+    "_meta": {
+      "benchmark": "LongMemEval (longmemeval_s, 500-item subset)",
+      "n_items": 120,
+      "seed": 42,
+      "budget_tokens": 8000,
+      "driver_model": "google/gemini-3-flash-preview",
+      "compactor_model": "google/gemini-3-flash-preview",
+      "judge_model": "openai/gpt-4o-2024-08-06"
+    },
+    "points": [
+      {
+        "strategy": "full_context",
+        "n": 120,
+        "accuracy": 0.65,
+        "ci95_low": 0.5667,
+        "ci95_high": 0.7333,
+        "mean_input_tokens": 106394,
+        "mean_compacted_tokens": 103121,
+        "mean_total_usd_per_query": 0.042182,
+        "p_value_vs_full": null
+      },
+      {
+        "strategy": "naive_truncation",
+        "n": 120,
+        "accuracy": 0.1833,
+        "ci95_low": 0.1167,
+        "ci95_high": 0.2583,
+        "mean_input_tokens": 8090,
+        "mean_compacted_tokens": 7775,
+        "mean_total_usd_per_query": 0.00455,
+        "p_value_vs_full": 0.0
+      },
+      {
+        "strategy": "rolling_summary",
+        "n": 120,
+        "accuracy": 0.5583,
+        "ci95_low": 0.4667,
+        "ci95_high": 0.65,
+        "mean_input_tokens": 11870,
+        "mean_compacted_tokens": 11469,
+        "mean_total_usd_per_query": 0.059298,
+        "p_value_vs_full": 0.1182
+      },
+      {
+        "strategy": "type_aware",
+        "n": 120,
+        "accuracy": 0.4583,
+        "ci95_low": 0.3667,
+        "ci95_high": 0.55,
+        "mean_input_tokens": 8615,
+        "mean_compacted_tokens": 7895,
+        "mean_total_usd_per_query": 0.069038,
+        "p_value_vs_full": 0.0004
+      },
+      {
+        "strategy": "task_aware",
+        "n": 120,
+        "accuracy": 0.7333,
+        "ci95_low": 0.65,
+        "ci95_high": 0.8083,
+        "mean_input_tokens": 1952,
+        "mean_compacted_tokens": 1705,
+        "mean_total_usd_per_query": 0.051941,
+        "p_value_vs_full": 0.1076
+      }
+    ]
+  },
+  "ours_longmemeval_seed43": {
+    "_meta": {
+      "n_items": 50,
+      "seed": 43,
+      "budget_tokens": 8000
+    },
+    "points": [
+      {
+        "strategy": "full_context",
+        "n": 50,
+        "accuracy": 0.66,
+        "ci95_low": 0.52,
+        "ci95_high": 0.8,
+        "mean_input_tokens": 106448
+      },
+      {
+        "strategy": "naive_truncation",
+        "n": 50,
+        "accuracy": 0.24,
+        "ci95_low": 0.12,
+        "ci95_high": 0.36,
+        "mean_input_tokens": 8110
+      },
+      {
+        "strategy": "rolling_summary",
+        "n": 50,
+        "accuracy": 0.54,
+        "ci95_low": 0.4,
+        "ci95_high": 0.68,
+        "mean_input_tokens": 12313
+      },
+      {
+        "strategy": "type_aware",
+        "n": 50,
+        "accuracy": 0.36,
+        "ci95_low": 0.24,
+        "ci95_high": 0.5,
+        "mean_input_tokens": 8682
+      },
+      {
+        "strategy": "task_aware",
+        "n": 50,
+        "accuracy": 0.86,
+        "ci95_low": 0.76,
+        "ci95_high": 0.94,
+        "mean_input_tokens": 1953
+      }
+    ]
+  },
+  "ours_longmemeval_budget_sweep_task_aware": {
+    "_meta": {
+      "n_items": 50,
+      "seed": 43,
+      "strategy": "task_aware"
+    },
+    "points": [
+      {
+        "budget_tokens": 4000,
+        "accuracy": 0.82,
+        "ci_low": 0.72,
+        "ci_high": 0.92,
+        "mean_input_tokens": 1710,
+        "mean_compacted_tokens": 1483
+      },
+      {
+        "budget_tokens": 8000,
+        "accuracy": 0.86,
+        "ci_low": 0.76,
+        "ci_high": 0.94,
+        "mean_input_tokens": 1953,
+        "mean_compacted_tokens": 1702
+      }
+    ]
+  },
+  "ours_taubench": {
+    "_meta": {
+      "benchmark": "tau-bench retail",
+      "n_items_per_strategy": 10,
+      "driver_model": "google/gemini-3-flash-preview",
+      "user_simulator": "openrouter/openai/gpt-4o-mini",
+      "metric": "pass@1",
+      "compaction_budget_tokens": 4000,
+      "max_steps": 20
+    },
+    "points": [
+      {
+        "strategy": "rolling_summary",
+        "n": 10,
+        "pass_at_1": 0.6,
+        "ci_low": 0.3127,
+        "ci_high": 0.8318,
+        "mean_steps": 13.6,
+        "mean_tool_calls": 6.5,
+        "mean_compacted_tokens": 2455.4,
+        "mean_usd_per_episode": 0.031752
+      },
+      {
+        "strategy": "type_aware",
+        "n": 10,
+        "pass_at_1": 0.5,
+        "ci_low": 0.2366,
+        "ci_high": 0.7634,
+        "mean_steps": 13.4,
+        "mean_tool_calls": 6.6,
+        "mean_compacted_tokens": 2401.85,
+        "mean_usd_per_episode": 0.034005
+      },
+      {
+        "strategy": "task_aware",
+        "n": 10,
+        "pass_at_1": 0.0,
+        "ci_low": 0,
+        "ci_high": 0.2775,
+        "mean_steps": 19.1,
+        "mean_tool_calls": 17.3,
+        "mean_compacted_tokens": 968.47,
+        "mean_usd_per_episode": 0.140013
+      }
+    ]
+  },
+  "ours_locomo": {
+    "_meta": {
+      "benchmark": "LoCoMo10 (Percena/locomo-mc10 mirror, snap-research/locomo10)",
+      "n_items_per_strategy": 25,
+      "driver_model": "google/gemini-3-flash-preview",
+      "compactor_model": "google/gemini-3-flash-preview",
+      "judge_model": "openai/gpt-4o-2024-08-06",
+      "judge_style": "unified-llm-judge with reasonable equivalence (deviation from per-type metric)",
+      "categories_included": "1=single-hop, 2=multi-hop, 3=temporal, 4=open-domain (5=adversarial excluded)"
+    },
+    "points": [
+      {
+        "strategy": "rolling_summary",
+        "n": 25,
+        "accuracy": 0.44,
+        "ci95_low": 0.2667,
+        "ci95_high": 0.6293,
+        "mean_compacted_tokens": 6773.4,
+        "mean_driver_input_tokens": 7114.6,
+        "mean_driver_usd": 0.003204
+      },
+      {
+        "strategy": "type_aware",
+        "n": 25,
+        "accuracy": 0.36,
+        "ci95_low": 0.2025,
+        "ci95_high": 0.5548,
+        "mean_compacted_tokens": 7897.7,
+        "mean_driver_input_tokens": 8942.7,
+        "mean_driver_usd": 0.00404
+      },
+      {
+        "strategy": "task_aware",
+        "n": 25,
+        "accuracy": 0.84,
+        "ci95_low": 0.6535,
+        "ci95_high": 0.936,
+        "mean_compacted_tokens": 1013.4,
+        "mean_driver_input_tokens": 1163.0,
+        "mean_driver_usd": 0.000613
+      }
+    ]
+  },
+  "ours_cross_vendor": {
+    "_meta": {
+      "benchmark": "LongMemEval, 15 items, same items across drivers",
+      "drivers": [
+        "google/gemini-3-flash-preview",
+        "anthropic/claude-haiku-4.5"
+      ],
+      "transfer_summary": {
+        "rankings": {
+          "anthropic/claude-haiku-4.5": [
+            "rolling_summary",
+            "type_aware",
+            "task_aware"
+          ],
+          "google/gemini-3-flash-preview": [
+            "task_aware",
+            "rolling_summary",
+            "type_aware"
+          ]
+        },
+        "pair_sign_agreement": 0.3333333333333333,
+        "pair_total": 3,
+        "pair_matches": 1,
+        "spearman_rho": -0.5,
+        "common_items": 15
+      }
+    },
+    "points": [
+      {
+        "driver": "anthropic/claude-haiku-4.5",
+        "strategy": "rolling_summary",
+        "n": 15,
+        "accuracy": 0.5333,
+        "ci95_low": 0.2667,
+        "ci95_high": 0.8,
+        "mean_input_tokens": 13433,
+        "mean_compacted_tokens": 11824,
+        "mean_driver_usd": 0.01394
+      },
+      {
+        "driver": "anthropic/claude-haiku-4.5",
+        "strategy": "type_aware",
+        "n": 15,
+        "accuracy": 0.4667,
+        "ci95_low": 0.2,
+        "ci95_high": 0.7333,
+        "mean_input_tokens": 8585,
+        "mean_compacted_tokens": 7644,
+        "mean_driver_usd": 0.008899
+      },
+      {
+        "driver": "anthropic/claude-haiku-4.5",
+        "strategy": "task_aware",
+        "n": 15,
+        "accuracy": 0.4,
+        "ci95_low": 0.1333,
+        "ci95_high": 0.6667,
+        "mean_input_tokens": 866,
+        "mean_compacted_tokens": 718,
+        "mean_driver_usd": 0.001142
+      },
+      {
+        "driver": "google/gemini-3-flash-preview",
+        "strategy": "rolling_summary",
+        "n": 15,
+        "accuracy": 0.6,
+        "ci95_low": 0.3333,
+        "ci95_high": 0.8667,
+        "mean_input_tokens": 12873,
+        "mean_compacted_tokens": 12439,
+        "mean_driver_usd": 0.003255
+      },
+      {
+        "driver": "google/gemini-3-flash-preview",
+        "strategy": "type_aware",
+        "n": 15,
+        "accuracy": 0.4667,
+        "ci95_low": 0.2,
+        "ci95_high": 0.7333,
+        "mean_input_tokens": 8535,
+        "mean_compacted_tokens": 7818,
+        "mean_driver_usd": 0.002376
+      },
+      {
+        "driver": "google/gemini-3-flash-preview",
+        "strategy": "task_aware",
+        "n": 15,
+        "accuracy": 0.7333,
+        "ci95_low": 0.5333,
+        "ci95_high": 0.9333,
+        "mean_input_tokens": 1946,
+        "mean_compacted_tokens": 1692,
+        "mean_driver_usd": 0.000531
+      }
+    ]
+  },
+  "from_paper": {
+    "_meta": {
+      "purpose": "reference markers; driver mismatch caveats apply throughout",
+      "source": "librarian_results.md Sections 5a/5b"
+    },
+    "points": [
+      {
+        "system": "LongMemEval Oracle (full ctx)",
+        "benchmark": "LongMemEval",
+        "accuracy": 0.918,
+        "driver": "gpt-4o",
+        "tokens_per_call": "n/a (small subset)",
+        "caveat": "97-question subset, paper Fig 3a",
+        "source": "arXiv 2410.10813"
+      },
+      {
+        "system": "LongMemEval RAG K=V+fact (top-10)",
+        "benchmark": "LongMemEval",
+        "accuracy": 0.72,
+        "driver": "gpt-4o",
+        "caveat": "_M variant, paper-proposed",
+        "source": "arXiv 2410.10813 Table 3"
+      },
+      {
+        "system": "ChatGPT memory feature",
+        "benchmark": "LongMemEval",
+        "accuracy": 0.577,
+        "driver": "gpt-4o",
+        "caveat": "97 q subset, web UI eval",
+        "source": "arXiv 2410.10813"
+      },
+      {
+        "system": "ChatGPT (gpt-4o-mini)",
+        "benchmark": "LongMemEval",
+        "accuracy": 0.711,
+        "driver": "gpt-4o-mini",
+        "caveat": "97 q subset",
+        "source": "arXiv 2410.10813"
+      },
+      {
+        "system": "Coze (gpt-4o)",
+        "benchmark": "LongMemEval",
+        "accuracy": 0.33,
+        "driver": "gpt-4o",
+        "source": "arXiv 2410.10813"
+      },
+      {
+        "system": "Zep (Graphiti)",
+        "benchmark": "LongMemEval",
+        "accuracy": 0.712,
+        "driver": "gpt-4-turbo",
+        "caveat": "Graphiti latency -90% but +18.5% acc; independent eval gives 0.638",
+        "source": "arXiv 2501.13956"
+      },
+      {
+        "system": "Mem0 (research blog)",
+        "benchmark": "LongMemEval",
+        "accuracy": 0.934,
+        "driver": "unspecified (likely gpt-5-mini default)",
+        "tokens_per_call": "<7k retrieval",
+        "caveat": "vendor blog, not peer-reviewed; OUR partial reproduction at iso-driver gemini-3-flash gave 0.667 at n=15",
+        "source": "research.mem0.ai/longmemeval"
+      },
+      {
+        "system": "Emergence EmergenceMem (internal)",
+        "benchmark": "LongMemEval",
+        "accuracy": 0.86,
+        "driver": "gpt-4o-2024-08-06",
+        "caveat": "internal variant",
+        "source": "emergence.ai/blog"
+      },
+      {
+        "system": "Mastra Observational Memory (gpt-4o)",
+        "benchmark": "LongMemEval",
+        "accuracy": 0.8423,
+        "driver": "gpt-4o",
+        "tokens_per_call": "~30k avg",
+        "source": "mastra.ai/research/observational-memory"
+      },
+      {
+        "system": "Mastra OM (gpt-5-mini)",
+        "benchmark": "LongMemEval",
+        "accuracy": 0.9487,
+        "driver": "gpt-5-mini",
+        "source": "mastra.ai/research/observational-memory"
+      },
+      {
+        "system": "OMEGA (claimed)",
+        "benchmark": "LongMemEval",
+        "accuracy": 0.954,
+        "driver": "gpt-4.1",
+        "caveat": "vendor-published, not peer-reviewed",
+        "source": "omegamax.co/benchmarks"
+      },
+      {
+        "system": "Supermemory (prev SOTA)",
+        "benchmark": "LongMemEval",
+        "accuracy": 0.816,
+        "driver": "gpt-4o",
+        "caveat": "driver match unverified",
+        "source": "via Mastra blog"
+      },
+      {
+        "system": "Mem0 (paper Table 4)",
+        "benchmark": "LoCoMo",
+        "accuracy": 0.6688,
+        "driver": "gpt-4o-mini",
+        "tokens_per_call": "~7k retrieval",
+        "source": "Mem0 arXiv 2504.19413"
+      },
+      {
+        "system": "Mem0g (paper Table 4)",
+        "benchmark": "LoCoMo",
+        "accuracy": 0.6844,
+        "driver": "gpt-4o-mini",
+        "tokens_per_call": "~14k",
+        "source": "Mem0 arXiv 2504.19413"
+      },
+      {
+        "system": "LangMem",
+        "benchmark": "LoCoMo",
+        "accuracy": 0.581,
+        "driver": "gpt-4o-mini",
+        "source": "Mem0 paper baseline"
+      },
+      {
+        "system": "OpenAI memory",
+        "benchmark": "LoCoMo",
+        "accuracy": 0.529,
+        "driver": "gpt-4o-mini",
+        "source": "Mem0 paper"
+      },
+      {
+        "system": "Full-context (Mem0 paper baseline)",
+        "benchmark": "LoCoMo",
+        "accuracy": 0.729,
+        "driver": "gpt-4o-mini",
+        "tokens_per_call": "~26k",
+        "source": "Mem0 paper Table"
+      },
+      {
+        "system": "Mem0 (research blog)",
+        "benchmark": "LoCoMo",
+        "accuracy": 0.916,
+        "driver": "unspecified",
+        "caveat": "post-paper vendor blog",
+        "source": "mem0.ai/research"
+      }
+    ]
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "experiment": "smoke_pilot",
+  "ts": "2026-05-08T01:16:04.983990+00:00",
+  "n_items": 25,
+  "seed": 42,
+  "strategies": [
+    "full_context",
+    "rolling_summary",
+    "task_aware"
+  ],
+  "driver_model": "google/gemini-3-flash-preview",
+  "compactor_model": "google/gemini-3-flash-preview",
+  "judge_model": "openai/gpt-4o-2024-08-06",
+  "budget_tokens": 8000,
+  "qtype_distribution": {
+    "temporal-reasoning": 7,
+    "single-session-assistant": 3,
+    "single-session-user": 3,
+    "multi-session": 7,
+    "knowledge-update": 4,
+    "single-session-preference": 1
+  },
+  "data_path": "/workdir/compaction_policies__20260508_0231/mle/data/longmemeval/longmemeval_s.json"
+}

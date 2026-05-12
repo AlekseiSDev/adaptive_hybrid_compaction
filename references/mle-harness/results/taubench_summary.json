@@ -1,0 +1,70 @@
+{
+  "domain": "retail",
+  "driver_model": "google/gemini-3-flash-preview",
+  "compactor_model": "google/gemini-3-flash-preview",
+  "user_simulator": "openrouter/openai/gpt-4o-mini",
+  "budget_per_compaction_tokens": 4000,
+  "max_steps": 20,
+  "n_per_strategy": 10,
+  "episode_ids": [
+    "retail_13",
+    "retail_14",
+    "retail_17",
+    "retail_28",
+    "retail_3",
+    "retail_31",
+    "retail_35",
+    "retail_81",
+    "retail_86",
+    "retail_94"
+  ],
+  "per_strategy": {
+    "rolling_summary": {
+      "n": 10,
+      "pass_at_1": 0.6,
+      "ci_low": 0.3127,
+      "ci_high": 0.8318,
+      "mean_steps": 13.6,
+      "mean_tool_calls": 6.5,
+      "mean_usd_per_episode": 0.031752,
+      "mean_litellm_usd_only": 0.031752,
+      "mean_compactor_usd_only": 0.0,
+      "mean_compacted_tokens": 2455.4
+    },
+    "type_aware": {
+      "n": 10,
+      "pass_at_1": 0.5,
+      "ci_low": 0.2366,
+      "ci_high": 0.7634,
+      "mean_steps": 13.4,
+      "mean_tool_calls": 6.6,
+      "mean_usd_per_episode": 0.034005,
+      "mean_litellm_usd_only": 0.033166,
+      "mean_compactor_usd_only": 0.000839,
+      "mean_compacted_tokens": 2401.85
+    },
+    "task_aware": {
+      "n": 10,
+      "pass_at_1": 0.0,
+      "ci_low": 0,
+      "ci_high": 0.2775,
+      "mean_steps": 19.1,
+      "mean_tool_calls": 17.3,
+      "mean_usd_per_episode": 0.140013,
+      "mean_litellm_usd_only": 0.032969,
+      "mean_compactor_usd_only": 0.107045,
+      "mean_compacted_tokens": 968.47
+    }
+  },
+  "paired_pass_deltas": {
+    "type_aware_minus_rolling": -0.1,
+    "task_aware_minus_rolling": -0.6,
+    "common_n": 10
+  },
+  "ranking": [
+    "rolling_summary",
+    "type_aware",
+    "task_aware"
+  ],
+  "commentary": "task_aware fails on agent trajectories. The compactor is told to keep content relevant to the latest user query, but on multi-step tool-using agents the active query at compaction time is rarely the right anchor: a customer's original request decomposes into many sub-tool-calls whose intermediate results (order IDs, prior checks, dependency chains) must survive even after the task's surface query has shifted to a sub-goal. The compactor aggressively drops historical tool_results because they look off-topic relative to the current sub-step, which breaks downstream tool dependencies (we observe task_aware capping out at max_steps with 0 reward: the agent loops trying to recover lost context). type_aware preserves type-balanced slices and rolling_summary preserves a running narrative, both of which retain enough state for tool-chain continuity."
+}

@@ -357,8 +357,9 @@ numbers процитированы; повторно интегрировать 
 
 **Track B — Eval harness**
 
-- **B1. Wire existing harness (1 день).** Portировать существующий из `mle/results/`
-  paper'a — что есть переиспользуем, расширения под AHC-specific метрики.
+- **B1. Wire existing harness (1 день).** Portировать harness из vendored snapshot
+  `references/mle-harness/code/` в `src/eval/` — что есть переиспользуем, расширения
+  под AHC-specific метрики.
 
 - **B2. Token / cache / latency telemetry + Langfuse observability (2 дня).** Замеры
   `cache_read_input_tokens` (где доступно), wall-clock latency, recall_usage_rate,

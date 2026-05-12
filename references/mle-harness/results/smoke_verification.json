@@ -1,0 +1,37 @@
+{
+  "checks": {
+    "no_silent_truncation": {
+      "pass": true,
+      "violations": [],
+      "n_violations": 0,
+      "policy": "full_context==original; rolling_summary<=original; budget-claiming<=1.5x budget"
+    },
+    "full_vs_rolling_gap": {
+      "pass": true,
+      "accs": {
+        "full_context": 0.72,
+        "rolling_summary": 0.64,
+        "task_aware": 0.8
+      },
+      "delta_full_minus_rolling": 0.07999999999999996,
+      "note": "Observable means we can compute both numbers; magnitude reported."
+    },
+    "cost_reconciliation": {
+      "pass": true,
+      "harness_total_usd": 4.6407,
+      "note": "Local sum only; spot-check vs OpenRouter dashboard pending."
+    },
+    "judge_cache": {
+      "pass": true,
+      "n_judge_calls_total": 150,
+      "n_judge_cache_hits": 79,
+      "note": "On rerun, judge_calls should all be cache_hits."
+    },
+    "task_aware_format_sanity": {
+      "pass": true,
+      "n_samples_inspected": 3,
+      "failures": []
+    }
+  },
+  "pass": true
+}

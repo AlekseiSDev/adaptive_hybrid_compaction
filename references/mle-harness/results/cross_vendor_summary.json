@@ -1,0 +1,81 @@
+{
+  "per_driver": {
+    "anthropic/claude-haiku-4.5": {
+      "rolling_summary": {
+        "n": 15,
+        "accuracy": 0.5333,
+        "ci95_low": 0.2667,
+        "ci95_high": 0.8,
+        "mean_input_tokens": 13433,
+        "mean_compacted_tokens": 11824,
+        "mean_driver_usd": 0.01394
+      },
+      "type_aware": {
+        "n": 15,
+        "accuracy": 0.4667,
+        "ci95_low": 0.2,
+        "ci95_high": 0.7333,
+        "mean_input_tokens": 8585,
+        "mean_compacted_tokens": 7644,
+        "mean_driver_usd": 0.008899
+      },
+      "task_aware": {
+        "n": 15,
+        "accuracy": 0.4,
+        "ci95_low": 0.1333,
+        "ci95_high": 0.6667,
+        "mean_input_tokens": 866,
+        "mean_compacted_tokens": 718,
+        "mean_driver_usd": 0.001142
+      }
+    },
+    "google/gemini-3-flash-preview": {
+      "rolling_summary": {
+        "n": 15,
+        "accuracy": 0.6,
+        "ci95_low": 0.3333,
+        "ci95_high": 0.8667,
+        "mean_input_tokens": 12873,
+        "mean_compacted_tokens": 12439,
+        "mean_driver_usd": 0.003255
+      },
+      "type_aware": {
+        "n": 15,
+        "accuracy": 0.4667,
+        "ci95_low": 0.2,
+        "ci95_high": 0.7333,
+        "mean_input_tokens": 8535,
+        "mean_compacted_tokens": 7818,
+        "mean_driver_usd": 0.002376
+      },
+      "task_aware": {
+        "n": 15,
+        "accuracy": 0.7333,
+        "ci95_low": 0.5333,
+        "ci95_high": 0.9333,
+        "mean_input_tokens": 1946,
+        "mean_compacted_tokens": 1692,
+        "mean_driver_usd": 0.000531
+      }
+    }
+  },
+  "transfer": {
+    "rankings": {
+      "anthropic/claude-haiku-4.5": [
+        "rolling_summary",
+        "type_aware",
+        "task_aware"
+      ],
+      "google/gemini-3-flash-preview": [
+        "task_aware",
+        "rolling_summary",
+        "type_aware"
+      ]
+    },
+    "pair_sign_agreement": 0.3333333333333333,
+    "pair_total": 3,
+    "pair_matches": 1,
+    "spearman_rho": -0.5,
+    "common_items": 15
+  }
+}

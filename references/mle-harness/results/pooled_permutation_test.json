@@ -1,0 +1,37 @@
+{
+  "method": "paired permutation test (sign-flip), 10000 permutations; bootstrap 95% CI 10000 resamples",
+  "comparison": "task_aware vs full_context (B=8000)",
+  "seed_42": {
+    "n": 120,
+    "fc_accuracy": 0.65,
+    "ta_accuracy": 0.7333333333333333,
+    "delta": 0.08333333333333326,
+    "p_value": 0.11028897110288971,
+    "bootstrap_ci_delta": [
+      -0.008333333333333333,
+      0.175
+    ]
+  },
+  "seed_43": {
+    "n": 50,
+    "fc_accuracy": 0.66,
+    "ta_accuracy": 0.86,
+    "delta": 0.19999999999999996,
+    "p_value": 0.007399260073992601,
+    "bootstrap_ci_delta": [
+      0.08,
+      0.32
+    ]
+  },
+  "pooled": {
+    "n": 170,
+    "fc_accuracy": 0.6529411764705882,
+    "ta_accuracy": 0.7705882352941177,
+    "delta": 0.11764705882352944,
+    "p_value": 0.004199580041995801,
+    "bootstrap_ci_delta": [
+      0.047058823529411764,
+      0.19411764705882353
+    ]
+  }
+}
