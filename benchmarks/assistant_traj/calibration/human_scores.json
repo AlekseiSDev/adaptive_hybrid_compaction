@@ -1,11 +1,21 @@
 {
-  "_instructions": "Read each (task, response) pair and replace `score: null` with 0.0, 0.5, or 1.0 per the rubric (Rubric — <category>.md). rationale is free-form (≤2 sentences). After filling, run: pnpm tsx benchmarks/assistant_traj/judge.ts --calibrate",
+  "_disclosure": "ВНИМАНИЕ: scores ниже сгенерированы LLM-субагентами (Claude Opus), не настоящим human reviewer'ом. Это agent-as-proxy-human calibration. Для финального paper / Track F report нужны настоящие human labels — текущие — это sanity-check, не ground truth.",
+  "_instructions": "Прочитай каждую пару (task, response) и сравни с rubric'ом из benchmarks/assistant_traj/rubrics/<category>.md. Score: 0.0 (fail) / 0.5 (partial) / 1.0 (perfect). После заполнения: pnpm tsx benchmarks/assistant_traj/judge.ts --calibrate.",
   "_tasks": {
-    "at_image_qa_005": "FSM diagram → Markdown Jira review. Read tasks/at_image_qa_005.json + attachments/at_image_qa_005/1.svg + responses/at_image_qa_005.txt. Rubric: image_qa.md.",
-    "at_code_iter_005": "PostgreSQL query iteration → pgTAP tests. Read tasks/at_code_iter_005.json + responses/at_code_iter_005.txt. Rubric: code_iter.md (composite — judge sub-rule checks pgTAP test structure).",
-    "at_research_write_005": "Node.js RFC → consolidated commit-ready doc. Read tasks/at_research_write_005.json + responses/at_research_write_005.txt. Rubric: research_write.md."
+    "at_image_qa_005": "FSM диаграмма (SVG) → Markdown Jira review. Файлы: tasks/at_image_qa_005.json + attachments/at_image_qa_005/1.svg + responses/at_image_qa_005.txt. Rubric: rubrics/image_qa.md.",
+    "at_code_iter_005": "PostgreSQL window-function query → pgTAP tests (composite eval: regex pre-checks + llm_judge sub-rule). Файлы: tasks/at_code_iter_005.json + responses/at_code_iter_005.txt. Rubric: rubrics/code_iter.md.",
+    "at_research_write_005": "Node.js RFC drafting → final commit-ready document. Файлы: tasks/at_research_write_005.json + responses/at_research_write_005.txt. Rubric: rubrics/research_write.md."
   },
-  "at_image_qa_005": { "score": null, "rationale": "" },
-  "at_code_iter_005": { "score": null, "rationale": "" },
-  "at_research_write_005": { "score": null, "rationale": "" }
+  "at_image_qa_005": {
+    "score": 0.0,
+    "rationale": "Полная галлюцинация: response описывает совершенно другую FSM (Draft/Confirmed/In Delivery/etc.) вместо реальных 8 состояний (PENDING/VALIDATED/CHARGED/SHIPPED/REJECTED/REFUNDED/RETURNED/ORPHAN). Все переходы, issues и recommendations не соответствуют диаграмме — major hallucination по rubric'у."
+  },
+  "at_code_iter_005": {
+    "score": 0.5,
+    "rationale": "Три pgTAP-теста по смыслу присутствуют (default-params has_rows, p_user_ids фильтр через is_empty, STABLE через function_is), но structurally это три отдельных plan(1)/finish() блока вместо единого BEGIN; ... SELECT plan(3); ... finish(); — regex на BEGIN и plan(3) не сматчатся, aggregate=all исключает 1.0."
+  },
+  "at_research_write_005": {
+    "score": 0.0,
+    "rationale": "Структурный fail: заголовок неверный (без @ourcorp/logger), секции переименованы и переупорядочены, отсутствуют 3.4 contextual logger и явная подсекция Express middleware, Alternatives содержит 3 варианта вместо 4 (нет cls-hooked), Migration plan без Phases 0-3, Open questions только 3 вместо ≥5, плюс ответ на английском при русскоязычном arc и потеряны factual детали из предыдущих turns."
+  }
 }

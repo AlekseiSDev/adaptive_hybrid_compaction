@@ -1,0 +1,16 @@
+{
+  "2b7a4549ee1b7a3d633c9058872f2908814ba03b244fbd2dfda8a4a77397a8c8": {
+    "score": 0.5,
+    "justification": "The three tests cover the required scenarios (default params, user_ids filter, STABLE marker), but the script lacks BEGIN; and a single SELECT plan(3); — instead it has three separate plan(1)/finish() blocks which is non-standard pgTAP usage and would cause errors in a CI runner. Also, `function_is` with a volatility argument is not a real pgTAP function (correct would be `volatility_is`), and `has_rows` is not a standard pgTAP function either.",
+    "cost_usd": 0.006135,
+    "model": "anthropic/claude-sonnet-4.6",
+    "ts": "2026-05-13T03:20:57.714Z"
+  },
+  "2e54243e50802156711edd6928e381b1f7152ffdc096bd10389e33cdb75dd553": {
+    "score": 0.5,
+    "justification": "The document has most structural elements but deviates significantly from the required structure: sections are renumbered/renamed (e.g., 'Implementation Details' replaces 'Обратная совместимость', 'Security' is missing entirely, 'Risks' is a separate section 8 instead of part of Migration plan), the required 9-section order (Motivation, Проблема, Proposed API with sub-sections 3.1-3.4, Обратная совместимость, Performance, Security, Alternatives, Migration plan with Phases 0-3 + R1-R3, Open questions ≥5) is not followed, and Open Questions has only 3 items instead of ≥5. The H1 title also differs from the required 'RFC-0042: Structured-context propagation в @ourcorp/logger'.",
+    "cost_usd": 0.011124,
+    "model": "anthropic/claude-sonnet-4.6",
+    "ts": "2026-05-13T03:21:02.626Z"
+  }
+}
