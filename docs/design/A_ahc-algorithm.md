@@ -15,6 +15,7 @@ pseudocode и инварианты. Используется как рефере
 - **Зависит от:** внутри проекта — ничего (foundational трек, старт day 1); внешний prereq для A6 — `docs/investigations/ai-sdk-v6-surface.md`
 - **Блокирует:** B2 (telemetry consume'ит `CompactionEvent`/`RecallEvent` из AHC), E1 (main sweep требует A6), G2 (UI mount на A6 middleware)
 - **Связь:** `system_design §7.2 Track A` (phase plan source), `system_design §6` (eval-protocol — что AHC должен поддержать), `design/B_eval-harness.md §3` (telemetry events, которые эмитит AHC), `decisions.md` (running log A-related решений — pnpm, JSON.stringify proxy для §9.1, AtomicGroup InflightToolUse)
+- **Что и зачем (algorithm overview):** [`../ahc-algorithm.md`](../ahc-algorithm.md) — paper-style Abstract + Methodology + прообразы + альтернативы. Этот файл оперативный (phase plan, public types, pseudocode); reader-facing описание живёт там.
 
 ---
 
