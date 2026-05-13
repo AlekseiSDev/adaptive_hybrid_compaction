@@ -1,0 +1,43 @@
+# VCS
+.git
+.gitignore
+.gitattributes
+
+# Local IDE / agent state
+.claude/
+.vscode/
+.idea/
+
+# Dependencies + caches (rebuilt inside the image)
+**/node_modules
+**/.next
+.vitest-cache
+.turbo
+*.tsbuildinfo
+
+# Eval sweep configs / data / report / docs / observability — not needed at runtime
+references/
+benchmarks/
+eval/
+report/
+docs/
+observability/
+.mastra/
+.venv-taubench/
+scripts/
+
+# Tests — src/eval/llm.ts is required by src/ui/lib/ahcStats.ts (costFromUsage),
+# so src/eval source stays in the build context; only test files are pruned.
+**/*.test.ts
+**/*.test.tsx
+**/*.spec.ts
+**/*.spec.tsx
+
+# Secrets / env (must be set via Railway runtime, never baked into image)
+.env
+.env.local
+.env.*.local
+
+# OS junk
+.DS_Store
+*.log
