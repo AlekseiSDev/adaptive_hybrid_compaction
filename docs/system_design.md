@@ -421,6 +421,14 @@ numbers процитированы; повторно интегрировать 
 - **D4. Eval adapter + LLM-judge rubrics (2 дня).** Adapter для AssistantTraj в общий
   harness, написать judge prompts для каждой категории, calibration sample (10% human-verify).
 
+- **D5. Other-bench ports (3 дня).** Порт TS BenchAdapter'ов для LongMemEval-med /
+  LoCoMo-med / tau-bench-retail-med из `references/mle-harness/code/run_*.py`.
+  Per-bench grader (longmemeval exact-string recall; locomo semantic; tau-bench
+  task-completion + tool-sequence). Task fixtures под `benchmarks/<bench>/`.
+  Регистрация в `defaultAdapterRegistry`. **Минимальная beta floor** (§9): 3
+  бенча — AssistantTraj + 2 из этих трёх; полные 4 — stretch. tau-bench heaviest
+  (agentic tooling); допустимо отложить если порт дороже 1 дня.
+
 **Track E — Main runs**
 
 - **E1. Sweep всех 4 baselines × 4 бенчей (3 дня wall-clock).** На OpenRouter+Gemini-3.1-Flash,
@@ -549,6 +557,7 @@ Wall-clock с Track G: ~31 день при 2–3 ч/день. Buffer на UI sco
 |---|---|---|
 | **AHC middleware** | `src/core/` + `src/adapters/ai-sdk-v6.ts` | Сама контрибьюция: AI SDK v6 совместимое middleware. Не публикуется на npm (см. §2.2). |
 | **AssistantTraj benchmark** | `benchmarks/assistant_traj/` | 30–40 schema-conformant tasks (jay-canvas-seeded + opensource + synthetic) с rubrics. Released как самостоятельный artifact. |
+| **Ported benches (D5)** | `src/eval/adapters/{longmemeval,locomo,tau-bench}.ts` + `benchmarks/{longmemeval,locomo,tau-bench}/` | TS BenchAdapter + grader для LongMemEval-med / LoCoMo-med / tau-bench-retail-med, портированные из `references/mle-harness/`. MVP floor — 3 бенча всего (AssistantTraj + 2 из этих 3); полные 4 — stretch. |
 | **Eval harness** | `src/eval/` + `eval/sweeps/` | Реусеблый harness с telemetry, statistical pipeline, sweep configs для replication. |
 | **Demo UI** | `src/ui/` | Local Next.js app, runnable `npm run dev:ui`. Interactive demo + defense surface. Text + image URL. |
 | **Run results** | `benchmarks/runs/` + `figures/` | NDJSON + summary tables + Pareto plots + ablation comparisons. |
@@ -628,13 +637,14 @@ adaptive_hybrid_compaction/
 │   │   └── ai-sdk-v6.ts                                  # A6
 │   ├── eval/                                             # Tracks B + C
 │   │   ├── types.ts, runner.ts, stats.ts, persistence.ts # B1/B2
-│   │   ├── adapters/<bench>.ts                           # bench task loaders
+│   │   ├── adapters/<bench>.ts                           # bench task loaders — D1-D4: assistant-traj.*; D5: longmemeval, locomo, tau-bench
 │   │   └── baselines/                                    # Track C: mastra/, anthropic.ts, fullContext.ts
 │   └── ui/                                               # Track G — Next.js App Router
 ├── eval/
 │   └── sweeps/                                           # Track E: main_e1.yaml, ablation_e2.yaml, cache_hit_e3.yaml
 ├── benchmarks/
-│   ├── assistant_traj/                                   # Track D: tasks/, attachments/, rubrics/, judge_cache.json
+│   ├── assistant_traj/                                   # Track D (D1-D4): tasks/, attachments/, rubrics/, judge_cache.json
+│   ├── longmemeval/, locomo/, tau-bench/                 # Track D (D5): per-bench tasks/, fixtures portированы из references/mle-harness/
 │   └── runs/<bench>/<config_id>/<seed>/                  # Track E: records.ndjson (gitignored) + summary.json + meta.json
 ├── observability/                                        # B2/§9: docker-compose.yml, langfuse-dashboard.json
 ├── references/                                           # Vendored upstream snapshot — read-only (см. references/README.md)
