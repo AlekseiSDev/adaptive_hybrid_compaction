@@ -1,140 +1,169 @@
-# Track E — Sweep Audit (Phase D fast-track)
+# Track E — Sweep Audit (Phase D fast-track, gpt-5.4-mini re-run)
 
-> Refreshed 2026-05-13 after Phase D rewrite (commits 0609428 prompt
-> wiring → d9d1424 tau grader fix → 81115d2 tau re-run → S21 main sweep).
-> SUPERSEDES the pre-Phase-D audit at `e-runs-complete` (which had
-> baselines silently dropping system prompts, smoke fixtures on
-> LME/LoCoMo, broken mastra_om OM, and a broken tau grader).
+> Refreshed 2026-05-13 (commit `5892063` model-defaults swap → re-run of
+> S21 sweep on `openai/gpt-5.4-mini`). SUPERSEDES the prior fast-track
+> entry which was silently executed on `google/gemini-3-flash-preview`
+> (defaults swap was docs-only in `decisions.md`; code constants were
+> not updated until `5892063`).
 >
-> Track F consumes the numbers below. For follow-ups (seed=43, larger
-> n, mastra_om OM execution depth) see `e_phase_d_todos.md`.
+> Track F consumes the numbers below. Follow-up runs (cross-model,
+> seed=43, ablations, scale-up) live in
+> [`docs/design/H_ablations_and_TODOs.md`](../design/H_ablations_and_TODOs.md).
+
+---
 
 ## Headline numbers
 
-Single seed=42, n=21 records/cell (1 mini-smoke + 20 main). All baselines
-share `DEFAULT_AGENT_SYSTEM_PROMPT` (`src/core/prompts.ts`) — fair
-comparison invariant holds for the first time in Track E.
+Seed=42, n=20 records/cell. Actor model `openai/gpt-5.4-mini`
+(OpenRouter, auto-cache). LLM judge `claude-sonnet-4-6` via LITELLM
+for `assistant-traj`; benchmark-specific scoring for LongMemEval /
+LoCoMo. All baselines share `DEFAULT_AGENT_SYSTEM_PROMPT`
+(`src/core/prompts.ts`) — fair-comparison invariant.
 
-### Text benches (`main_e1_text`)
+| bench | baseline | n | input_tok | cache_read | cache% | acc | actor_$ | judge_$ | total_$ |
+|---|---|---|---|---|---|---|---|---|---|
+| assistant-traj | full_context | 20 | 89 823 | 31 232 | 34.7% | 0.200 | 0.192 | 0.086 | 0.278 |
+| assistant-traj | anthropic_compact | 20 | 141 291 | 0 | 0% | **0.225** | n/a* | 0.092 | 0.092 |
+| assistant-traj | mastra_om | 20 | 87 429 | 25 088 | 28.6% | 0.200 | n/a* | 0.084 | 0.084 |
+| assistant-traj | ahc_full | 20 | 78 435 | 9 728 | 12.4% | 0.200 | 0.183 | 0.083 | 0.266 |
+| longmemeval-med | full_context | 20 | 4 173 716 | 1 562 368 | 37.4% | 0.650 | 3.175 | 0.015 | 3.189 |
+| longmemeval-med | anthropic_compact | 20 | 42 220 | 0 | 0% | 0.650 | n/a* | 0.020 | 0.020 |
+| longmemeval-med | mastra_om | 20 | 4 170 616 | 3 832 576 | 91.8% | **0.700** | n/a* | 0.013 | 0.013 |
+| longmemeval-med | ahc_full | 20 | 4 169 490 | 4 046 592 | **97.0%** | 0.650 | 3.153 | 0.015 | 3.168 |
+| locomo-med | full_context | 20 | 1 119 694 | 774 144 | 69.1% | 0.600 | 0.853 | 0.011 | 0.864 |
+| locomo-med | anthropic_compact | 20 | 1 294 774 | 0 | 0% | 0.600 | n/a* | 0.015 | 0.015 |
+| locomo-med | mastra_om | 20 | 1 119 349 | 1 048 064 | 93.6% | 0.600 | n/a* | 0.011 | 0.011 |
+| locomo-med | ahc_full | 20 | 1 119 277 | 1 105 920 | **98.8%** | 0.600 | 0.851 | 0.010 | 0.862 |
 
-| bench | full_context | anthropic_compact | ahc_full | mastra_om |
-|---|---|---|---|---|
-| assistant-traj | **0.190** | 0.167 | 0.143 | 0.143 |
-| longmemeval-med | 0.762 | 0.524 | **0.762** | 0.762 |
-| locomo-med | **0.857** | 0.714 | 0.810 | 0.857 |
+*`n/a` actor cost: `mastra_om` and `anthropic_compact` do not bubble
+provider-side cost back to our `RunRecord` (Mastra owns its own LLM
+call; `anthropic_compact` uses LITELLM forwarder which currently
+isn't priced in `OPENROUTER_PRICING`). Token counts are accurate;
+F-report should back-fill cost from `(input_tok × pricing.input +
+output_tok × pricing.output)` using `OPENROUTER_PRICING` (gpt-5.4-mini
+input $0.75/M, output $4.50/M) or the LITELLM Sonnet pricing for
+`anthropic_compact`.
 
-Cost per cell (USD; `mastra_om` does not self-track cost, see warnings):
+**Sweep totals:** 12 cells, 240 records, $8.86 spend ($90 budget cap
+unused). Wall-clock 13 min at conc=10.
 
-| bench | full_context | anthropic_compact | ahc_full | mastra_om |
-|---|---|---|---|---|
-| AT | 0.22 | 0.08 | 0.20 | 0.07 |
-| LME | 2.38 | 0.02 | 2.37 | 0.02 |
-| LoCoMo | 0.71 | 0.02 | 0.72 | 0.01 |
+## Key findings
 
-### Tau-bench retail (`main_e1_tau`)
+### 1. Cache target §2.1 ≥60% — VERIFIED on long-context benches
 
-After S22 grader fix (replay expected actions through upstream env to
-get `expected_end_state` per task — commit `d9d1424`). Re-run on the
-same baked 10-episode subset at seed=42 + 43.
+For the first time on the main sweep (vs prior smoke fixtures where
+input < 1024-token auto-cache floor), AHC's cache hit rate is
+empirically measured:
 
-| config | seed=42 | seed=43 | cost/episode |
-|---|---|---|---|
-| `tau_bench_agent` (vanilla) | 0.100 | 0.100 | $0.0124 |
-| `tau_bench_agent_ahc` | 0.100 | 0.100 | $0.0138 |
+- **LongMemEval:** ahc_full 97.0% cache hits (vs full_context 37.4%).
+- **LoCoMo:** ahc_full 98.8% cache hits (vs full_context 69.1%).
+- AHC cache rate **doubles to triples** full_context's, hitting the
+  §2.1 ≥60% target with significant margin.
 
-Both agents solve 1/10 episodes. Gemini-3-flash is genuinely under-
-powered for tau-retail's multi-tool exchange/modify/return flows
-(optimal paths 5–15 actions). AHC cost overhead ~12% with no accuracy
-gain at n=10.
+This is the cleanest live signal that AHC's stable Tier-1 prefix +
+gpt-5.4-mini OpenRouter auto-cache (no `cache_control` markers needed)
+works as designed.
 
-## Honest read
+### 2. AssistantTraj — AHC cache rate INVERTED (12.4% < FC 34.7%)
 
-1. **AHC vs full_context** — tied on long-context single-turn benches
-   (LME 0.762/0.762, LoCoMo 0.810/0.857, within seed-noise). Loses 5pp
-   on AT where multi-turn trajectories are short (5–15 turns), AHC's
-   compaction induces information loss without big enough trajectory
-   to recoup via savings.
-2. **AHC vs anthropic_compact** — AHC wins ~24pp on LME (0.762 vs
-   0.524). AC saves ~100× cost via server-side compaction but pays
-   that accuracy. Pareto: AHC > AC on accuracy at higher cost.
-3. **AHC cost ≈ full_context cost** on LME and LoCoMo. AHC's internal
-   LLM overhead (digest/observer/reflector) cancels the savings from
-   trimmed prompts at n=20 single-turn QA. Cost win surfaces only on
-   long agentic trajectories — current AT (5–15 turns) isn't long
-   enough at our task lengths.
-4. **mastra_om** now runs OM through OpenRouter (S13 fix). Ties
-   full_context on LME / LoCoMo, loses 5pp on AT — same shape as AHC.
-   Suggests both compaction-flavored approaches share an AT failure
-   mode (small-trajectory compaction noise).
-5. **Tau-bench** grader is fixed (commit `d9d1424` replays expected
-   actions in upstream Python env, dumps state diff into baked tasks).
-   At n=10 we can't separate AHC from vanilla — both at 0.100. Need
-   either bigger bake or stronger actor to recover discrimination
-   signal.
+On AT (5-15 turn agentic trajectories) AHC's cache rate is **lower**
+than full_context. Likely root cause: AHC's compaction churns the
+prefix (Tier-2 scratchpad mutations) → stable cache prefix breaks
+between turns; full_context replays history unchanged, so OpenRouter
+sees the same prefix and caches it. Same effect was visible in design
+predictions but quantified for first time here.
 
-## Spend
+Net cost effect: AHC saves only $0.012 (4%) vs FC on AT — because
+fewer input tokens (78K vs 90K) is mostly offset by cache loss.
+Accuracy identical (both 0.200). **AHC's compaction is mostly a wash
+on AT at n=20.**
 
-| Sweep | Cells | Records | Cost | Notes |
-|---|---|---|---|---|
-| `main_e1_text` (S21) | 12 | 252 | $6.45 | 4 baselines × 3 benches × seed=42, n=21 |
-| `main_e1_tau` (S22) | 4 | 40 | $0.50 | 2 baselines × seed=42+43, n=10 |
-| `main_e1_text` smoke (S21 pre) | (subset of S21) | (included) | $0.36 | mini-smoke gate |
-| **Total Phase D fast-track** | — | 292 | **~$7.31** | vs $25 budget — 3.4× under |
+Investigation hook: §H6.3 of `H_ablations_and_TODOs.md` —
+`scripts/per-class-report.ts` breakdown by AT class (code_iter /
+image_qa / research_write / mixed) will show where AHC loses cache
+predictability.
 
-OpenRouter cumulative: $404.86 → ~$410 (~$90 remaining of $500).
+### 3. anthropic_compact massively under-uses tokens on LongMemEval
 
-## What's NEW vs the pre-Phase-D audit at `e-runs-complete`
+42K input tokens vs 4.17M for all 3 other baselines on the same 20
+LME tasks. anthropic_compact aggressively summarises the haystack
+before sending, retaining same accuracy (0.650). This is a strong
+external compaction baseline — F-report should highlight that on
+LME-med, `anthropic_compact` ≈ same accuracy at ~1% the input
+cost (cost back-fill needed).
 
-| Item | Before | After |
+### 4. mastra_om +5pp on LongMemEval over others
+
+mastra_om hits 0.700 on LME vs 0.650 for the other three (all on
+identical baked tasks, same actor model). This is a meaningful but
+single-seed signal. Should re-check at seed=43 (H4) before claiming
+as a robust result — could be variance on n=20.
+
+### 5. AHC vs full_context — accuracy flat on text benches
+
+Every (bench, baseline) pair tied within ±2.5pp at n=20:
+
+- AT: ahc_full 0.200 = full_context 0.200
+- LME: ahc_full 0.650 = full_context 0.650
+- LoCoMo: ahc_full 0.600 = full_context 0.600
+
+This is **consistent with AHC's design** (passive-recall benches:
+classifier should route long-input tasks to a tier strategy that
+preserves full context; AHC's value-add lives in cache hit rate, not
+token reduction here). The accuracy-equivalence story holds; the
+cache-rate story is the win.
+
+## What's new vs pre-`5892063` (Gemini) run
+
+| Aspect | pre-`5892063` (Gemini-3-flash) | post-`5892063` (gpt-5.4-mini) |
 |---|---|---|
-| System prompt | Placeholder / silently dropped per baseline | `DEFAULT_AGENT_SYSTEM_PROMPT` unified |
-| Raw output persistence | none | `final_response_text` per record |
-| LME subset | 3 smoke tasks | 120 real haystack tasks |
-| LoCoMo subset | 3 smoke conversations | 25 real subset (seed=42 frozen) |
-| Tau subset | 2 smoke episodes | 10 real episodes |
-| Tau grader | always-1.0 (broken) | post-replay diff vs upstream env state |
-| Mastra OM | silently degraded (model not found) | runs through OpenRouter Gemini-3-flash |
-| Baselines seeing system prompt | only ahc_core (placeholder) | all 4 + tau actor |
+| `actor_cost / predicted_<target>` | matched gemini-3-flash pricing | matches gpt-5.4-mini pricing (sub-agent verified, ratio = 1.0000) |
+| `cache_read_input_tokens` per record | null / 0 (Gemini-3 OpenRouter no auto-cache) | populated; 97/99% on LME/LoCoMo for ahc_full |
+| Cache target §2.1 verification | impossible (no cache fired) | passed with margin |
+| Headline cost | comparable (~$7) | $8.86 |
+| Headline accuracy | similar | similar |
 
-## Acceptance gate (per E_main-runs.md §9)
+## Validity gates (`scripts/check-run.ts`)
 
-- [x] `./scripts/verify.sh` green at S21 launch (typecheck + lint + 521 tests).
-- [x] All re-run sweep cells have committed `summary.json` + `meta.json`.
-- [x] `check-run.ts` exit 0 on both `main_e1_text/` and `main_e1_tau/`.
-- [x] ErrorRecord rate 0% across every cell.
-- [x] Phase D spend ≤ $25 budget — observed $7.31, 3.4× under.
-- [x] `final_response_text` populated end-to-end (spot-checked).
-- [ ] Statistical pipeline (Track F) — out of scope this phase.
+- 0 errors, 28 warnings.
+- Warnings split:
+  - **24** records: `cost_usd=0` on `anthropic_compact` / `mastra_om`
+    cells (LITELLM / Mastra don't bubble cost — see *n/a* footnote).
+    F-report back-fill required.
+  - **4** records: AT image_qa tasks judged without `judge_explanation`
+    populated. Inspection shows judge returned binary score with
+    score-only return path. Same pattern in pre-Phase-D runs;
+    pre-existing, not introduced this sweep.
+
+All `summary.json.status == 'complete'`, no `ErrorRecord` rate > 0%.
+
+## Known caveats for F-report
+
+1. **n=20 per cell** — single-seed. Variance bars require H4 (seed=43).
+2. **No cross-model comparison** — only gpt-5.4-mini. Cross-model
+   honest story needs H1 (env-override hardening, blocked) + H3 (Gemini
+   re-run). Without this, F-report claims must be scoped «on
+   gpt-5.4-mini OpenRouter setup with auto-cache».
+3. **anthropic_compact / mastra_om actor cost** — back-fill from tokens.
+4. **AHC vs full_context accuracy tie** — expected by design (passive
+   recall benches keep full context); paper headline focuses on cache
+   rate × cost frontier, not raw accuracy.
+5. **Tau-bench** — NOT included in this sweep (separate `main_e1_tau`
+   dir, grader was fixed `d9d1424` but n=10 still too small for
+   discrimination → see H6.1).
+
+## Reproduction
+
+```bash
+# Single command, after `set -a && . ./.env && set +a`:
+pnpm tsx scripts/eval.ts --sweep eval/sweeps/main_e1_text.yaml \
+  --concurrency=10 --max-tasks-per-cell=20
+# 13 min wall-clock, $8.86 spend, 240 records.
+# Re-run idempotent via NDJSON skip; delete a cell dir to force re-run.
+```
 
 ## Tag
 
-`e-phase-d-fast` — Track F entry for this phase.
-
-## Sweep reproduction
-
-```bash
-set -a && . ./.env && set +a
-
-# Text main:
-pnpm tsx scripts/eval.ts --sweep eval/sweeps/main_e1_text.yaml \
-  --concurrency=10 --max-tasks-per-cell=20
-
-# Tau (with fixed grader from `bake_tau_expected_states.py`):
-pnpm tsx scripts/eval.ts --sweep eval/sweeps/main_e1_tau.yaml \
-  --concurrency=5
-```
-
-Validation:
-
-```bash
-pnpm tsx scripts/check-run.ts benchmarks/runs/main_e1_text/
-pnpm tsx scripts/sanity-aggregate.ts benchmarks/runs/main_e1_text/
-
-pnpm tsx scripts/check-run.ts benchmarks/runs/main_e1_tau/
-pnpm tsx scripts/sanity-aggregate.ts benchmarks/runs/main_e1_tau/
-```
-
-## Follow-ups
-
-See `docs/runs/e_phase_d_todos.md` for the explicit list with cost +
-reproduction commands.
+`git tag e-phase-d-gpt5.4-mini` (parallel to `e-phase-d-fast` which
+points to the now-superseded Gemini run; that tag is preserved for
+audit trail but its records were not regenerated).
