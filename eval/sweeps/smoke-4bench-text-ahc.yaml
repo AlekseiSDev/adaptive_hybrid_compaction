@@ -1,0 +1,21 @@
+name: smoke-4bench-text-ahc
+# E0-post-D5 smoke: AHC middleware on text benches (AT / LME / LoCoMo).
+# Mirror of D5's smoke-4bench.yaml (full_context baseline) — same fixtures,
+# replaces full_context with ahc_full. Catches AHC × LME / LoCoMo integration
+# bugs before E1 main sweep launch ($90 spend).
+#
+# Tau-bench AHC smoke ships separately in smoke-4bench-tau-ahc.yaml (D5).
+#
+# Expected runs: 3 benches × 1 config × ~3 fixtures each ≈ 9 RunRecords.
+# Cost target <$0.50 (Gemini-3-flash actor + Sonnet-4.6 judge on AT).
+
+benches:
+  - assistant-traj
+  - longmemeval-med
+  - locomo-med
+configs:
+  - id: ahc_full
+    ahc_flags: {}   # defaults — full pipeline (classifier + offloader +
+                    # observer + reflection)
+seeds: [42]
+budget_usd: 1.0
