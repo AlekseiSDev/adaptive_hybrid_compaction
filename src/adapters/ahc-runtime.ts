@@ -41,9 +41,9 @@ export type AhcRuntimeOptions = {
   model: string
   /**
    * Optional base URL override. For 'openrouter' defaults to
-   * `https://openrouter.ai/api/v1`. Ignored for 'anthropic_direct' (Anthropic
-   * SDK does not accept a custom base URL through this surface — use direct
-   * SDK if needed).
+   * `https://openrouter.ai/api/v1`. For 'anthropic_direct' enables routing
+   * through a forwarder (e.g. corporate LiteLLM proxy speaking the Anthropic
+   * protocol) — value passed to `createAnthropic({apiKey, baseURL})`.
    */
   baseURL?: string
   flags?: Partial<FeatureFlags>
@@ -84,7 +84,10 @@ function buildBaseModel(opts: AhcRuntimeOptions): LanguageModelV3 {
   }
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
   if (opts.provider === 'anthropic_direct') {
-    const anthropic = createAnthropic({ apiKey: opts.apiKey })
+    const anthropic = createAnthropic({
+      apiKey: opts.apiKey,
+      ...(opts.baseURL !== undefined ? { baseURL: opts.baseURL } : {}),
+    })
     return anthropic(opts.model)
   }
   throw new Error(`createAhcRuntime: unsupported provider: ${String(opts.provider)}`)

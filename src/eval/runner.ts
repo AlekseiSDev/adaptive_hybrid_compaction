@@ -191,18 +191,56 @@ const LITELLM_MODEL = 'claude-sonnet-4.6'
 
 function makeAhcCoreRunner(config: ConfigDef): Runner {
   // E0: provider switch (`'openrouter'` default, `'anthropic_direct'` for E3
-  // cache-hit subset). Env var + actor model resolution diverge per provider.
+  // cache-hit subset). E1: anthropic_direct path additionally supports LiteLLM
+  // forwarder (LITELLM_MASTER_KEY + LITELLM_BASE_URL), mirroring the
+  // makeAnthropicCompactRunner priority order so the corporate proxy that
+  // upstream-bills the Anthropic key works for both anthropic_compact baseline
+  // AND ahc_full × anthropic_direct config rows.
   const provider = config.provider ?? 'openrouter'
-  const apiKey =
-    provider === 'anthropic_direct'
-      ? process.env['ANTHROPIC_API_KEY']
-      : process.env['OPENROUTER_API_KEY']
-  if (!apiKey) {
-    const envName = provider === 'anthropic_direct' ? 'ANTHROPIC_API_KEY' : 'OPENROUTER_API_KEY'
-    throw new Error(
-      `ahc_core runner with provider=${provider} requires ${envName} env var.`,
-    )
+
+  let apiKey: string
+  let baseURL: string | undefined
+  let resolvedModelDefault: string | undefined
+
+  if (provider === 'openrouter') {
+    const key = process.env['OPENROUTER_API_KEY']
+    if (!key || key.length === 0) {
+      throw new Error(
+        'ahc_core runner with provider=openrouter requires OPENROUTER_API_KEY env var.',
+      )
+    }
+    apiKey = key
+    baseURL = 'https://openrouter.ai/api/v1'
+  } else {
+    // provider === 'anthropic_direct': prefer LiteLLM forwarder → fall back to
+    // direct ANTHROPIC_API_KEY. CLAUDE_CODE_OAUTH_TOKEN unsupported here
+    // (no streaming/cache support through OAuth surface).
+    const litellmKey = process.env['LITELLM_MASTER_KEY']
+    const litellmUrl = process.env['LITELLM_BASE_URL']
+    const directKey = process.env['ANTHROPIC_API_KEY']
+    const hasLitellm =
+      litellmKey !== undefined &&
+      litellmKey.length > 0 &&
+      litellmUrl !== undefined &&
+      litellmUrl.length > 0
+    const hasDirect = directKey !== undefined && directKey.length > 0
+    if (!hasLitellm && !hasDirect) {
+      throw new Error(
+        'ahc_core runner with provider=anthropic_direct requires one of: ' +
+          'LITELLM_MASTER_KEY + LITELLM_BASE_URL (forwarder, preferred) or ' +
+          'ANTHROPIC_API_KEY (console direct). Neither is set.',
+      )
+    }
+    if (hasLitellm) {
+      apiKey = litellmKey
+      baseURL = litellmUrl
+      // Default model on LiteLLM path uses dot-form alias (proxy rewrite).
+      resolvedModelDefault = 'claude-sonnet-4.6'
+    } else {
+      apiKey = directKey ?? ''
+    }
   }
+
   const flagsFromConfig = (config.ahc_flags ?? {})
   const modelOverride = flagsFromConfig['model']
   // Strip ahc_core-runner-specific keys (`model`) from FeatureFlags pass-through.
@@ -210,9 +248,12 @@ function makeAhcCoreRunner(config: ConfigDef): Runner {
   const baseline = ahcCoreBaseline({
     apiKey,
     provider,
-    // baseURL only meaningful for OpenRouter path; @ai-sdk/anthropic uses SDK default.
-    ...(provider === 'openrouter' ? { baseURL: 'https://openrouter.ai/api/v1' } : {}),
-    ...(typeof modelOverride === 'string' ? { model: modelOverride } : {}),
+    ...(baseURL !== undefined ? { baseURL } : {}),
+    ...(typeof modelOverride === 'string'
+      ? { model: modelOverride }
+      : resolvedModelDefault !== undefined
+        ? { model: resolvedModelDefault }
+        : {}),
     // Other ahc_flags keys (TRAJECTORY_CLASSIFIER, REFLECTION, etc.) map to
     // FeatureFlags — pass through directly; createAhcMiddleware merges with defaults.
     ahcFlags: featureFlagsRaw,

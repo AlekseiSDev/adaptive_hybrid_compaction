@@ -86,9 +86,16 @@ function resolvePricing(provider: AhcProvider, model: string): ModelPricing {
   return table[model] ?? ZERO_PRICING
 }
 
-function defaultLlmClient(provider: AhcProvider, apiKey: string): LLMClient {
+function defaultLlmClient(
+  provider: AhcProvider,
+  apiKey: string,
+  baseURL: string | undefined,
+): LLMClient {
   if (provider === 'anthropic_direct') {
-    return createAnthropicClient({ apiKey })
+    return createAnthropicClient({
+      apiKey,
+      ...(baseURL !== undefined ? { baseURL } : {}),
+    })
   }
   return createOpenRouterClient({ apiKey, appName: 'AHC' })
 }
@@ -123,7 +130,10 @@ export function ahcCoreBaseline(deps: AhcCoreBaselineDeps): Baseline {
       // step.cost_usd we return at the end reflects all upstream consumption.
       const baseLlmCaller =
         deps.llmCaller ??
-        wrapLlmClientAsLLMCaller(deps.llmClient ?? defaultLlmClient(provider, deps.apiKey), model)
+        wrapLlmClientAsLLMCaller(
+          deps.llmClient ?? defaultLlmClient(provider, deps.apiKey, deps.baseURL),
+          model,
+        )
       const costAwareLlmCaller = makeCostAwareLLMCaller(baseLlmCaller, pricing, (usd) => {
         scratch.internalCostUsdSinceLastStep += usd
       })

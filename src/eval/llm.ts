@@ -41,6 +41,13 @@ export const ANTHROPIC_DIRECT_PRICING: Record<string, ModelPricing> = Object.fre
     input_per_million_usd: 3.0,
     output_per_million_usd: 15.0,
   },
+  // LiteLLM proxy uses dot-form model aliases (claude-sonnet-4.6 rewrites
+  // upstream to anthropic/claude-sonnet-4-6). Same pricing — keep both keys
+  // in sync when refreshing. See LITELLM_MODEL in src/eval/runner.ts.
+  'claude-sonnet-4.6': {
+    input_per_million_usd: 3.0,
+    output_per_million_usd: 15.0,
+  },
 })
 
 export function costFromUsage(model: string, usage: OpenRouterUsage): number {

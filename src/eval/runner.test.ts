@@ -449,14 +449,21 @@ describe('default registries', () => {
     ).toThrow(/unknown runner/)
   })
 
-  test('runner registry: provider:anthropic_direct dispatches to ANTHROPIC_API_KEY env var (E0)', () => {
-    // ahc_core with provider:'anthropic_direct' reads ANTHROPIC_API_KEY, not
-    // OPENROUTER_API_KEY. With both missing, error message mentions the
-    // anthropic-specific env name.
-    const prevOR = process.env['OPENROUTER_API_KEY']
-    const prevAN = process.env['ANTHROPIC_API_KEY']
+  test('runner registry: provider:anthropic_direct requires LITELLM_* or ANTHROPIC_API_KEY (E1)', () => {
+    // ahc_core with provider:'anthropic_direct' accepts either LiteLLM
+    // forwarder (LITELLM_MASTER_KEY + LITELLM_BASE_URL) OR direct
+    // ANTHROPIC_API_KEY. With all three missing, error message names both
+    // auth paths.
+    const prev = {
+      OR: process.env['OPENROUTER_API_KEY'],
+      AN: process.env['ANTHROPIC_API_KEY'],
+      LK: process.env['LITELLM_MASTER_KEY'],
+      LU: process.env['LITELLM_BASE_URL'],
+    }
     delete process.env['OPENROUTER_API_KEY']
     delete process.env['ANTHROPIC_API_KEY']
+    delete process.env['LITELLM_MASTER_KEY']
+    delete process.env['LITELLM_BASE_URL']
     try {
       expect(() =>
         defaultRunnerRegistry.resolve({
@@ -464,10 +471,69 @@ describe('default registries', () => {
           ahc_flags: {},
           provider: 'anthropic_direct',
         }),
-      ).toThrow(/provider=anthropic_direct.*ANTHROPIC_API_KEY/)
+      ).toThrow(/provider=anthropic_direct.*LITELLM_MASTER_KEY.*ANTHROPIC_API_KEY/s)
     } finally {
-      if (prevOR !== undefined) process.env['OPENROUTER_API_KEY'] = prevOR
-      if (prevAN !== undefined) process.env['ANTHROPIC_API_KEY'] = prevAN
+      for (const [k, v] of Object.entries({
+        OPENROUTER_API_KEY: prev.OR,
+        ANTHROPIC_API_KEY: prev.AN,
+        LITELLM_MASTER_KEY: prev.LK,
+        LITELLM_BASE_URL: prev.LU,
+      })) {
+        if (v !== undefined) process.env[k] = v
+      }
+    }
+  })
+
+  test('runner registry: provider:anthropic_direct accepts LITELLM_* (forwarder, preferred path) (E1)', () => {
+    // When LITELLM_* are set, the runner factory builds without throwing.
+    // We can't easily assert which auth path was taken from the outside, but
+    // resolving without throw is the signal that LITELLM_* were honored
+    // (ANTHROPIC_API_KEY is also deleted).
+    const prev = {
+      AN: process.env['ANTHROPIC_API_KEY'],
+      LK: process.env['LITELLM_MASTER_KEY'],
+      LU: process.env['LITELLM_BASE_URL'],
+    }
+    delete process.env['ANTHROPIC_API_KEY']
+    process.env['LITELLM_MASTER_KEY'] = 'test-litellm-key'
+    process.env['LITELLM_BASE_URL'] = 'http://localhost:4400'
+    try {
+      const runner = defaultRunnerRegistry.resolve({
+        id: 'x',
+        ahc_flags: {},
+        provider: 'anthropic_direct',
+      })
+      expect(runner.name).toBeTypeOf('string')
+    } finally {
+      if (prev.AN !== undefined) process.env['ANTHROPIC_API_KEY'] = prev.AN
+      if (prev.LK !== undefined) process.env['LITELLM_MASTER_KEY'] = prev.LK
+      else delete process.env['LITELLM_MASTER_KEY']
+      if (prev.LU !== undefined) process.env['LITELLM_BASE_URL'] = prev.LU
+      else delete process.env['LITELLM_BASE_URL']
+    }
+  })
+
+  test('runner registry: provider:anthropic_direct falls back to ANTHROPIC_API_KEY when LITELLM_* missing (E1)', () => {
+    const prev = {
+      AN: process.env['ANTHROPIC_API_KEY'],
+      LK: process.env['LITELLM_MASTER_KEY'],
+      LU: process.env['LITELLM_BASE_URL'],
+    }
+    delete process.env['LITELLM_MASTER_KEY']
+    delete process.env['LITELLM_BASE_URL']
+    process.env['ANTHROPIC_API_KEY'] = 'test-direct-key'
+    try {
+      const runner = defaultRunnerRegistry.resolve({
+        id: 'x',
+        ahc_flags: {},
+        provider: 'anthropic_direct',
+      })
+      expect(runner.name).toBeTypeOf('string')
+    } finally {
+      if (prev.AN !== undefined) process.env['ANTHROPIC_API_KEY'] = prev.AN
+      else delete process.env['ANTHROPIC_API_KEY']
+      if (prev.LK !== undefined) process.env['LITELLM_MASTER_KEY'] = prev.LK
+      if (prev.LU !== undefined) process.env['LITELLM_BASE_URL'] = prev.LU
     }
   })
 

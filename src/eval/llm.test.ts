@@ -221,6 +221,15 @@ describe('ANTHROPIC_DIRECT_PRICING + anthropicCostFromUsage', () => {
     const usage: AnthropicUsage = { input_tokens: 100, output_tokens: 50 }
     expect(anthropicCostFromUsage('claude-future-99', usage)).toBe(0)
   })
+
+  test('claude-sonnet-4.6 dot-form alias matches dash-form pricing (E1 LiteLLM path)', () => {
+    // LiteLLM forwarder uses dot-form aliases; ahc_core resolvePricing()
+    // looks up by exact model id, so both forms must resolve to identical
+    // numbers to avoid cost-tracking drift between auth paths.
+    const dotted = ANTHROPIC_DIRECT_PRICING['claude-sonnet-4.6']
+    const dashed = ANTHROPIC_DIRECT_PRICING['claude-sonnet-4-6']
+    expect(dotted).toEqual(dashed)
+  })
 })
 
 describe('createAnthropicClient — shape sanity', () => {

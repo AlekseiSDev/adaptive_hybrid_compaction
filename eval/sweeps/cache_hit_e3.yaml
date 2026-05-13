@@ -7,7 +7,13 @@ name: cache_hit_e3
 # Provider switch (decisions.md [2026-05-13] E0 — ConfigDef.provider field):
 #   ahc_full × anthropic_direct  — main test; @ai-sdk/anthropic provider
 #                                  surfaces cache_read_input_tokens via
-#                                  AnthropicUsage in TurnRecord.
+#                                  AnthropicUsage in TurnRecord. E1: when
+#                                  LITELLM_MASTER_KEY + LITELLM_BASE_URL are
+#                                  set in env, anthropic_direct routes through
+#                                  the forwarder (model must use dot-form
+#                                  alias, e.g. `claude-sonnet-4.6`); without
+#                                  LITELLM_*, falls back to ANTHROPIC_API_KEY
+#                                  direct (dash-form `claude-sonnet-4-6`).
 #   anthropic_compact            — reference baseline (Anthropic's native
 #                                  server-side compact_20260112 strategy);
 #                                  always Anthropic-native, no provider
@@ -32,8 +38,12 @@ name: cache_hit_e3
 benches:
   - longmemeval-med
 configs:
+  # Model id resolution: the runner factory defaults to `claude-sonnet-4.6`
+  # (dot-form) when LITELLM_* are set, else `claude-sonnet-4-6` (dash-form).
+  # `ahc_flags.model` here would override that; leaving it absent so the
+  # factory picks the right form for the active auth path.
   - id: ahc_full_anthropic
-    ahc_flags: { model: claude-sonnet-4-6 }
+    ahc_flags: {}
     provider: anthropic_direct
   - id: anthropic_compact
     baseline: anthropic_compact
