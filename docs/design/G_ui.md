@@ -133,7 +133,8 @@ source of truth.
   - Production-grade UX (mobile, accessibility) — basic styling достаточно
   - Streaming markdown edge cases — simple text/code blocks ok; tables/KaTeX out
   - Дополнительные tools (`web_search`, file system, code interpreter) — один
-    `fetch_url` достаточно для демо AHC offload; остальное scope creep
+    `fetch_url` достаточно для демо AHC offload; остальное scope creep. Roadmap
+    для расширения palette зафиксирован в §"Tool palette extensions (post-G3)".
   - Конфигурируемый system prompt из UI — hardcoded достаточно
   - Multi-agent / handoff scenarios — single agent loop
 
@@ -400,3 +401,147 @@ const { model } = createAhcRuntime({
 - `createUIMessageStream` + `buildAhcStats` + telemetry sidebar plumbing — не трогается.
 
 Tracker: см. `docs/decisions.md [2026-05-13] E0 — Single shared AHC-over-AI-SDK runtime`.
+
+---
+
+## Tool palette extensions (post-G3)
+
+§1 Out жёстко зафиксировал "один `fetch_url` достаточно для MVP AHC демо". Эта секция —
+roadmap расширения palette до "default agentic assistant" набора (`google_search`,
+`create_image`) **после** того как G3 закрыт. Не G4; не блокирует acceptance gate;
+fixes интент чтобы будущий агент не пере-открывал то же исследование.
+
+### Current state (после G3 commit `aaf3cdc` + миграция `5ccbd96`)
+
+User-facing tool — ровно один:
+
+| Tool | Источник | Поведение |
+|---|---|---|
+| `fetch_url(url)` | `src/ui/lib/fetchUrl.ts:70-88` | HTTP GET → cheerio HTML→text, cap 8000 chars, timeout 5s, rate-limit 30/5 min per session |
+
+Плюс AHC-injected `recall_tool_result` (`src/core/recallTool.ts`), который **не** user-facing
+по смыслу — middleware подсовывает его модели когда scratchpad непуст, чтобы модель
+доставала offloaded tool_result'ы по ссылке вместо повторного `fetch_url`.
+
+System prompt (`src/ui/lib/systemPrompt.ts`) hardcoded под `fetch_url`. Если регистрировать
+новые tools — обновлять prompt **обязательно**, иначе модель про них "не знает".
+
+### Что добавить — gap analysis
+
+| Tool | AHC-relevance | UX-relevance | Verdict |
+|---|---|---|---|
+| `google_search` | **+1.** Новый shape toxic tool_result (grounded ответ + цитаты, ~0.5-2 KB) → classifier видит более разнообразные траектории (`tool_heavy` чаще, `mixed`/`conversational` на чистых search'ах). Offload pipeline испытывается на другом контент-типе. | Default expectation для "research assistant"; убирает frustration "почему модель не может погуглить". | **Высокий приоритет** |
+| `create_image` | Нейтрально. tool_result короткий (URL ~100 chars), не triggers T_SIZE-offload. Может быть offload-able только при reference-image input (base64 → ~50 KB) но AHC ради этого не запустится. | Image-out + image-edit с reference. Стандартная default-feature. | **Средний приоритет** |
+| `browse_url` | Нулевая. Перекрывается с `fetch_url` (тот же HTTP GET + HTML→text). Различие появится только при JS-render через Playwright server-side — это +chromium процесс +1s latency, тяжеловес. | Lo-value alone. | **Скорее пропустить либо переименовать `fetch_url` → `browse_url`** (модели лучше отзываются на это имя). |
+
+### Provider choice — оба tool'а через `@google/genai`, один ключ
+
+**Ключевое наблюдение:** Gemini API имеет встроенный grounding-тул `tools: [{google_search:{}}]` —
+модель сама ходит в Google, цитирует, отдаёт grounded ответ + `groundingMetadata` с
+ссылками. Это **нативная фича провайдера**, не отдельный сервис. Тот же
+`@google/genai` SDK покрывает и image generation (`responseModalities:["IMAGE"]`).
+**Один ключ `GOOGLE_GENAI_API_KEY` → два tool'а** — без отдельного Brave/SerpAPI.
+
+**Архитектурный nuance:** main actor в AHC-роуте остаётся `google/gemini-3-flash-preview`
+через **OpenRouter** (для AHC middleware mount'а — обязательно). OpenRouter не
+экспонирует Gemini native tools. Поэтому `google_search` и `create_image` —
+**side-channel calls к Gemini API напрямую** из execute-body AI SDK tool'а; AHC
+middleware видит результат как обычный `tool_result` (текст или URL) и offload'ит
+как обычно. Архитектура остаётся чистой:
+
+```
+streamText({ model: AHC-wrapped OpenRouter Gemini-3-Flash, tools: { ... } })
+                ▲                                          │
+                │ main agent loop                          │ side-channel for tool exec
+                │                                          ▼
+        (AHC middleware                          @google/genai direct
+         sees tool_result text)              ──► (google_search grounding OR
+                                                  responseModalities:[IMAGE])
+```
+
+### Verification — ключ работает (2026-05-13)
+
+Прогон против фактического `google.apiKey` из `jay-canvas/apps/platform/api/config/local.yaml`:
+
+| Endpoint | `models?list` | `googleSearch` grounding | `responseModalities:[IMAGE]` |
+|---|---|---|---|
+| Direct: `https://generativelanguage.googleapis.com/v1beta` | HTTP 200 | HTTP 200 (5 grounding chunks, текст grounded) | HTTP 200 (476 KB PNG, корректный) |
+| Gateway: `https://generativelanguage-gw.just-ai.com/v1beta` | HTTP 200 | HTTP 200 (3 grounding chunks) | not tested |
+
+Ключ — "белый", direct API без IP allowlist'а. **Использовать direct endpoint** — без
+зависимости от Just AI internal gateway. Gateway оставить как fallback.
+
+### Source pointers — `/Users/Aleksei/Projects/jay-canvas`
+
+Активные реализации в jay-canvas (по `apps/platform/api/src/functions/functions.list.ts`):
+
+- **`google_search`** — в jay-canvas сейчас идёт через **Brave** (`functions.list.ts:22`
+  регистрирует `BraveFunctions`; `SerpapiFunctions` существует в коде но
+  `serpapi.apiKey: ""` — dead). Brave у них работает через прокси-gateway
+  `https://brave-gw.just-ai.com`. **Для AHC переиспользовать не Brave-провайдер**, а
+  нативный Gemini grounding (см. выше) — один ключ, один SDK, тот же effect.
+- **`create_image`** — `apps/platform/api/src/functions/functions.google.ts` (200 строк).
+  Wrapper над `@google/genai` SDK, модели Gemini Imagen (`gemini-2.5-flash-image`,
+  `gemini-3.1-flash-image-preview`, `gemini-3-pro-image-preview`). Принимает
+  `images: string[]` (max 3) — reference images для img2img/edit, fetched по URL +
+  base64-inline в `contents`. Возврат — `{image_url}` после upload в FilesService.
+  **Этот wrapper переносить — переиспользуемый паттерн.**
+
+**Cred (один на оба tool'а):** `GOOGLE_GENAI_API_KEY` в `.env`. Значение — из
+`jay-canvas/apps/platform/api/config/local.yaml` ключ `google.apiKey`. BaseURL —
+**direct** `https://generativelanguage.googleapis.com/` (gateway не нужен).
+
+### Что было сделано (2026-05-13)
+
+**Implemented:** см. commit `feat(G): add google_search + create_image tools via @google/genai` (SHA backfill — см. `docs: backfill SHA` follow-up). Per-session rate limiters: `SEARCH_RATE_LIMITER` 20/5min, `IMAGE_RATE_LIMITER` 5/5min (`src/ui/lib/sessionRegistry.ts`).
+
+- [x] **Recon** в jay-canvas: `apps/platform/api/src/functions/functions.google.ts` —
+      image gen wrapper над `@google/genai` SDK. Brave-wrapper не читали (не
+      переиспользуем — см. Provider choice выше).
+- [x] **`pnpm add @google/genai`** в корневой `package.json`.
+- [x] **Создан `src/ui/lib/googleGenai.ts`** — lazy singleton
+      `new GoogleGenAI({apiKey: process.env.GOOGLE_GENAI_API_KEY!})` с
+      `__resetClientForTests` для unit-тестов. BaseURL — default direct.
+- [x] **Создан `src/ui/lib/googleSearch.ts`** — паттерн `fetchUrl.ts:76-88`.
+      Возврат — `{ok, text, citations: [{title, uri}]}` (плоский shape из
+      `groundingMetadata.groundingChunks[].web`). Модель `gemini-2.5-flash`.
+      `SEARCH_RATE_LIMITER` 20/5min per session.
+- [x] **Создан `src/ui/lib/createImage.ts`** — паттерн как `functions.google.ts`
+      в jay-canvas, без NestJS / billing / FilesService.
+      `client.models.generateContent({model:'gemini-2.5-flash-image', contents,
+      config:{responseModalities:['IMAGE']}})`; decode `inlineData.data` base64,
+      запись в **`src/ui/public/generated/<uuid>.png`** (а не data-URL — exit
+      из localStorage bloat для chat history). Cleanup >1h при invoke.
+      `IMAGE_RATE_LIMITER` 5/5min per session.
+- [x] **Регистрация в `src/ui/app/api/chat/route.ts`:**
+      `tools: { fetch_url, google_search, create_image }`.
+- [x] **System prompt update в `src/ui/lib/systemPrompt.ts`** — упомянуты все три
+      tools с when-to-use guidance.
+- [x] **Image renderer** в `src/ui/components/Chat.tsx` — branch для
+      `tool-create_image` + `output-available` → `<img src={output.image_url}>`;
+      остальные tool-parts остаются JSON-блоком.
+- [x] **Env var** в `.env`: `GOOGLE_GENAI_API_KEY=<value>` (gitignored).
+      Значение — из `jay-canvas/apps/platform/api/config/local.yaml` `google.apiKey`.
+      **Один ключ на оба tool'а.**
+- [x] **Smoke**: Playwright MCP 3-turn trajectory (search → fetch citation → create_image),
+      screenshots `/tmp/g-toolpalette-{1,2,3}.png`.
+
+### Что НЕ менять при этом переносе
+
+- **AHC middleware / scratchpad / offload pipeline** — toxic tool_result от search'а
+  триггерит существующий A6 path без изменений; никаких core-доработок не требуется.
+- **`createAhcRuntime`** — provider stays `'openrouter'`, model stays
+  `google/gemini-3-flash-preview` (image gen идёт через **отдельный** SDK
+  `@google/genai`, не через chat completion model).
+- **`buildAhcStats` / telemetry envelope** — не зависит от количества tools; работает
+  с любыми `compaction_event` / `recall_event` идентично.
+- **`system_design.md §7 Track G phase plan`** — G1–G3 done; это **post-G3 expansion**,
+  не отдельная фаза G4. Если расширение разрастётся (auth, sandbox для code interpreter,
+  storage для files) — тогда уже отдельный design doc / трек.
+
+### Hidden cost note
+
+Каждый зарегистрированный tool добавляет JSON-schema в каждый запрос к модели —
+эмпирически ~50-200 input tokens per schema. С 3 tools = ~+500 input tokens на каждый
+turn baseline (до любого contenta). Для demo приемлемо; учитывать если будут
+production-scale runs или benchmark sweeps.

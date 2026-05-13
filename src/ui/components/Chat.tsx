@@ -233,6 +233,20 @@ function renderPart(part: AhcUIMessage['parts'][number], key: string) {
     // Telemetry envelope — rendered in sidebar, not inline.
     return null;
   }
+  if (part.type === 'tool-create_image' && 'state' in part && part.state === 'output-available') {
+    const output = (part as { output?: { image_url?: unknown } }).output;
+    if (output && typeof output.image_url === 'string') {
+      return (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          key={key}
+          src={output.image_url}
+          alt="generated"
+          className="max-h-72 rounded border border-gray-200"
+        />
+      );
+    }
+  }
   if (part.type.startsWith('tool-')) {
     return (
       <pre key={key} className="rounded bg-blue-50 px-2 py-1 text-[11px] text-blue-700">

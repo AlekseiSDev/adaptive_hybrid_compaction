@@ -27,3 +27,6 @@ observability/.langfuse/
 # Playwright MCP scratch — page snapshots, console logs, screenshots
 .playwright-mcp/
 *.screenshot.png
+
+# Generated images from /api/chat create_image tool (kept ephemeral; dir tracked via .gitkeep)
+src/ui/public/generated/*.png

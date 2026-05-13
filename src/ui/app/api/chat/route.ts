@@ -10,7 +10,14 @@ import { createAhcRuntime } from '../../../../adapters';
 import type { CoreEvent } from '../../../../core';
 import { activeFlagNames, parseFlagsFromUrl } from '../../../lib/featureFlags';
 import { createSessionLimitedFetchUrl } from '../../../lib/fetchUrl';
-import { FETCH_RATE_LIMITER, SESSION_REGISTRY } from '../../../lib/sessionRegistry';
+import { createSessionLimitedGoogleSearch } from '../../../lib/googleSearch';
+import { createSessionLimitedCreateImage } from '../../../lib/createImage';
+import {
+  FETCH_RATE_LIMITER,
+  IMAGE_RATE_LIMITER,
+  SEARCH_RATE_LIMITER,
+  SESSION_REGISTRY,
+} from '../../../lib/sessionRegistry';
 import { buildAhcStats } from '../../../lib/ahcStats';
 import type { AhcStatsEnvelope } from '../../../lib/ahcStatsTypes';
 import { SYSTEM_PROMPT } from '../../../lib/systemPrompt';
@@ -73,6 +80,12 @@ export async function POST(req: Request) {
   const fetchUrl = createSessionLimitedFetchUrl(sessionId, (id) =>
     FETCH_RATE_LIMITER.tryConsume(id),
   );
+  const googleSearch = createSessionLimitedGoogleSearch(sessionId, (id) =>
+    SEARCH_RATE_LIMITER.tryConsume(id),
+  );
+  const createImage = createSessionLimitedCreateImage(sessionId, (id) =>
+    IMAGE_RATE_LIMITER.tryConsume(id),
+  );
 
   const activeFlags = activeFlagNames(flags);
 
@@ -83,7 +96,11 @@ export async function POST(req: Request) {
         system: SYSTEM_PROMPT,
         messages: modelMessages,
         stopWhen: stepCountIs(maxSteps),
-        tools: { fetch_url: fetchUrl },
+        tools: {
+          fetch_url: fetchUrl,
+          google_search: googleSearch,
+          create_image: createImage,
+        },
         onFinish: ({ usage }) => {
           const envelope = buildAhcStats({
             events,

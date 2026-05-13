@@ -42,3 +42,11 @@ export class FetchRateLimiter {
 }
 
 export const FETCH_RATE_LIMITER = new FetchRateLimiter();
+export const SEARCH_RATE_LIMITER = new FetchRateLimiter({
+  maxPerWindow: 20,
+  windowMs: 5 * 60 * 1000,
+});
+export const IMAGE_RATE_LIMITER = new FetchRateLimiter({
+  maxPerWindow: 5,
+  windowMs: 5 * 60 * 1000,
+});
