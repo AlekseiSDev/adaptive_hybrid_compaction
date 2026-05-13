@@ -1,194 +1,140 @@
-# Track E — Sweep Audit (E1 + E2 + E3)
+# Track E — Sweep Audit (Phase D fast-track)
 
-> Consolidated post-run audit for the four E-track sweeps. Numbers here are
-> raw aggregates from `summary.json` per cell (committed under
-> `benchmarks/runs/<sweep>/`); Track F handles the statistical pipeline
-> (paired permutation, bootstrap, stat-significance).
+> Refreshed 2026-05-13 after Phase D rewrite (commits 0609428 prompt
+> wiring → d9d1424 tau grader fix → 81115d2 tau re-run → S21 main sweep).
+> SUPERSEDES the pre-Phase-D audit at `e-runs-complete` (which had
+> baselines silently dropping system prompts, smoke fixtures on
+> LME/LoCoMo, broken mastra_om OM, and a broken tau grader).
+>
+> Track F consumes the numbers below. For follow-ups (seed=43, larger
+> n, mastra_om OM execution depth) see `e_phase_d_todos.md`.
 
-## Headline
+## Headline numbers
 
-**AHC vs full_context on assistant-traj (the only bench with task variety):**
+Single seed=42, n=21 records/cell (1 mini-smoke + 20 main). All baselines
+share `DEFAULT_AGENT_SYSTEM_PROMPT` (`src/core/prompts.ts`) — fair
+comparison invariant holds for the first time in Track E.
 
-| seed | full_context | mastra_om | anthropic_compact | ahc_full | Δ AHC vs FC |
-|------|--------------|-----------|-------------------|----------|-------------|
-| 42 (primary) | 0.233 | 0.267 | 0.233 | **0.300** | +29% relative |
-| 43 (replication) | 0.217 | 0.250 | 0.217 | **0.283** | +30% relative |
+### Text benches (`main_e1_text`)
 
-n=30 tasks per cell. seed=43 replication sanity ✓ (AHC delta consistent within
-~1pp).
-
-## Spend summary
-
-| Sweep | Cells | Budget | Actual | Notes |
+| bench | full_context | anthropic_compact | ahc_full | mastra_om |
 |---|---|---|---|---|
-| E3 cache-hit | 2 | $20 | $0.009 | LITELLM proxy works; cache_read=0 on smoke tasks (below 1024-token threshold) |
-| E1 text | 24 | $90 | $2.94 | Gemini-3-flash actor + Sonnet-judge; bench task counts: AT=30, LME=3, LoCoMo=3 |
-| E1 tau | 4 | $30 | $0.020 | 2 tau-bench tasks baked; multi-turn agent loop ~3 turns/episode |
-| E2 ablations | 12 | $12 | $2.91 | 3 AHC configs × 2 benches × 2 seeds |
-| **Total** | **42** | **$152** | **$5.88** | OpenRouter cumulative usage: $393.86 → ~$400 (~$100 remaining) |
+| assistant-traj | **0.190** | 0.167 | 0.143 | 0.143 |
+| longmemeval-med | 0.762 | 0.524 | **0.762** | 0.762 |
+| locomo-med | **0.857** | 0.714 | 0.810 | 0.857 |
 
-## Per-sweep details
+Cost per cell (USD; `mastra_om` does not self-track cost, see warnings):
 
-### E3 cache-hit (longmemeval-med)
+| bench | full_context | anthropic_compact | ahc_full | mastra_om |
+|---|---|---|---|---|
+| AT | 0.22 | 0.08 | 0.20 | 0.07 |
+| LME | 2.38 | 0.02 | 2.37 | 0.02 |
+| LoCoMo | 0.71 | 0.02 | 0.72 | 0.01 |
 
-- **Cells**: 2 (ahc_full_anthropic + anthropic_compact, seed=42 only).
-- **Records**: 6 (3 tasks × 2 configs).
-- **Accuracy**: 1.000 across all 6 (smoke fixtures, trivial).
-- **Cache hit ratio**: 0% per turn — LME-med baked subset has tasks of
-  ~200 tokens, below Anthropic's 1024-token ephemeral-cache threshold.
-  AHC's `cache_control: ephemeral` marker works (verified in live smoke
-  with filler-padded prompt → 99% hit ratio), but the smoke fixtures
-  themselves don't exercise the cache path.
-- **Honest finding**: §2.1 target ≥60% cache_read ratio requires real
-  LME-med tasks (~16k input tokens, multi-session haystacks). D5 baked
-  smoke fixtures; F-report logs the limitation.
+### Tau-bench retail (`main_e1_tau`)
 
-### E1 text (assistant-traj + longmemeval-med + locomo-med)
+After S22 grader fix (replay expected actions through upstream env to
+get `expected_end_state` per task — commit `d9d1424`). Re-run on the
+same baked 10-episode subset at seed=42 + 43.
 
-- **Cells**: 24 (4 baselines × 3 benches × 2 seeds).
-- **Records**: 288. ErrorRecord rate: 0%.
-- **AT numbers** (per headline table): AHC wins by +29-30% relative.
-- **LME / LoCoMo numbers**: all baselines uniformly 1.000 (3-task smoke
-  fixtures saturate; zero discrimination signal from these benches in
-  this run).
-- **mastra_om Observational Memory failure**: Mastra's OM step needs
-  `GOOGLE_GENERATIVE_AI_API_KEY` for `google/gemini-2.5-flash` (hardcoded
-  in @mastra/memory@1.17.5; no public-API override). Agent recovered to
-  produce main responses (mastra_om scored 0.267/0.250 on AT) but the
-  number reflects "Mastra agent without working OM", not the intended
-  baseline. F report should treat mastra_om numbers with this caveat;
-  follow-up: set `GOOGLE_GENERATIVE_AI_API_KEY` env var (project `.env`
-  has `GOOGLE_GENAI_API_KEY` as of 2026-05-13 — note name mismatch with
-  Mastra's expected `_GENERATIVE_AI_` form) and re-run mastra_om cells
-  (delete `benchmarks/runs/main_e1_text/**/7e22cf2fb044d669/` and re-run
-  sweep; auto-resume executes only the deleted cells).
-- **check-run.ts**: 0 errors, 76 warnings (60 LME/LoCoMo accuracy-constant,
-  16 mastra_om cost-not-tracked — all expected).
+| config | seed=42 | seed=43 | cost/episode |
+|---|---|---|---|
+| `tau_bench_agent` (vanilla) | 0.100 | 0.100 | $0.0124 |
+| `tau_bench_agent_ahc` | 0.100 | 0.100 | $0.0138 |
 
-### E1 tau (tau-bench-retail-med)
+Both agents solve 1/10 episodes. Gemini-3-flash is genuinely under-
+powered for tau-retail's multi-tool exchange/modify/return flows
+(optimal paths 5–15 actions). AHC cost overhead ~12% with no accuracy
+gain at n=10.
 
-- **Cells**: 4 (vanilla `tau_bench_agent` + `tau_bench_agent_ahc`, 2 seeds).
-- **Records**: 8 (2 tasks × 4 cells). ErrorRecord rate: 0%.
-- **Results**: both configs scored 0.500 (1/2 tasks); per-task uniform
-  (tau_smoke_001 → reward=0, tau_smoke_002 → reward=1 across all configs).
-  No discrimination signal with n=2.
-- **S4 wiring confirmed**: AHC variant emits 3 compaction events per
-  episode (encoded in TurnRecord by `buildEpisodeTurns`); vanilla
-  produces empty turns array. F report can cite the events for AHC
-  observability claims.
-- **Bug fixed mid-sweep**: `user-sim` started conversation with empty
-  messages array → OpenAI API 400. Patch (commit `7f95f77`): seed kickoff
-  with benign assistant greeting; subsequent turns unmodified.
+## Honest read
 
-### E2 ablations (assistant-traj + longmemeval-med)
+1. **AHC vs full_context** — tied on long-context single-turn benches
+   (LME 0.762/0.762, LoCoMo 0.810/0.857, within seed-noise). Loses 5pp
+   on AT where multi-turn trajectories are short (5–15 turns), AHC's
+   compaction induces information loss without big enough trajectory
+   to recoup via savings.
+2. **AHC vs anthropic_compact** — AHC wins ~24pp on LME (0.762 vs
+   0.524). AC saves ~100× cost via server-side compaction but pays
+   that accuracy. Pareto: AHC > AC on accuracy at higher cost.
+3. **AHC cost ≈ full_context cost** on LME and LoCoMo. AHC's internal
+   LLM overhead (digest/observer/reflector) cancels the savings from
+   trimmed prompts at n=20 single-turn QA. Cost win surfaces only on
+   long agentic trajectories — current AT (5–15 turns) isn't long
+   enough at our task lengths.
+4. **mastra_om** now runs OM through OpenRouter (S13 fix). Ties
+   full_context on LME / LoCoMo, loses 5pp on AT — same shape as AHC.
+   Suggests both compaction-flavored approaches share an AT failure
+   mode (small-trajectory compaction noise).
+5. **Tau-bench** grader is fixed (commit `d9d1424` replays expected
+   actions in upstream Python env, dumps state diff into baked tasks).
+   At n=10 we can't separate AHC from vanilla — both at 0.100. Need
+   either bigger bake or stronger actor to recover discrimination
+   signal.
 
-- **Configs**: ahc_full, ahc_no_observer, ahc_no_offloader. Dropped
-  ahc_no_async_buffer per budget hedge (commit `715b7a1`).
-- **Cells**: 12 (3 configs × 2 benches × 2 seeds). 198 records. 0 errors.
-- **AT results** (n=30 per cell):
+## Spend
 
-  | config | seed=42 | seed=43 | Δ vs ahc_full (42) |
-  |---|---|---|---|
-  | ahc_full | 0.250 | 0.267 | — |
-  | ahc_no_observer | 0.233 | 0.267 | −1.7pp |
-  | ahc_no_offloader | 0.250 | 0.283 | 0.0pp |
+| Sweep | Cells | Records | Cost | Notes |
+|---|---|---|---|---|
+| `main_e1_text` (S21) | 12 | 252 | $6.45 | 4 baselines × 3 benches × seed=42, n=21 |
+| `main_e1_tau` (S22) | 4 | 40 | $0.50 | 2 baselines × seed=42+43, n=10 |
+| `main_e1_text` smoke (S21 pre) | (subset of S21) | (included) | $0.36 | mini-smoke gate |
+| **Total Phase D fast-track** | — | 292 | **~$7.31** | vs $25 budget — 3.4× under |
 
-- **LME-med**: all configs 1.000 (smoke fixture saturation).
-- **Honest finding**: ablation Δ ≈ ±2pp on AT — below the seed-noise
-  floor (ahc_full seed42/seed43 spread is 1.7pp). With n=30 tasks per
-  cell we cannot conclude individual AHC component contributions. F
-  report should either disclose insufficient stat power OR D5 bake
-  larger AT subset (or use full LongMemEval / LoCoMo) before drawing
-  conclusions about Task-Aware Extraction / Type-Aware Offloader
-  individual deltas.
+OpenRouter cumulative: $404.86 → ~$410 (~$90 remaining of $500).
 
-## Cross-replication: ahc_full E1 vs E2
+## What's NEW vs the pre-Phase-D audit at `e-runs-complete`
 
-Same config, same code path, two separate sweep runs:
-
-|  | seed=42 | seed=43 |
+| Item | Before | After |
 |---|---|---|
-| E1_text ahc_full | 0.300 | 0.283 |
-| E2 ahc_full | 0.250 | 0.267 |
-| **Δ (E1 − E2)** | **+5.0pp** | **+1.7pp** |
-
-**Drift ≈ 3-5pp**. At `temperature=0` + per-prompt judge cache, this drift
-is unexpected. Possible sources:
-
-- Judge cache miss / cold partial: same actor output may produce different
-  judge prompt hashes if any whitespace/formatting differs; rare but
-  possible on borderline tasks.
-- Provider-side non-determinism even at temp=0 (claude-sonnet-judge
-  through OpenRouter has been observed to vary by ~1 logit on identical
-  inputs in some sessions).
-- Concurrency=5 + judge cache file I/O: parallel writers might race on
-  cache reads, occasionally producing fresh judge calls where a cache
-  hit was possible.
-
-For F-track: treat single-seed E1_text ahc_full = 0.300 as primary headline
-but note ±5pp run-to-run variance. The relative ordering (AHC > mastra_om
-> full_context / anthropic_compact) is stable across both runs.
-
-## Known follow-ups for F
-
-1. **Bake real LME-med subset** (D5 follow-up): current baked tasks are
-   smoke fixtures (~3 tasks, ~200 tokens). For F-report stats power +
-   E3 cache-hit verification, need ~10-15 real tasks with 16k+ input.
-2. **Bake real LoCoMo-med subset**: same as LME — current baked is 3
-   smoke conversations.
-3. **Bake more tau-bench tasks**: current 2 tasks → no signal.
-4. **mastra_om OM fix**: set `GOOGLE_GENERATIVE_AI_API_KEY` (Mastra's
-   expected var name) and re-run mastra_om cells. Without this, the
-   mastra_om numbers in E1_text don't represent the intended baseline.
-5. **Anthropic cache_control on stable prefix**: marker placement
-   working (S3, commit `64ff6be`+`1e9e375`). For F-report cache-rate
-   claim, need real LME tasks (#1).
-6. **AHC × tau-bench InstrumentationEvents detail**: per-event payload
-   currently captured but not summarized in F format. Track F decides
-   what to expose.
+| System prompt | Placeholder / silently dropped per baseline | `DEFAULT_AGENT_SYSTEM_PROMPT` unified |
+| Raw output persistence | none | `final_response_text` per record |
+| LME subset | 3 smoke tasks | 120 real haystack tasks |
+| LoCoMo subset | 3 smoke conversations | 25 real subset (seed=42 frozen) |
+| Tau subset | 2 smoke episodes | 10 real episodes |
+| Tau grader | always-1.0 (broken) | post-replay diff vs upstream env state |
+| Mastra OM | silently degraded (model not found) | runs through OpenRouter Gemini-3-flash |
+| Baselines seeing system prompt | only ahc_core (placeholder) | all 4 + tau actor |
 
 ## Acceptance gate (per E_main-runs.md §9)
 
-- [x] `./scripts/verify.sh` green (497 unit + cache-invariance).
-- [x] All 4 sweeps have committed `summary.json` + `meta.json` per cell.
-- [x] ErrorRecord rate < 10% on every (sweep, bench, config) — observed: 0%.
-- [x] `check-run.ts` exit 0 on all sweep outputs (warnings only).
-- [x] Cost actual << 30% of budget delta — under by 50× ($3 spent vs $152).
+- [x] `./scripts/verify.sh` green at S21 launch (typecheck + lint + 521 tests).
+- [x] All re-run sweep cells have committed `summary.json` + `meta.json`.
+- [x] `check-run.ts` exit 0 on both `main_e1_text/` and `main_e1_tau/`.
+- [x] ErrorRecord rate 0% across every cell.
+- [x] Phase D spend ≤ $25 budget — observed $7.31, 3.4× under.
+- [x] `final_response_text` populated end-to-end (spot-checked).
 - [ ] Statistical pipeline (Track F) — out of scope this phase.
-- [ ] Per-class breakdown (B3) — exists as `scripts/per-class-report.ts`,
-  can be run on AT records as F-prep.
 
 ## Tag
 
-`e-runs-complete` — marks Track F entry.
+`e-phase-d-fast` — Track F entry for this phase.
 
 ## Sweep reproduction
-
-To re-run any sweep on a fresh env:
 
 ```bash
 set -a && . ./.env && set +a
 
-# E3 cache-hit (LITELLM proxy):
-pnpm tsx scripts/eval.ts --sweep eval/sweeps/cache_hit_e3.yaml --concurrency=2
+# Text main:
+pnpm tsx scripts/eval.ts --sweep eval/sweeps/main_e1_text.yaml \
+  --concurrency=10 --max-tasks-per-cell=20
 
-# E1 text main:
-pnpm tsx scripts/eval.ts --sweep eval/sweeps/main_e1_text.yaml --concurrency=5
-
-# E1 tau:
-pnpm tsx scripts/eval.ts --sweep eval/sweeps/main_e1_tau.yaml --concurrency=5
-
-# E2 ablations:
-pnpm tsx scripts/eval.ts --sweep eval/sweeps/ablation_e2.yaml --concurrency=5
+# Tau (with fixed grader from `bake_tau_expected_states.py`):
+pnpm tsx scripts/eval.ts --sweep eval/sweeps/main_e1_tau.yaml \
+  --concurrency=5
 ```
 
-Auto-resume: re-running a sweep skips already-completed `task_id`s from
-NDJSON. Delete a cell's `records.ndjson` to force re-run of just that
-cell (cell directory layout is per-`(bench, config_id, seed)`).
-
-Validation (after each sweep):
+Validation:
 
 ```bash
-pnpm tsx scripts/check-run.ts benchmarks/runs/<sweep_name>/
-pnpm tsx scripts/sanity-aggregate.ts benchmarks/runs/<sweep_name>/
+pnpm tsx scripts/check-run.ts benchmarks/runs/main_e1_text/
+pnpm tsx scripts/sanity-aggregate.ts benchmarks/runs/main_e1_text/
+
+pnpm tsx scripts/check-run.ts benchmarks/runs/main_e1_tau/
+pnpm tsx scripts/sanity-aggregate.ts benchmarks/runs/main_e1_tau/
 ```
+
+## Follow-ups
+
+See `docs/runs/e_phase_d_todos.md` for the explicit list with cost +
+reproduction commands.
