@@ -1,6 +1,5 @@
-import { generateText, wrapLanguageModel, type ModelMessage } from 'ai'
-import { createOpenAI } from '@ai-sdk/openai'
-import { createAhcMiddleware } from '../../adapters/ai-sdk-v6.js'
+import { generateText, type ModelMessage } from 'ai'
+import { createAhcRuntime, type AhcProvider } from '../../adapters/ahc-runtime.js'
 import { SessionScratchpadRegistry } from '../../adapters/sessionScratchpad.js'
 import type {
   CoreEvent,
@@ -12,6 +11,8 @@ import type {
   Message,
 } from '../../core/index.js'
 import {
+  ANTHROPIC_DIRECT_PRICING,
+  createAnthropicClient,
   createOpenRouterClient,
   OPENROUTER_PRICING,
   type ModelPricing,
@@ -26,17 +27,20 @@ import type {
   Task,
 } from '../types.js'
 
-// ahc_core baseline — real AHC runtime over AI SDK v6 provider with the
-// createAhcMiddleware adapter (A6). Per system_design.md §7.2 Track B B5:
-// single integration point — AI SDK v6 wrapping; replaces noop_ahc stub.
+// ahc_core baseline — real AHC runtime over AI SDK v6 provider, assembled via
+// shared `createAhcRuntime` factory (src/adapters/ahc-runtime.ts). Per
+// `docs/decisions.md [2026-05-13] E0 — Single shared AHC-over-AI-SDK runtime`,
+// the actor+middleware wiring lives in adapters/ahc-runtime; this Baseline
+// adds eval-specific concerns on top: cost-aware LLMCaller around the eval
+// LLMClient (so step.cost_usd accounts for digest/observer/reflection), per-
+// task scratchpad lifecycle, instrumentation collector → InstrumentationEvent.
 //
-// Provider is OpenAI-protocol (createOpenAI) pointed at OpenRouter base URL
-// — matches the primary actor model from §6.1 (Gemini-3-Flash-Preview).
-// LLMCaller for AHC core internal calls (digest/observer/reflection) is
-// derived from the same provider via wrapLLMClientAsCaller + cost-aware
-// wrapper so step.cost_usd reflects ALL LLM consumption, not just main call.
+// Provider switch (`'openrouter'` default, `'anthropic_direct'` for E3
+// cache-hit subset) plumbed through deps; baseURL only meaningful on
+// 'openrouter' (Anthropic uses SDK default).
 
-const DEFAULT_MODEL = 'google/gemini-3-flash-preview'
+const DEFAULT_OPENROUTER_MODEL = 'google/gemini-3-flash-preview'
+const DEFAULT_ANTHROPIC_MODEL = 'claude-sonnet-4-6'
 // AI SDK v6 recommends passing the system prompt as the top-level `system:`
 // option rather than as a `{role:'system'}` entry in `messages:` (prompt-
 // injection-attack mitigation). A6 middleware's `transformParams` reads the
@@ -48,6 +52,12 @@ export type AhcCoreBaselineDeps = {
   apiKey: string
   baseURL?: string
   model?: string
+  /**
+   * Provider for the main actor + internal AHC LLM calls. 'openrouter'
+   * (default) uses @ai-sdk/openai pointed at OpenRouter; 'anthropic_direct'
+   * uses @ai-sdk/anthropic for E3 cache-hit subset.
+   */
+  provider?: AhcProvider
   ahcFlags?: Partial<FeatureFlags>
   pricing?: ModelPricing
   /**
@@ -67,17 +77,26 @@ type AhcScratch = {
   internalCostUsdSinceLastStep: number
 }
 
+function resolveDefaultModel(provider: AhcProvider): string {
+  return provider === 'anthropic_direct' ? DEFAULT_ANTHROPIC_MODEL : DEFAULT_OPENROUTER_MODEL
+}
+
+function resolvePricing(provider: AhcProvider, model: string): ModelPricing {
+  const table = provider === 'anthropic_direct' ? ANTHROPIC_DIRECT_PRICING : OPENROUTER_PRICING
+  return table[model] ?? ZERO_PRICING
+}
+
+function defaultLlmClient(provider: AhcProvider, apiKey: string): LLMClient {
+  if (provider === 'anthropic_direct') {
+    return createAnthropicClient({ apiKey })
+  }
+  return createOpenRouterClient({ apiKey, appName: 'AHC' })
+}
+
 export function ahcCoreBaseline(deps: AhcCoreBaselineDeps): Baseline {
-  const model = deps.model ?? DEFAULT_MODEL
-  const openai = createOpenAI({
-    apiKey: deps.apiKey,
-    ...(deps.baseURL !== undefined ? { baseURL: deps.baseURL } : {}),
-  })
-  // openai(modelId) defaults to the Responses API endpoint (OpenAI-only).
-  // OpenRouter/LiteLLM speak the legacy Chat Completions API — must select
-  // it explicitly via `.chat(modelId)`.
-  const baseModel = openai.chat(model)
-  const pricing = deps.pricing ?? OPENROUTER_PRICING[model] ?? ZERO_PRICING
+  const provider: AhcProvider = deps.provider ?? 'openrouter'
+  const model = deps.model ?? resolveDefaultModel(provider)
+  const pricing = deps.pricing ?? resolvePricing(provider, model)
 
   return {
     name: 'ahc_core',
@@ -104,20 +123,29 @@ export function ahcCoreBaseline(deps: AhcCoreBaselineDeps): Baseline {
       // step.cost_usd we return at the end reflects all upstream consumption.
       const baseLlmCaller =
         deps.llmCaller ??
-        wrapLlmClientAsLLMCaller(deps.llmClient ?? defaultLlmClientFromOpenRouter(deps.apiKey), model)
-      const middleware = createAhcMiddleware({
+        wrapLlmClientAsLLMCaller(deps.llmClient ?? defaultLlmClient(provider, deps.apiKey), model)
+      const costAwareLlmCaller = makeCostAwareLLMCaller(baseLlmCaller, pricing, (usd) => {
+        scratch.internalCostUsdSinceLastStep += usd
+      })
+
+      // Shared AHC-over-AI-SDK assembly — provider switch (openrouter /
+      // anthropic_direct), middleware wiring, scratchpad lifecycle all live
+      // in createAhcRuntime. Eval-side adds the cost-aware llmCaller +
+      // instrumentation collector below.
+      const { model: wrapped } = createAhcRuntime({
+        provider,
+        apiKey: deps.apiKey,
+        model,
+        ...(deps.baseURL !== undefined ? { baseURL: deps.baseURL } : {}),
         ...(deps.ahcFlags !== undefined ? { flags: deps.ahcFlags } : {}),
-        llmCaller: makeCostAwareLLMCaller(baseLlmCaller, pricing, (usd) => {
-          scratch.internalCostUsdSinceLastStep += usd
-        }),
         sessionId: () => state.task_id,
         scratchpadRegistry: scratch.registry,
         hysteresisStateOverride: scratch.hysteresis,
         emit: (e) => {
           events.push(mapCoreEventToInstrumentation(e))
         },
+        llmCaller: costAwareLlmCaller,
       })
-      const wrapped = wrapLanguageModel({ model: baseModel, middleware })
       const messages = toModelMessages([...state.history, userMsg])
 
       const start = Date.now()
@@ -284,10 +312,6 @@ export function mapCoreEventToInstrumentation(e: CoreEvent): InstrumentationEven
     class: e.class,
     confidence: e.confidence,
   }
-}
-
-function defaultLlmClientFromOpenRouter(apiKey: string): LLMClient {
-  return createOpenRouterClient({ apiKey, appName: 'AHC' })
 }
 
 // Convert AHC core Message[] to AI SDK ModelMessage[]. Core uses content as
