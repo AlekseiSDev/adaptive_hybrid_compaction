@@ -1,0 +1,44 @@
+{
+  "task_id": "at_code_iter_006",
+  "category": "code_iter",
+  "source": "synthetic",
+  "turns": [
+    {
+      "role": "user",
+      "content": [
+        { "type": "text", "text": "Дай Python-функцию `parse_log_line(line: str) -> dict | None`, которая парсит nginx access-log в combined-формате: `remote_addr - remote_user [time_local] \"request\" status body_bytes \"referer\" \"user_agent\"`. Возвращай {remote_addr, time_local, method, path, protocol, status (int), body_bytes (int), referer, user_agent}. На невалидной строке — None." }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        { "type": "text", "text": "```python\nimport re\nfrom typing import Optional\n\n_PATTERN = re.compile(\n    r'^(?P<remote_addr>\\S+) - (?P<remote_user>\\S+) '\n    r'\\[(?P<time_local>[^\\]]+)\\] '\n    r'\"(?P<method>\\S+) (?P<path>\\S+) (?P<protocol>[^\"]+)\" '\n    r'(?P<status>\\d{3}) (?P<body_bytes>\\d+) '\n    r'\"(?P<referer>[^\"]*)\" \"(?P<user_agent>[^\"]*)\"$'\n)\n\ndef parse_log_line(line: str) -> Optional[dict]:\n    line = line.rstrip('\\n')\n    m = _PATTERN.match(line)\n    if not m:\n        return None\n    d = m.groupdict()\n    return {\n        'remote_addr': d['remote_addr'],\n        'time_local': d['time_local'],\n        'method': d['method'],\n        'path': d['path'],\n        'protocol': d['protocol'],\n        'status': int(d['status']),\n        'body_bytes': int(d['body_bytes']),\n        'referer': d['referer'],\n        'user_agent': d['user_agent'],\n    }\n```\n\nКлючевые точки:\n- `\\S+` для адреса и user (не пускает пробелы)\n- `[^\\]]+` для time_local (до закрывающей `]`)\n- Группа `request` разбита на 3 подгруппы (method/path/protocol) одним совмещённым regex'ом\n- На невалидной строке `.match()` вернёт None → возвращаем None по контракту" }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        { "type": "text", "text": "Хорошо. Теперь напиши 3 unit-теста с pytest: (1) валидная строка → корректный dict; (2) строка без user_agent → None; (3) status как int, не str. Каждый тест — отдельная def. Готовый Python-код, который можно положить в test_parse_log_line.py и запустить `pytest`." }
+      ]
+    }
+  ],
+  "tools_available": [],
+  "evaluation": {
+    "strategy": "composite",
+    "aggregate": "all",
+    "rules": [
+      { "strategy": "regex", "pattern": "def test_", "flags": "" },
+      { "strategy": "regex", "pattern": "(import pytest|from pytest)", "flags": "" },
+      { "strategy": "regex", "pattern": "is None", "flags": "" },
+      { "strategy": "regex", "pattern": "(isinstance.*int|== \\d+)", "flags": "" },
+      {
+        "strategy": "llm_judge",
+        "rubric_id": "code_iter",
+        "expected_summary": "Three pytest unit tests in a single Python file (test_parse_log_line.py shape), each as a separate def test_<name>() function. Test 1: parses a known-valid combined-format nginx log line and asserts every expected dict key with concrete values. Test 2: passes a malformed line (e.g. missing user_agent or unbalanced quotes) and asserts parse_log_line(...) is None. Test 3: parses a valid line and asserts isinstance(result['status'], int) (or result['status'] == <int>) and isinstance(result['body_bytes'], int). Code is pure Python, imports parse_log_line from the module, runnable via pytest, no prose around it."
+      }
+    ]
+  },
+  "provenance": {
+    "review_signoff": ""
+  }
+}

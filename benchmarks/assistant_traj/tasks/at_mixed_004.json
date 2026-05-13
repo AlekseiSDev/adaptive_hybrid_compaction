@@ -1,0 +1,68 @@
+{
+  "task_id": "at_mixed_004",
+  "category": "mixed",
+  "source": "synthetic",
+  "turns": [
+    {
+      "role": "user",
+      "content": [
+        { "type": "text", "text": "Прикладываю CSV — sales за Q1 по 8 регионам:\n\n```\nregion,jan,feb,mar\nNorth America,420,512,478\nLatin America,180,195,220\nEMEA,610,580,640\nUK & Ireland,290,305,318\nDACH,340,360,355\nSEA,150,168,182\nGreater China,520,498,540\nIndia,210,245,278\n```\n\nДай сжатый management summary: топ-3 региона по объёму, кто растёт fastest QoQ (jan→mar), кто стагнирует/падает. Без таблиц, плотным текстом, ≤6 предложений." }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        { "type": "text", "text": "Q1 sales total $9.39M (всего ≈ 12.4M-line items по 8 регионам). Топ-3 по сумме за квартал: EMEA ($1.83M), Greater China ($1.56M), North America ($1.41M) — на них приходится ~51% всего объёма. Fastest QoQ growth (jan→mar): India +32.4% ($210→$278), Latin America +22.2%, SEA +21.3% — все три emerging-market сегмента ускоряются. Стагнация / просадка: DACH (-1.5% от пика февраля), North America (-6.6% mar vs feb после январского rally), EMEA волатилен но в плюсе +4.9%. Greater China — slight dip в feb ($498), но март ($540) восстановил и обогнал январь. Общий QoQ рост total Q1 sales: +12.8% jan→mar." }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        { "type": "text", "text": "Ок. Нужна более структурированная версия для слайда — таблица:\n- регион\n- total Q1 ($k)\n- QoQ growth % (jan→mar, 1 знак после запятой)\n- статус (Growing / Stable / Declining), threshold: Growing >+5%, Declining <−2%, Stable иначе\n\nСортируй по total Q1 desc." }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        { "type": "text", "text": "| Регион | Total Q1 ($k) | QoQ growth | Статус |\n|---|---:|---:|---|\n| EMEA | 1,830 | +4.9% | Stable |\n| Greater China | 1,558 | +3.8% | Stable |\n| North America | 1,410 | +13.8% | Growing |\n| DACH | 1,055 | +4.4% | Stable |\n| UK & Ireland | 913 | +9.7% | Growing |\n| India | 733 | +32.4% | Growing |\n| Latin America | 595 | +22.2% | Growing |\n| SEA | 500 | +21.3% | Growing |\n\nИтого: 5 регионов Growing, 3 Stable, 0 Declining. Total Q1 $8.59M, QoQ growth +10.4%." }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        { "type": "text", "text": "Я пересчитал NA — там в январе 420, в марте 478, это (478-420)/420 = +13.81%. Подтверждаешь? И поправь свою «Total Q1» — у тебя по NA получилось $1,410k, а должно быть 420+512+478 = $1,410k... OK это правильно. А EMEA total: 610+580+640 = $1,830k — правильно. Просто у тебя в первом ответе я видел общий total $9.39M, а в таблице получилось $8.59M. Что верно?" }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        { "type": "text", "text": "Хороший catch. Правильный итог — $8.59M, не $9.39M. Первый ответ содержал ошибку: я случайно учёл строку header'а или дублировал сумму одного региона при беглом сложении. Корректная декомпозиция:\n\n420+512+478 = 1,410 (NA)\n180+195+220 = 595 (LATAM)\n610+580+640 = 1,830 (EMEA)\n290+305+318 = 913 (UK&I)\n340+360+355 = 1,055 (DACH)\n150+168+182 = 500 (SEA)\n520+498+540 = 1,558 (GC)\n210+245+278 = 733 (India)\n----\nSUM = 8,594 → $8.59M ✓\n\nТакже NA QoQ: (478-420)/420 = 13.81% — подтверждаю. В таблице округлено до +13.8%." }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        { "type": "text", "text": "Хорошо. Теперь экспортируй финальную таблицу в CSV-формат, готовый для импорта в Excel: header строкой, разделитель — запятая, числа без знака $ и без `,` thousand-separator (просто целые), QoQ growth с одним знаком после запятой и без знака `%` (например `13.8`, не `+13.8%`). Никакой prose до или после CSV." }
+      ]
+    }
+  ],
+  "tools_available": [],
+  "evaluation": {
+    "strategy": "composite",
+    "aggregate": "all",
+    "rules": [
+      { "strategy": "regex", "pattern": "^region,total_q1,qoq_growth,status", "flags": "im" },
+      { "strategy": "regex", "pattern": "EMEA,1830,4\\.9,Stable", "flags": "" },
+      { "strategy": "regex", "pattern": "India,733,32\\.4,Growing", "flags": "" },
+      { "strategy": "regex", "pattern": "SEA,500,21\\.3,Growing", "flags": "" },
+      {
+        "strategy": "llm_judge",
+        "rubric_id": "mixed",
+        "expected_summary": "Pure CSV export, no prose before or after. Header line: «region,total_q1,qoq_growth,status» (or close equivalent like total_q1_usd_k). Exactly 8 data rows (one per region) sorted by total_q1 descending. Numeric fields: total_q1 as plain integer (no $, no commas), qoq_growth as decimal with 1 fractional digit (no + or % signs), status one of {Growing, Stable, Declining}. Expected rows in order: EMEA 1830 4.9 Stable, Greater China 1558 3.8 Stable, North America 1410 13.8 Growing, DACH 1055 4.4 Stable, UK & Ireland 913 9.7 Growing, India 733 32.4 Growing, Latin America 595 22.2 Growing, SEA 500 21.3 Growing. Region names may match upstream verbatim or be slightly normalised; total values must match the corrected sums (after the bug-catch turn)."
+      }
+    ]
+  },
+  "provenance": {
+    "review_signoff": ""
+  }
+}

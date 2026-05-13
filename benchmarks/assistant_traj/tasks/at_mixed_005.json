@@ -1,0 +1,56 @@
+{
+  "task_id": "at_mixed_005",
+  "category": "mixed",
+  "source": "synthetic",
+  "turns": [
+    {
+      "role": "user",
+      "content": [
+        { "type": "text", "text": "Я организатор внутреннего хакатона на 40 человек, 2 дня, suburban location. Бюджет 200k ₽. Нужно: (a) рассадка по командам — 8 команд по 5; (b) питание (3 приёма пищи × 2 дня); (c) награждение топ-3. Дай предварительную смету по статьям + 1-предложение объяснение по каждой." }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        { "type": "text", "text": "| Статья | Сумма (₽) | Описание |\n|---|---:|---|\n| Аренда зала + зон | 35,000 | Большая зона на 40 + 8 малых team-pods, 2 дня. |\n| Питание (6 meals × 40) | 72,000 | Завтрак/обед/ужин × 2 дня; ~300 ₽/meal × 240 = 72k. Кейтеринг местного бистро. |\n| Кофе-брейки + снэки | 18,000 | Бесконечный кофе/чай/печенье — расходник, поддерживает энергию. |\n| Призы топ-3 | 50,000 | 30 / 15 / 5 — карты Wildberries или техника. |\n| Расходники (бейджи, маркеры, флипчарты) | 8,000 | Канцелярка + бейджи на 40 + 5 шт flipchart + маркеры. |\n| Печать материалов (правила, расписание) | 3,000 | Цветная печать ~50 листов + 50 раздаточных карточек. |\n| Транспорт жюри (3 чел) | 6,000 | Такси в обе стороны для приглашённых менторов/жюри. |\n| Резерв непредвиденных | 8,000 | ~4% буфер на форс-мажор. |\n| **ИТОГО** | **200,000** | |\n\nИтоговая сумма ровно укладывается в бюджет 200k. Если будет economy в кейтеринге — переведу в призовой фонд." }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        { "type": "text", "text": "Призы — нет, сократи до 35k (3 ноутбука бюджетных не наша история, market-card вполне). Высвобождающиеся 15k — добавь как «welcome dinner» в день -1 (вечер перед стартом, опционально для тех кто приедет накануне). Покажи обновлённую таблицу." }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        { "type": "text", "text": "| Статья | Сумма (₽) | Описание |\n|---|---:|---|\n| Аренда зала + зон | 35,000 | Большая зона на 40 + 8 малых team-pods, 2 дня. |\n| Питание (6 meals × 40) | 72,000 | Завтрак/обед/ужин × 2 дня; ~300 ₽/meal × 240. |\n| Кофе-брейки + снэки | 18,000 | Бесконечный кофе/чай/печенье. |\n| Welcome dinner (день −1, опц.) | 15,000 | Ужин накануне для ~20 ранних приехавших; 750 ₽/чел. |\n| Призы топ-3 | 35,000 | 20 / 10 / 5 — карты Wildberries или Ozon. |\n| Расходники (бейджи, маркеры, флипчарты) | 8,000 | Канцелярка + бейджи + flipchart. |\n| Печать материалов | 3,000 | Расписание + раздаточный. |\n| Транспорт жюри (3 чел) | 6,000 | Такси в обе стороны. |\n| Резерв непредвиденных | 8,000 | ~4% буфер. |\n| **ИТОГО** | **200,000** | |" }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        { "type": "text", "text": "Финал: экспортируй эту таблицу в чистый CSV (без markdown-обрамления, header'ом строкой, разделитель запятая). Строки в том же порядке. Без знаков валюты, числа целые. Заголовки полей по-английски: item,amount_rub,note. note может содержать запятые → оборачивай поля в двойные кавычки если в них есть запятая." }
+      ]
+    }
+  ],
+  "tools_available": [],
+  "evaluation": {
+    "strategy": "composite",
+    "aggregate": "all",
+    "rules": [
+      { "strategy": "regex", "pattern": "^item,amount_rub,note", "flags": "im" },
+      { "strategy": "regex", "pattern": "35000", "flags": "" },
+      { "strategy": "regex", "pattern": "Welcome dinner", "flags": "" },
+      { "strategy": "regex", "pattern": "200000|TOTAL|ИТОГО", "flags": "i" },
+      {
+        "strategy": "llm_judge",
+        "rubric_id": "mixed",
+        "expected_summary": "Pure CSV export, no markdown fencing, no prose before or after. Header line in English: «item,amount_rub,note». Exactly 9 data rows (the 9 budget categories in the same order as the updated table: hall rental, meals, coffee+snacks, welcome dinner, prizes, supplies, printing, jury transport, reserve), plus optionally a TOTAL row at the end (200000). All amounts as plain integers (no ₽ symbol, no thousand separators). Note field quoted with double quotes when it contains commas. Welcome dinner row present with 15000 amount; prizes row 35000; meals row 72000 (or close)."
+      }
+    ]
+  },
+  "provenance": {
+    "review_signoff": ""
+  }
+}

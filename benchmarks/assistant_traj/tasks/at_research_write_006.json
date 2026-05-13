@@ -1,0 +1,46 @@
+{
+  "task_id": "at_research_write_006",
+  "category": "research_write",
+  "source": "synthetic",
+  "turns": [
+    {
+      "role": "user",
+      "content": [
+        { "type": "text", "text": "Помоги составить короткий внутренний memo для CTO от security-команды. Контекст: разработчик случайно закоммитил AWS access key в публичный GitHub репозиторий, ротировал в течение 3 минут после обнаружения, никаких неавторизованных запросов в CloudTrail не было. Нужно: factual summary, impact assessment, timeline, что сделано, что планируем сделать чтобы предотвратить рецидив. Тон — спокойный, конкретный, без паники. Длина — 250-350 слов." }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        { "type": "text", "text": "**MEMO**\n\n**To:** CTO\n**From:** Security Team\n**Date:** [today]\n**Subject:** AWS key exposure incident — contained, no compromise\n\n## Summary\n2026-05-13 в 14:32 UTC разработчик закоммитил активный AWS access key (`AKIA*****`, IAM user `deploy-bot`) в public-репозиторий `widgets-ui`. Ключ был обнаружен через GitHub Push Protection alert в течение 90 секунд. Ротация выполнена за 3 минуты с момента push'а. Активного использования ключа третьими лицами не зафиксировано.\n\n## Impact assessment\n- **Exposure window:** 3 минуты (с 14:32:15 по 14:35:18 UTC).\n- **Permissions у ключа:** S3 read/write для production deployment bucket, ECR push, ECS update-service.\n- **CloudTrail audit:** 0 запросов с этого ключа с IP-адресов вне нашей VPN-сети после публикации. Все запросы — с CI-runner'ов, ожидаемая активность.\n- **Severity:** низкая. Containment успешный, business impact отсутствует.\n\n## Timeline\n- 14:32 UTC — push в github.com/ourcorp/widgets-ui\n- 14:33 UTC — GitHub Push Protection alert + Slack-уведомление #security-alerts\n- 14:34 UTC — IAM key deactivated\n- 14:35 UTC — IAM key deleted; новый создан, CI/CD secrets обновлены\n- 14:40 UTC — push force-overwritten (история переписана через git-filter-repo)\n- 15:00 UTC — GitHub secret scanning подтвердил отсутствие ключа в репозитории\n\n## Actions completed\n1. Ключ ротирован + удалён\n2. Деплои перезапущены с новым ключом — оба сервиса healthy\n3. Слак-разговор с разработчиком; обучающая беседа (не дисциплинарка — Just Culture)\n\n## Prevention plan\n1. **pre-commit hook** с `gitleaks` (рассылка на dev-laptops до конца недели)\n2. **CI gate** с `truffleHog` на PR (already on staging — promote to prod next week)\n3. **Reduce blast radius:** уменьшить scope `deploy-bot` ключа — убрать ECR push, оставить только нужный bucket\n4. **Quarterly drill:** добавить «случайный коммит секрета» в incident-response runbook'и\n\nКлючевой урок: GitHub Push Protection + быстрый IAM-rotation сработали, как и задумано. Это валидирует defence-in-depth, но не отменяет prevention upstream." }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        { "type": "text", "text": "В целом ок, но CTO просил без bullet-point спам'а — переписать как 4 короткие plain-text абзаца: Что произошло. Что мы сделали. Почему impact низкий. Что меняем чтобы не повторилось. Без таблиц и H2-заголовков." }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        { "type": "text", "text": "**To:** CTO · **From:** Security · **Date:** [today] · **Subject:** AWS key exposure — contained\n\n**Что произошло.** 2026-05-13 в 14:32 UTC разработчик закоммитил активный AWS access key (IAM user `deploy-bot`, права: S3/ECR/ECS на production) в public-репозиторий `widgets-ui`. GitHub Push Protection поднял alert через 90 секунд, security on-call отреагировал в течение трёх минут. Окно экспозиции — 3 минуты, с 14:32:15 по 14:35:18 UTC.\n\n**Что мы сделали.** Ключ деактивирован в 14:34, удалён в 14:35; на его место выпущен новый и подкатан в CI/CD secrets. История репозитория переписана через `git-filter-repo`, force-push выполнен в 14:40. GitHub secret scanning в 15:00 подтвердил отсутствие ключа в публичной истории. Деплои перезапущены с новым ключом — оба сервиса healthy.\n\n**Почему impact низкий.** CloudTrail за окно экспозиции (плюс 24 часа после) не показал ни одного запроса с этого ключа с IP-адресов вне нашей VPN-сети. Вся активность — с известных CI-runner'ов в ожидаемом профиле. Нет признаков exfiltration, нет неавторизованных деплоев, нет затрат на новые ресурсы. Containment успешный, business impact отсутствует.\n\n**Что меняем.** На следующей неделе раскатываем gitleaks как pre-commit hook на dev-laptops и promote'ним truffleHog с staging на prod в CI-gate (сейчас он опционален). Параллельно урезаем scope `deploy-bot`-ключа — оставляем только нужный S3 bucket, убираем ECR push и ECS update-service. Quarterly drill включит сценарий «случайно закоммитил секрет» — чтобы реакция в три минуты стала повторяемой, а не везением." }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        { "type": "text", "text": "Хорошо. Финальный pass — добавь короткое одно-предложение P.S. в конце где упомяни что разработчику дана обучающая обратная связь без дисциплинарных последствий (just culture), и что это сообщается прозрачно. Готовая версия одним блоком текста." }
+      ]
+    }
+  ],
+  "tools_available": [],
+  "evaluation": {
+    "strategy": "llm_judge",
+    "rubric_id": "research_write",
+    "expected_summary": "Final memo as a single plain-text block. Header line at top with To/From/Date/Subject (subject indicates contained AWS key exposure incident). Exactly 4 paragraphs in order: «Что произошло» (factual timeline of the leak — exposure window ≈3 minutes, IAM user deploy-bot, public repo widgets-ui), «Что мы сделали» (rotation + git history rewrite + secret-scan verification + redeploy healthy), «Почему impact низкий» (CloudTrail audit clean, no external requests, no business impact), «Что меняем» (pre-commit gitleaks rollout, truffleHog promote to prod CI-gate, reduce IAM scope of deploy-bot, quarterly drill). Followed by a single-sentence P.S. that mentions Just Culture / educational feedback / no disciplinary consequences and a note on transparent communication. Total length 280-380 words. Tone calm, factual, no bullet lists, no H2 headings, no tables. Russian language consistent with the conversation."
+  },
+  "provenance": {
+    "review_signoff": ""
+  }
+}

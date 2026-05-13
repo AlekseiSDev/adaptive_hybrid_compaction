@@ -1,0 +1,47 @@
+{
+  "task_id": "at_image_qa_006",
+  "category": "image_qa",
+  "source": "synthetic",
+  "turns": [
+    {
+      "role": "user",
+      "content": [
+        { "type": "image", "path": "attachments/at_image_qa_006/1.svg", "alt": "Bar chart: engineering team headcount by quarter 2023-2025, grouped bars for 3 years × 4 quarters, with projected Q4 2025 hatched" },
+        { "type": "text", "text": "Это график headcount нашей engineering-команды по кварталам с 2023 года. Скажи: (1) какой год показывает самый высокий headcount по Q3, (2) есть ли projected данные на графике и как они отмечены." }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        { "type": "text", "text": "1. **Самый высокий Q3** — 2025 год. По графику Q3 2025 (оранжевый сплошной столбик) выше столбиков 2023 (синий, ~50 FTE) и 2024 (зелёный, ~66 FTE); 2025 Q3 примерно ~78 FTE.\n\n2. **Projected данные есть** — это Q4 2025 (оранжевый, штриховой контур, заливка с прозрачностью). В легенде подписан как «projected». 2023 Q4 и 2024 Q4 — сплошные (исторические/factual), 2025 Q4 единственный projected." }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        { "type": "text", "text": "Хорошо. Прикинь approximate growth rate YoY (2024 vs 2023) и (2025 vs 2024) на основе Q3 значений. Возьми ~50, ~66, ~78 FTE как ты сказал." }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        { "type": "text", "text": "- **2024 vs 2023 Q3:** (66 − 50) / 50 = **+32% YoY**\n- **2025 vs 2024 Q3:** (78 − 66) / 66 = **+18% YoY**\n\nGrowth rate замедляется почти вдвое между двумя YoY-периодами. Если экстраполировать в Q3 2026 на тех же +18%, ожидание ~92 FTE. Однако замедление само по себе может продолжаться, тогда +10–15% → ~86–90." }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        { "type": "text", "text": "Финал: оформи ответ как короткий executive summary одним абзацем для slide-deck'а: 2 предложения, ключевые цифры включи, упомяни замедление и projected Q4." }
+      ]
+    }
+  ],
+  "tools_available": [],
+  "evaluation": {
+    "strategy": "llm_judge",
+    "rubric_id": "image_qa",
+    "expected_summary": "Single short paragraph (2 sentences) suitable for a slide-deck executive summary. Mentions: (1) engineering headcount growth from ~50 FTE in Q3 2023 to ~78 FTE in Q3 2025 (or close numeric reading of bar heights); (2) YoY growth rate decelerating from +32% (2023→2024) to +18% (2024→2025); (3) Q4 2025 marked as projected on the chart (hatched/dashed style). No bullet points, no headings, no introductory chatter."
+  },
+  "provenance": {
+    "review_signoff": ""
+  }
+}

@@ -1,0 +1,152 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 560" width="900" height="560">
+  <defs>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#444"/>
+    </marker>
+  </defs>
+  <style>
+    .edge { stroke: #2c5cb3; stroke-width: 1.5; fill: #e6f0ff; rx: 6; }
+    .gateway { stroke: #b07d00; stroke-width: 1.5; fill: #ffeaa7; rx: 6; }
+    .service { stroke: #2d7a30; stroke-width: 1.5; fill: #d8f5d2; rx: 6; }
+    .store { stroke: #823a8e; stroke-width: 1.5; fill: #ead0f0; rx: 6; }
+    .ext { stroke: #b32c2c; stroke-width: 1.5; fill: #fde0e0; rx: 6; stroke-dasharray: 3,2; }
+    .lbl { font-family: -apple-system, sans-serif; font-size: 12px; font-weight: 600; fill: #111; text-anchor: middle; }
+    .sub { font-family: -apple-system, sans-serif; font-size: 10px; fill: #444; text-anchor: middle; }
+    .title { font-family: -apple-system, sans-serif; font-size: 16px; font-weight: 600; fill: #111; text-anchor: middle; }
+    .ln { stroke: #444; stroke-width: 1.2; fill: none; }
+    .ln-dot { stroke: #b32c2c; stroke-width: 1.2; fill: none; stroke-dasharray: 4,3; }
+    .legend-text { font-family: -apple-system, sans-serif; font-size: 11px; fill: #333; text-anchor: start; }
+  </style>
+
+  <text x="450" y="28" class="title">E-commerce platform — production architecture</text>
+
+  <!-- Browser -->
+  <rect x="60" y="60" width="120" height="50" class="edge"/>
+  <text x="120" y="82" class="lbl">Web browser</text>
+  <text x="120" y="98" class="sub">React SPA</text>
+
+  <!-- Mobile -->
+  <rect x="60" y="130" width="120" height="50" class="edge"/>
+  <text x="120" y="152" class="lbl">Mobile app</text>
+  <text x="120" y="168" class="sub">iOS / Android</text>
+
+  <!-- CDN -->
+  <rect x="240" y="60" width="120" height="50" class="edge"/>
+  <text x="300" y="82" class="lbl">CloudFront CDN</text>
+  <text x="300" y="98" class="sub">static assets</text>
+
+  <!-- API Gateway -->
+  <rect x="240" y="130" width="120" height="50" class="gateway"/>
+  <text x="300" y="152" class="lbl">API Gateway</text>
+  <text x="300" y="168" class="sub">auth, rate limit</text>
+
+  <!-- Auth Service -->
+  <rect x="420" y="60" width="120" height="50" class="service"/>
+  <text x="480" y="82" class="lbl">Auth Service</text>
+  <text x="480" y="98" class="sub">Node + JWT</text>
+
+  <!-- Cart Service -->
+  <rect x="420" y="130" width="120" height="50" class="service"/>
+  <text x="480" y="152" class="lbl">Cart Service</text>
+  <text x="480" y="168" class="sub">Python</text>
+
+  <!-- Order Service -->
+  <rect x="420" y="200" width="120" height="50" class="service"/>
+  <text x="480" y="222" class="lbl">Order Service</text>
+  <text x="480" y="238" class="sub">Go</text>
+
+  <!-- Inventory Service -->
+  <rect x="420" y="270" width="120" height="50" class="service"/>
+  <text x="480" y="292" class="lbl">Inventory Service</text>
+  <text x="480" y="308" class="sub">Java</text>
+
+  <!-- Notification Service -->
+  <rect x="420" y="340" width="120" height="50" class="service"/>
+  <text x="480" y="362" class="lbl">Notification Svc</text>
+  <text x="480" y="378" class="sub">Node</text>
+
+  <!-- Data stores -->
+  <rect x="600" y="60" width="120" height="50" class="store"/>
+  <text x="660" y="82" class="lbl">PostgreSQL</text>
+  <text x="660" y="98" class="sub">users, sessions</text>
+
+  <rect x="600" y="130" width="120" height="50" class="store"/>
+  <text x="660" y="152" class="lbl">Redis</text>
+  <text x="660" y="168" class="sub">cart cache, TTL</text>
+
+  <rect x="600" y="200" width="120" height="50" class="store"/>
+  <text x="660" y="222" class="lbl">PostgreSQL</text>
+  <text x="660" y="238" class="sub">orders, history</text>
+
+  <rect x="600" y="270" width="120" height="50" class="store"/>
+  <text x="660" y="292" class="lbl">PostgreSQL</text>
+  <text x="660" y="308" class="sub">inventory, locks</text>
+
+  <!-- Kafka -->
+  <rect x="600" y="340" width="120" height="50" class="store"/>
+  <text x="660" y="362" class="lbl">Kafka</text>
+  <text x="660" y="378" class="sub">events topic</text>
+
+  <!-- External services -->
+  <rect x="770" y="200" width="110" height="50" class="ext"/>
+  <text x="825" y="222" class="lbl">Stripe</text>
+  <text x="825" y="238" class="sub">payments (ext)</text>
+
+  <rect x="770" y="340" width="110" height="50" class="ext"/>
+  <text x="825" y="362" class="lbl">SendGrid</text>
+  <text x="825" y="378" class="sub">email (ext)</text>
+
+  <!-- Monitoring -->
+  <rect x="240" y="430" width="120" height="50" class="edge"/>
+  <text x="300" y="452" class="lbl">Datadog</text>
+  <text x="300" y="468" class="sub">metrics, logs</text>
+
+  <!-- Edges: client traffic -->
+  <path d="M 180 85 L 240 85" class="ln" marker-end="url(#ar)"/>
+  <path d="M 180 155 L 240 155" class="ln" marker-end="url(#ar)"/>
+
+  <!-- Gateway → services -->
+  <path d="M 360 155 L 420 85" class="ln" marker-end="url(#ar)"/>
+  <path d="M 360 155 L 420 155" class="ln" marker-end="url(#ar)"/>
+  <path d="M 360 155 L 420 225" class="ln" marker-end="url(#ar)"/>
+  <path d="M 360 155 L 420 295" class="ln" marker-end="url(#ar)"/>
+
+  <!-- Services → stores -->
+  <path d="M 540 85 L 600 85" class="ln" marker-end="url(#ar)"/>
+  <path d="M 540 155 L 600 155" class="ln" marker-end="url(#ar)"/>
+  <path d="M 540 225 L 600 225" class="ln" marker-end="url(#ar)"/>
+  <path d="M 540 295 L 600 295" class="ln" marker-end="url(#ar)"/>
+
+  <!-- Order → Inventory (sync) -->
+  <path d="M 480 250 L 480 270" class="ln" marker-end="url(#ar)"/>
+
+  <!-- Order → Stripe (sync, ext) -->
+  <path d="M 540 225 L 770 225" class="ln-dot" marker-end="url(#ar)"/>
+
+  <!-- Order → Kafka -->
+  <path d="M 540 250 Q 600 320 600 350" class="ln" marker-end="url(#ar)"/>
+
+  <!-- Kafka → Notification -->
+  <path d="M 600 365 L 540 365" class="ln" marker-end="url(#ar)"/>
+
+  <!-- Notification → SendGrid -->
+  <path d="M 540 365 L 770 365" class="ln-dot" marker-end="url(#ar)"/>
+
+  <!-- All services → Datadog (collected dotted) -->
+  <path d="M 480 390 Q 380 410 320 430" class="ln" marker-end="url(#ar)"/>
+
+  <!-- Legend -->
+  <rect x="60" y="500" width="14" height="14" class="edge"/>
+  <text x="78" y="512" class="legend-text">edge / client</text>
+  <rect x="180" y="500" width="14" height="14" class="gateway"/>
+  <text x="198" y="512" class="legend-text">gateway</text>
+  <rect x="270" y="500" width="14" height="14" class="service"/>
+  <text x="288" y="512" class="legend-text">internal service</text>
+  <rect x="400" y="500" width="14" height="14" class="store"/>
+  <text x="418" y="512" class="legend-text">data store / queue</text>
+  <rect x="540" y="500" width="14" height="14" class="ext"/>
+  <text x="558" y="512" class="legend-text">external (dashed border)</text>
+  <line x1="700" y1="507" x2="730" y2="507" class="ln-dot"/>
+  <text x="735" y="512" class="legend-text">cross-trust-boundary edge</text>
+</svg>

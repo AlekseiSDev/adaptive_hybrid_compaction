@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 400" width="640" height="400">
+  <style>
+    .axis { stroke: #333; stroke-width: 1.5; }
+    .grid { stroke: #ddd; stroke-width: 0.5; stroke-dasharray: 2,2; }
+    .bar-2023 { fill: #4a90e2; }
+    .bar-2024 { fill: #7ed957; }
+    .bar-2025 { fill: #e67e22; }
+    .lbl { font-family: -apple-system, sans-serif; font-size: 11px; fill: #333; text-anchor: middle; }
+    .axis-lbl { font-family: -apple-system, sans-serif; font-size: 11px; fill: #666; text-anchor: end; }
+    .title { font-family: -apple-system, sans-serif; font-size: 15px; font-weight: 600; fill: #111; text-anchor: middle; }
+    .legend-text { font-family: -apple-system, sans-serif; font-size: 12px; fill: #333; text-anchor: start; }
+  </style>
+
+  <text x="320" y="28" class="title">Engineering team headcount by quarter (2023-2025)</text>
+
+  <!-- Y axis -->
+  <line x1="80" y1="60" x2="80" y2="330" class="axis"/>
+  <!-- X axis -->
+  <line x1="80" y1="330" x2="600" y2="330" class="axis"/>
+
+  <!-- Y axis labels + grid -->
+  <text x="73" y="335" class="axis-lbl">0</text>
+  <text x="73" y="280" class="axis-lbl">25</text>
+  <text x="73" y="225" class="axis-lbl">50</text>
+  <text x="73" y="170" class="axis-lbl">75</text>
+  <text x="73" y="115" class="axis-lbl">100</text>
+  <text x="73" y="65" class="axis-lbl">125</text>
+
+  <line x1="80" y1="280" x2="600" y2="280" class="grid"/>
+  <line x1="80" y1="225" x2="600" y2="225" class="grid"/>
+  <line x1="80" y1="170" x2="600" y2="170" class="grid"/>
+  <line x1="80" y1="115" x2="600" y2="115" class="grid"/>
+  <line x1="80" y1="65" x2="600" y2="65" class="grid"/>
+
+  <!-- Groups: Q1, Q2, Q3, Q4. Bars per quarter for 2023/2024/2025 -->
+  <!-- Q1: 2023=40, 2024=58, 2025=72 -->
+  <rect x="110" y="242" width="22" height="88" class="bar-2023"/>
+  <rect x="134" y="202" width="22" height="128" class="bar-2024"/>
+  <rect x="158" y="172" width="22" height="158" class="bar-2025"/>
+  <text x="145" y="348" class="lbl">Q1</text>
+
+  <!-- Q2: 2023=45, 2024=64, 2025=80 -->
+  <rect x="230" y="231" width="22" height="99" class="bar-2023"/>
+  <rect x="254" y="189" width="22" height="141" class="bar-2024"/>
+  <rect x="278" y="154" width="22" height="176" class="bar-2025"/>
+  <text x="265" y="348" class="lbl">Q2</text>
+
+  <!-- Q3: 2023=50, 2024=66, 2025=78 -->
+  <rect x="350" y="220" width="22" height="110" class="bar-2023"/>
+  <rect x="374" y="185" width="22" height="145" class="bar-2024"/>
+  <rect x="398" y="158" width="22" height="172" class="bar-2025"/>
+  <text x="385" y="348" class="lbl">Q3</text>
+
+  <!-- Q4: 2023=54, 2024=70, 2025=85 (projected, hatched) -->
+  <rect x="470" y="211" width="22" height="119" class="bar-2023"/>
+  <rect x="494" y="176" width="22" height="154" class="bar-2024"/>
+  <rect x="518" y="143" width="22" height="187" class="bar-2025" fill-opacity="0.5" stroke="#e67e22" stroke-width="1.5" stroke-dasharray="3,2"/>
+  <text x="505" y="348" class="lbl">Q4</text>
+
+  <!-- Legend -->
+  <rect x="120" y="370" width="14" height="14" class="bar-2023"/>
+  <text x="140" y="382" class="legend-text">2023</text>
+  <rect x="200" y="370" width="14" height="14" class="bar-2024"/>
+  <text x="220" y="382" class="legend-text">2024</text>
+  <rect x="280" y="370" width="14" height="14" class="bar-2025"/>
+  <text x="300" y="382" class="legend-text">2025</text>
+  <rect x="380" y="370" width="14" height="14" class="bar-2025" fill-opacity="0.5" stroke="#e67e22" stroke-width="1.5" stroke-dasharray="3,2"/>
+  <text x="400" y="382" class="legend-text">projected</text>
+
+  <text x="40" y="195" class="lbl" transform="rotate(-90, 40, 195)">Headcount (FTE)</text>
+</svg>

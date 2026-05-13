@@ -1,0 +1,71 @@
+{
+  "task_id": "at_code_iter_008",
+  "category": "code_iter",
+  "source": "synthetic",
+  "turns": [
+    {
+      "role": "user",
+      "content": [
+        { "type": "text", "text": "Нужен bash one-liner: посчитай top-10 самых занятых HTTP endpoint'ов из nginx access-log (combined формат). Output: количество, метод, путь — отсортировано по убыванию. `cat /var/log/nginx/access.log | <your pipeline>`." }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        { "type": "text", "text": "```bash\ncat /var/log/nginx/access.log | awk -F'\"' '{print $2}' | awk '{print $1, $2}' | sort | uniq -c | sort -rn | head -10\n```\n\nКак работает:\n1. `awk -F'\"' '{print $2}'` — вытащить второе поле между кавычками. В combined формате это request line: `GET /api/users HTTP/1.1`.\n2. `awk '{print $1, $2}'` — оставить метод и путь (без HTTP/1.1).\n3. `sort | uniq -c` — посчитать одинаковые (метод+путь).\n4. `sort -rn | head -10` — топ 10 по убыванию." }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        { "type": "text", "text": "В access-log query-string в путях создаёт шум: `/api/users?page=1`, `/api/users?page=2`, `/api/users?id=42` — это одинаковый endpoint, но в подсчёт идут отдельно. Нужно дропнуть query-string перед группировкой." }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        { "type": "text", "text": "```bash\ncat /var/log/nginx/access.log | awk -F'\"' '{print $2}' | awk '{split($2, p, \"?\"); print $1, p[1]}' | sort | uniq -c | sort -rn | head -10\n```\n\nИзменение в шаге 2: `split($2, p, \"?\")` режет путь по `?`; берём `p[1]` — часть до query-string. Если query-string отсутствует, `p[1]` = весь путь, всё работает." }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        { "type": "text", "text": "Ещё одна проблема: numeric IDs в path. `/api/users/123/posts` и `/api/users/456/posts` — это одинаковый endpoint, но идут как разные. Нужно заменить любое числовое сегмент пути на `:id`. Также — UUIDы (формат 8-4-4-4-12) на `:uuid`." }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        { "type": "text", "text": "```bash\ncat /var/log/nginx/access.log \\\n  | awk -F'\"' '{print $2}' \\\n  | awk '{split($2, p, \"?\"); print $1, p[1]}' \\\n  | sed -E 's#/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}#/:uuid#g; s#/[0-9]+#/:id#g' \\\n  | sort | uniq -c | sort -rn | head -10\n```\n\nДве `sed` подстановки в одном `-E` (extended regex):\n1. **UUID first** — `s#/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}#/:uuid#g`. Делаем UUID first потому что UUID содержит цифры — иначе `:id` сразу съест часть UUID.\n2. **Numeric ID** — `s#/[0-9]+#/:id#g`. Любая подстрока вида `/123` → `/:id`.\n\nИспользуем `#` как разделитель в sed чтобы не escape'ить `/` в путях." }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        { "type": "text", "text": "Хорошо. Последнее: оберни всё в shell-script `top_endpoints.sh` с двумя argument'ами — `--log <path>` (default `/var/log/nginx/access.log`) и `--top N` (default 10). Поддерживай `--help`. shellcheck-clean (set -euo pipefail, кавычки на $vars, прочее). Готовый файл." }
+      ]
+    }
+  ],
+  "tools_available": [],
+  "evaluation": {
+    "strategy": "composite",
+    "aggregate": "all",
+    "rules": [
+      { "strategy": "regex", "pattern": "#!/(usr/bin/env\\s+bash|bin/bash)", "flags": "" },
+      { "strategy": "regex", "pattern": "set -euo pipefail", "flags": "" },
+      { "strategy": "regex", "pattern": "--log", "flags": "" },
+      { "strategy": "regex", "pattern": "--top", "flags": "" },
+      { "strategy": "regex", "pattern": "--help", "flags": "" },
+      { "strategy": "regex", "pattern": ":uuid", "flags": "" },
+      { "strategy": "regex", "pattern": ":id", "flags": "" },
+      {
+        "strategy": "llm_judge",
+        "rubric_id": "code_iter",
+        "expected_summary": "Shell script `top_endpoints.sh` ready to commit. Starts with shebang (#!/usr/bin/env bash or #!/bin/bash). Includes `set -euo pipefail`. Argument parsing for --log <path> (defaults to /var/log/nginx/access.log) and --top <N> (defaults to 10) and --help (prints usage + exits 0). Uses awk/sed pipeline that: (1) extracts request line from log via \"\" splitting, (2) strips query-string via split on ?, (3) normalises UUIDs to :uuid before numeric IDs to :id (UUID first because UUIDs contain digits), (4) sort | uniq -c | sort -rn | head -N. Variables quoted (\"$LOG\", \"$TOP\"). No prose around the code, shellcheck-clean style, runnable as bash top_endpoints.sh --log /tmp/foo.log --top 5."
+      }
+    ]
+  },
+  "provenance": {
+    "review_signoff": ""
+  }
+}

@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 480" width="700" height="480">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#333"/>
+    </marker>
+    <style>
+      .state { fill: #e6f0ff; stroke: #2c5cb3; stroke-width: 2; }
+      .terminal { fill: #d8f5d2; stroke: #2d7a30; stroke-width: 2; }
+      .error { fill: #fde0e0; stroke: #b32c2c; stroke-width: 2; }
+      .lbl { font-family: -apple-system, sans-serif; font-size: 13px; fill: #111; text-anchor: middle; }
+      .trans { font-family: -apple-system, sans-serif; font-size: 11px; fill: #444; text-anchor: middle; }
+      .title { font-family: -apple-system, sans-serif; font-size: 16px; font-weight: 600; fill: #111; }
+    </style>
+  </defs>
+
+  <text x="350" y="28" class="title" text-anchor="middle">Order Lifecycle FSM</text>
+
+  <!-- States -->
+  <ellipse cx="100" cy="120" rx="60" ry="28" class="state"/>
+  <text x="100" y="124" class="lbl">PENDING</text>
+
+  <ellipse cx="280" cy="120" rx="60" ry="28" class="state"/>
+  <text x="280" y="124" class="lbl">VALIDATED</text>
+
+  <ellipse cx="460" cy="120" rx="60" ry="28" class="state"/>
+  <text x="460" y="124" class="lbl">CHARGED</text>
+
+  <ellipse cx="610" cy="120" rx="60" ry="28" class="terminal"/>
+  <text x="610" y="124" class="lbl">SHIPPED</text>
+
+  <ellipse cx="280" cy="260" rx="60" ry="28" class="error"/>
+  <text x="280" y="264" class="lbl">REJECTED</text>
+
+  <ellipse cx="460" cy="260" rx="60" ry="28" class="error"/>
+  <text x="460" y="264" class="lbl">REFUNDED</text>
+
+  <ellipse cx="610" cy="260" rx="60" ry="28" class="state"/>
+  <text x="610" y="264" class="lbl">RETURNED</text>
+
+  <ellipse cx="100" cy="400" rx="60" ry="28" class="state"/>
+  <text x="100" y="404" class="lbl">ORPHAN</text>
+
+  <!-- Transitions -->
+  <!-- PENDING -> VALIDATED -->
+  <line x1="160" y1="120" x2="220" y2="120" stroke="#333" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="190" y="110" class="trans">validate</text>
+
+  <!-- VALIDATED -> CHARGED -->
+  <line x1="340" y1="120" x2="400" y2="120" stroke="#333" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="370" y="110" class="trans">charge</text>
+
+  <!-- CHARGED -> SHIPPED -->
+  <line x1="520" y1="120" x2="550" y2="120" stroke="#333" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="535" y="110" class="trans">fulfil</text>
+
+  <!-- VALIDATED -> REJECTED -->
+  <line x1="280" y1="148" x2="280" y2="232" stroke="#333" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="313" y="195" class="trans">decline</text>
+
+  <!-- CHARGED -> REFUNDED -->
+  <line x1="460" y1="148" x2="460" y2="232" stroke="#333" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="494" y="195" class="trans">refund</text>
+
+  <!-- SHIPPED -> RETURNED -->
+  <line x1="610" y1="148" x2="610" y2="232" stroke="#333" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="641" y="195" class="trans">return</text>
+
+  <!-- RETURNED -> REFUNDED -->
+  <line x1="550" y1="260" x2="520" y2="260" stroke="#333" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="535" y="250" class="trans">refund</text>
+
+  <!-- REJECTED -> PENDING (retry) -->
+  <path d="M 250 240 Q 130 200 100 148" fill="none" stroke="#333" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="155" y="195" class="trans">retry</text>
+
+  <!-- ORPHAN — disconnected; no incoming/outgoing transitions -->
+  <text x="100" y="445" class="trans">(no transitions)</text>
+
+  <!-- Legend -->
+  <rect x="40" y="455" width="14" height="14" class="state"/>
+  <text x="62" y="467" class="trans" text-anchor="start">normal state</text>
+  <rect x="180" y="455" width="14" height="14" class="terminal"/>
+  <text x="202" y="467" class="trans" text-anchor="start">terminal</text>
+  <rect x="290" y="455" width="14" height="14" class="error"/>
+  <text x="312" y="467" class="trans" text-anchor="start">error/recovery</text>
+</svg>
