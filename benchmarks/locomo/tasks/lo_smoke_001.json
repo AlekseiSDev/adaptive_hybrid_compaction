@@ -1,0 +1,24 @@
+{
+  "sample_id": "conv-smoke-1",
+  "qa_idx": 1,
+  "category": 1,
+  "category_name": "single-hop",
+  "question": "When did John get his ankle injury?",
+  "answer": "around November 16, 2023",
+  "evidence": ["D2:3"],
+  "conversation": {
+    "speaker_a": "John",
+    "speaker_b": "Alice",
+    "session_1": [
+      { "speaker": "John", "text": "Hey Alice, training has been brutal lately.", "dia_id": "D1:1" },
+      { "speaker": "Alice", "text": "What happened?", "dia_id": "D1:2" }
+    ],
+    "session_1_date_time": "2023-11-23",
+    "session_2": [
+      { "speaker": "John", "text": "I twisted my ankle around Nov 16th doing a heavy jump set.", "dia_id": "D2:1" },
+      { "speaker": "Alice", "text": "Ouch, how's recovery?", "dia_id": "D2:2" },
+      { "speaker": "John", "text": "Slow — PT three times a week now.", "dia_id": "D2:3" }
+    ],
+    "session_2_date_time": "2023-12-02"
+  }
+}

@@ -15,6 +15,11 @@ import {
 } from './adapters/assistant-traj.js'
 import { defaultLlmJudge } from './adapters/assistant-traj.judge.js'
 import {
+  createLoCoMoGrader,
+  defaultLocomoJudge,
+  locomoAdapter,
+} from './adapters/locomo-med.js'
+import {
   createLongMemEvalGrader,
   longmemevalAdapter,
 } from './adapters/longmemeval-med.js'
@@ -104,6 +109,12 @@ export const defaultAdapterRegistry: AdapterRegistry = {
       return {
         adapter: longmemevalAdapter,
         grader: createLongMemEvalGrader({ llmJudge: defaultLmeJudge() }),
+      }
+    }
+    if (bench === 'locomo-med') {
+      return {
+        adapter: locomoAdapter,
+        grader: createLoCoMoGrader({ llmJudge: defaultLocomoJudge() }),
       }
     }
     throw new Error(`bench not registered: ${bench}`)
