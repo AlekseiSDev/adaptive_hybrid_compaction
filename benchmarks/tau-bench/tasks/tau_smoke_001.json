@@ -1,0 +1,79 @@
+{
+  "episode_id": "tau_smoke_001",
+  "task_idx": 1,
+  "instruction": "You are Alice Smith (email alice.smith@example.com). You want to cancel your pending keyboard order — you decided you no longer need it. Verify your identity and have the order cancelled.",
+  "initial_state": {
+    "users": {
+      "alice_smith_1001": {
+        "user_id": "alice_smith_1001",
+        "name": { "first_name": "Alice", "last_name": "Smith" },
+        "email": "alice.smith@example.com",
+        "address": {
+          "address1": "1 Main Street",
+          "city": "Springfield",
+          "country": "US",
+          "state": "CA",
+          "zip": "90210"
+        },
+        "payment_methods": {
+          "credit_card_1001": {
+            "source": "credit_card",
+            "brand": "visa",
+            "last_four": "4242",
+            "id": "credit_card_1001"
+          }
+        },
+        "orders": ["order_smoke_001"]
+      }
+    },
+    "orders": {
+      "order_smoke_001": {
+        "order_id": "order_smoke_001",
+        "user_id": "alice_smith_1001",
+        "address": {
+          "address1": "1 Main Street",
+          "city": "Springfield",
+          "country": "US",
+          "zip": "90210"
+        },
+        "items": [
+          {
+            "product_id": "prod_keyboard",
+            "item_id": "item_kbd_blue",
+            "name": "Mechanical Keyboard (Blue Switches)",
+            "price": 79.99,
+            "options": { "switch": "blue" }
+          }
+        ],
+        "fulfillments": [],
+        "status": "pending",
+        "payment_history": [
+          {
+            "transaction_type": "payment",
+            "amount": 79.99,
+            "payment_method_id": "credit_card_1001"
+          }
+        ]
+      }
+    },
+    "products": {}
+  },
+  "expected_end_state": {
+    "orders": {
+      "order_smoke_001": {
+        "order_id": "order_smoke_001",
+        "user_id": "alice_smith_1001",
+        "address": {
+          "address1": "1 Main Street",
+          "city": "Springfield",
+          "country": "US",
+          "zip": "90210"
+        },
+        "items": [],
+        "fulfillments": [],
+        "status": "cancelled",
+        "payment_history": []
+      }
+    }
+  }
+}

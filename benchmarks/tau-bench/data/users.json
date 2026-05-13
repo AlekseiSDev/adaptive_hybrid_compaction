@@ -1,0 +1,47 @@
+[
+  {
+    "user_id": "alice_smith_1001",
+    "name": { "first_name": "Alice", "last_name": "Smith" },
+    "email": "alice.smith@example.com",
+    "address": {
+      "address1": "1 Main Street",
+      "city": "Springfield",
+      "country": "US",
+      "state": "CA",
+      "zip": "90210"
+    },
+    "payment_methods": {
+      "credit_card_1001": {
+        "source": "credit_card",
+        "brand": "visa",
+        "last_four": "4242",
+        "id": "credit_card_1001"
+      },
+      "gift_card_1001": {
+        "source": "gift_card",
+        "id": "gift_card_1001",
+        "balance": 50.0
+      }
+    },
+    "orders": ["order_smoke_001"]
+  },
+  {
+    "user_id": "bob_jones_2002",
+    "name": { "first_name": "Bob", "last_name": "Jones" },
+    "email": "bob.jones@example.com",
+    "address": {
+      "address1": "42 Elm Avenue",
+      "city": "Shelbyville",
+      "country": "US",
+      "state": "OR",
+      "zip": "97333"
+    },
+    "payment_methods": {
+      "paypal_2002": {
+        "source": "paypal",
+        "id": "paypal_2002"
+      }
+    },
+    "orders": ["order_smoke_002"]
+  }
+]

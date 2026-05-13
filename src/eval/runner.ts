@@ -25,6 +25,11 @@ import {
 } from './adapters/longmemeval-med.js'
 import { defaultLmeJudge } from './adapters/longmemeval-med.judge.js'
 import { syntheticAdapter, syntheticGrader } from './adapters/synthetic.js'
+import {
+  makeTauBenchRunner,
+  taubenchAdapter,
+  taubenchGrader,
+} from './adapters/tau-bench-retail/index.js'
 import { buildRunnerFromBaseline } from './baseline.js'
 import { anthropicCompactBaseline } from './baselines/anthropic_compact.js'
 import { fullContextBaseline } from './baselines/full_context.js'
@@ -116,6 +121,9 @@ export const defaultAdapterRegistry: AdapterRegistry = {
         adapter: locomoAdapter,
         grader: createLoCoMoGrader({ llmJudge: defaultLocomoJudge() }),
       }
+    }
+    if (bench === 'tau-bench-retail-med') {
+      return { adapter: taubenchAdapter, grader: taubenchGrader }
     }
     throw new Error(`bench not registered: ${bench}`)
   },
@@ -219,6 +227,24 @@ function makeAnthropicCompactRunner(): Runner {
   return buildRunnerFromBaseline(baseline)
 }
 
+function makeTauBenchAgentRunner(config: ConfigDef): Runner {
+  const apiKey = process.env['OPENROUTER_API_KEY']
+  if (!apiKey || apiKey.length === 0) {
+    throw new Error('tau_bench_agent requires OPENROUTER_API_KEY')
+  }
+  const ahcFlagsRaw = config.ahc_flags ?? {}
+  // For `tau_bench_agent_ahc` baseline, ahc_flags from sweep YAML control
+  // AHC middleware behavior (TRAJECTORY_CLASSIFIER, REFLECTION, etc.).
+  // For vanilla `tau_bench_agent`, ahcFlags stays undefined → actor unwrapped.
+  return makeTauBenchRunner({
+    apiKey,
+    baseURL: 'https://openrouter.ai/api/v1',
+    ...(config.baseline === 'tau_bench_agent_ahc'
+      ? { ahcFlags: ahcFlagsRaw as Partial<NonNullable<Parameters<typeof makeTauBenchRunner>[0]['ahcFlags']>> }
+      : {}),
+  })
+}
+
 export const defaultRunnerRegistry: RunnerRegistry = {
   resolve: (config) => {
     if (config.baseline === 'full_context') {
@@ -229,6 +255,9 @@ export const defaultRunnerRegistry: RunnerRegistry = {
     }
     if (config.baseline === 'anthropic_compact') {
       return makeAnthropicCompactRunner()
+    }
+    if (config.baseline === 'tau_bench_agent' || config.baseline === 'tau_bench_agent_ahc') {
+      return makeTauBenchAgentRunner(config)
     }
     // `ahc_flags`-only configs (no explicit `baseline`) route to the real
     // ahc_core runner — A6 middleware over AI SDK v6 provider, per B5.

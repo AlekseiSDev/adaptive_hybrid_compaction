@@ -100,6 +100,9 @@ export type RunnerResponse = {
   errors: ErrorRecord[]
   totals: TokenUsage
   cost_usd: number
+  // Side-channel for bench-specific payloads (e.g. tau-bench env state + reward).
+  // Transient — not persisted to RunRecord; only used grader↔runner. D5 Step 4.
+  bench_extras?: unknown
 }
 
 export type ConfigDef = {

@@ -1,0 +1,38 @@
+[
+  {
+    "product_id": "prod_keyboard",
+    "name": "Mechanical Keyboard",
+    "variants": {
+      "item_kbd_blue": {
+        "item_id": "item_kbd_blue",
+        "options": { "switch": "blue" },
+        "price": 79.99,
+        "available": true
+      },
+      "item_kbd_red": {
+        "item_id": "item_kbd_red",
+        "options": { "switch": "red" },
+        "price": 79.99,
+        "available": true
+      }
+    }
+  },
+  {
+    "product_id": "prod_mouse",
+    "name": "Wireless Mouse",
+    "variants": {
+      "item_mouse_black": {
+        "item_id": "item_mouse_black",
+        "options": { "color": "black" },
+        "price": 24.99,
+        "available": true
+      },
+      "item_mouse_white": {
+        "item_id": "item_mouse_white",
+        "options": { "color": "white" },
+        "price": 24.99,
+        "available": false
+      }
+    }
+  }
+]

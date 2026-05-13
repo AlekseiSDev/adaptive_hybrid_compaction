@@ -1,4 +1,6 @@
+import Anthropic from '@anthropic-ai/sdk'
 import type {
+  AnthropicUsage,
   LLMClient,
   LLMRequest,
   LLMResponse,
@@ -23,6 +25,19 @@ export const OPENROUTER_PRICING: Record<string, ModelPricing> = Object.freeze({
   // /api/v1/models); fallback to 4.6 per plan. Note: OpenRouter uses dot
   // notation (4.6), Anthropic SDK uses dash (4-6). Pricing verified live.
   'anthropic/claude-sonnet-4.6': {
+    input_per_million_usd: 3.0,
+    output_per_million_usd: 15.0,
+  },
+})
+
+// Anthropic direct-API pricing snapshot — separate table from OpenRouter
+// proxy pricing because direct API has slightly different prompt-cache rates
+// and uses dash-form model ids (claude-sonnet-4-6, not 4.6). E3 cache-hit
+// subset routes through Anthropic-direct; main sweeps stay on OpenRouter.
+// Cache rates ignored in cost calc — F report uses cache_read_input_tokens
+// ratio as the metric, not a per-token cost line. Refresh перед E3 launch.
+export const ANTHROPIC_DIRECT_PRICING: Record<string, ModelPricing> = Object.freeze({
+  'claude-sonnet-4-6': {
     input_per_million_usd: 3.0,
     output_per_million_usd: 15.0,
   },
