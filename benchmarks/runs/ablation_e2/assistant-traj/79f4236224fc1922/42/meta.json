@@ -1,0 +1,10 @@
+{
+  "config": {
+    "id": "ahc_full",
+    "ahc_flags": {}
+  },
+  "bench": "assistant-traj",
+  "seed": 42,
+  "git_sha": "88764cdc0df0f64c95b8b91e46cd21f9db775fe6",
+  "timestamp": "2026-05-13T13:13:12.362Z"
+}

@@ -1,0 +1,12 @@
+{
+  "config": {
+    "id": "ahc_no_observer",
+    "ahc_flags": {
+      "TASK_AWARE_EXTRACTION": false
+    }
+  },
+  "bench": "longmemeval-med",
+  "seed": 43,
+  "git_sha": "88764cdc0df0f64c95b8b91e46cd21f9db775fe6",
+  "timestamp": "2026-05-13T13:35:30.400Z"
+}
