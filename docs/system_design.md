@@ -310,7 +310,7 @@ numbers процитированы; повторно интегрировать 
 - **Track D** — Custom benchmark construction (старт day 1)
 - **Track E** — Main runs (требует A + B + C + D)
 - **Track F** — Course report writing (требует E)
-- **Track G** — Demo UI (требует A6; параллелится с E/F)
+- **Track G** — Demo UI (требует Track A полностью + B2 telemetry; параллелится с E/F)
 
 ### 7.2 Phase schedule с описанием шагов
 
@@ -456,12 +456,16 @@ numbers процитированы; повторно интегрировать 
 
 - **G1. Skeleton + AI SDK v6 chat (1 день).** Next.js App Router app в `src/ui/`.
   `useChat` hook на OpenRouter provider, text + image URL input, multi-turn без AHC.
+  Минимальный agent-каркас: hardcoded system prompt (research-assistant role),
+  `maxSteps:8` agent loop через AI SDK v6 — tools ещё нет, single LLM call per turn.
   AI SDK v6 UI helpers — часть `ai-sdk-v6-surface` investigation (A6 prerequisite).
-  Exit: chat работает end-to-end через UI.
+  Exit: chat работает end-to-end через UI. Детали — `design/G_ui.md §1, §4 G1`.
 
 - **G2. AHC integration (1 день).** Mount AHC middleware в `/api/chat` route. Per-session
   scratchpad lifecycle (in-memory `Map<sessionId, Scratchpad>`, TTL 1ч idle). Feature flags
-  читаются из query params для quick toggling. Exit: AHC active в demo runs, recall работает.
+  читаются из query params для quick toggling. Один real tool — `fetch_url(url) → string`
+  (server-side fetch + html-to-text) — большой tool_result делает AHC offload видимым;
+  без tools Tier3 пустой и демо бесмысленно. Exit: AHC active в demo runs, recall работает.
 
 - **G3. Telemetry sidebar (1 день).** Backend injects AHC stats в response envelope;
   frontend sidebar показывает live class, observations, scratchpad size, recall events,
