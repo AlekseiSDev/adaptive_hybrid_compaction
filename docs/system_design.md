@@ -465,17 +465,24 @@ numbers процитированы; повторно интегрировать 
 - **E3. Cache hit rate subset (0.5 дня).** n=10-15 через Anthropic direct API, Sonnet-4.6.
   ~$20.
 
-**Track F — Course report**
+**Track F — Course report.** Primary deliverable — `report/main.md` (submission-grade
+markdown по NLP_Course_Template секциям; templates в `docs/templates/NLP_Course_Template.{pdf,tex}`).
+LaTeX path (`report/main.tex` по .tex template) — optional в F3 при наличии buffer.
+Prev paper cite source: `references/paper/` + `docs/templates/prev_paper/result.md`
+headline-summary, **с provenance disclosure** (fully agent-generated, без human review;
+см. `design/F_report.md §4.1`). Подробности — `design/F_report.md`.
 
 - **F1. Структура отчёта по NLP_Course_Template (2 дня).** Заполнить секции (Intro,
   Related Work, Model Description с references на design/A_ahc-algorithm.md, Dataset, Experiments,
-  Results, Conclusion). Главная Results таблица.
+  Results, Conclusion). Главная Results таблица. Mapping 1-в-1 на template секции —
+  `design/F_report.md §2`.
 
 - **F2. Figures + discussion (2 дня).** Pareto plot per benchmark, per-class breakdown bar
   chart, ablation comparison. Discussion section с честным анализом negative results если есть.
 
 - **F3. Финальный pass + полировка (1 день).** Корректура, refs.bib, проверка терминологии,
-  reproducibility appendix.
+  reproducibility appendix. Optional latex path: `report/main.tex` build из md содержания
+  по template, `latexmk -pdf` clean.
 
 **Track G — Demo UI**
 
