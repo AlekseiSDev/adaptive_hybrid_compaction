@@ -50,6 +50,36 @@ export function mapOpenRouterUsage(
   }
 }
 
+// AI SDK v6 LanguageModelUsage shape: flat `inputTokens` / `outputTokens`
+// (number | undefined) plus nested `inputTokenDetails.cacheReadTokens`.
+// Differs from OpenRouter / Anthropic snake_case shapes — separate mapper
+// avoids polymorphic adapters in callers.
+export type AiSdkUsageShape = {
+  inputTokens?: number | undefined
+  outputTokens?: number | undefined
+  inputTokenDetails?: {
+    cacheReadTokens?: number | undefined
+    cacheWriteTokens?: number | undefined
+  }
+}
+
+export function mapAiSdkUsage(
+  usage: AiSdkUsageShape,
+  timing: TurnTimingHints,
+): TurnUsagePart {
+  const cacheRead = usage.inputTokenDetails?.cacheReadTokens
+  const cacheWrite = usage.inputTokenDetails?.cacheWriteTokens
+  return {
+    turn_index: timing.turn_index,
+    input_tokens: usage.inputTokens ?? 0,
+    output_tokens: usage.outputTokens ?? 0,
+    wall_clock_ms: timing.wall_clock_ms,
+    ...(timing.ttfb_ms !== undefined ? { ttfb_ms: timing.ttfb_ms } : {}),
+    ...(cacheRead !== undefined ? { cache_read_input_tokens: cacheRead } : {}),
+    ...(cacheWrite !== undefined ? { cache_creation_input_tokens: cacheWrite } : {}),
+  }
+}
+
 export function mapAnthropicUsage(
   usage: AnthropicUsage,
   timing: TurnTimingHints,

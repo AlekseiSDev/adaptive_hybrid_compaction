@@ -391,6 +391,17 @@ numbers процитированы; повторно интегрировать 
   для §9 pipeline. Real-run артефакты не коммитятся (validation step, не
   reproducibility evidence). См. `decisions.md 2026-05-13` B4 entries.
 
+- **B5. AHC runtime integration (1 день).** Real `ahc_core` runner в
+  `src/eval/runners/ahc_core.ts` — `wrapLanguageModel({model, middleware})`
+  поверх AI SDK v6 provider (`@ai-sdk/openai` configured for OpenRouter) +
+  `createAhcMiddleware` (A6 adapter); `generateText({experimental_telemetry:
+  {isEnabled, functionId:'ahc.step'}})` для auto-spans. Cost-aware LLMCaller
+  wrapper учитывает digest/observer/reflection LLM-вызовы в `step.cost_usd`.
+  Per-task `eval.task` span (для всех configs — landed в Commit A) +
+  child `ai.generateText` spans (для ahc_core). Заменяет `noop_ahc` stub из
+  B1 в `ahc_flags`-driven configs; `baseline: noop_ahc` остаётся explicit
+  fallback для offline smoke без API key.
+
 **Track C — Baselines integration**
 
 - **C1. Mastra OM baseline (2 дня).** Поднять Mastra с default config (PG storage,

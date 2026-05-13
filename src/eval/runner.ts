@@ -21,6 +21,7 @@ import { fullContextBaseline } from './baselines/full_context.js'
 import { mastraOmBaseline } from './baselines/mastra_om.js'
 import { CostTracker } from './cost.js'
 import { createOpenRouterClient } from './llm.js'
+import { ahcCoreBaseline } from './runners/ahc_core.js'
 import { noopAhcBaseline, noopBaseline } from './runners/stub.js'
 import { aggregateTurnEvents } from './telemetry.js'
 import type {
@@ -137,6 +138,30 @@ function makeMastraOmRunner(): Runner {
 // are upgraded.
 const LITELLM_MODEL = 'claude-sonnet-4.6'
 
+function makeAhcCoreRunner(config: ConfigDef): Runner {
+  const apiKey = process.env['OPENROUTER_API_KEY']
+  if (!apiKey) {
+    throw new Error(
+      'ahc_core runner requires OPENROUTER_API_KEY env var (primary actor model = Gemini-3-Flash-Preview through OpenRouter, per system_design §6.1).',
+    )
+  }
+  const flagsFromConfig = (config.ahc_flags ?? {}) as Record<string, unknown>
+  const modelOverride = flagsFromConfig['model']
+  // Strip ahc_core-runner-specific keys (`model`) from FeatureFlags pass-through.
+  const { model: _omitModel, ...featureFlagsRaw } = flagsFromConfig
+  const baseline = ahcCoreBaseline({
+    apiKey,
+    baseURL: 'https://openrouter.ai/api/v1',
+    ...(typeof modelOverride === 'string' ? { model: modelOverride } : {}),
+    // Other ahc_flags keys (TRAJECTORY_CLASSIFIER, REFLECTION, etc.) map to
+    // FeatureFlags — pass through directly; createAhcMiddleware merges with defaults.
+    ahcFlags: featureFlagsRaw as Partial<
+      NonNullable<Parameters<typeof ahcCoreBaseline>[0]['ahcFlags']>
+    >,
+  })
+  return buildRunnerFromBaseline(baseline)
+}
+
 function makeAnthropicCompactRunner(): Runner {
   // Auth priority: LiteLLM proxy → OAuth (subscription) → API key (console).
   // LiteLLM path runs through a local proxy (e.g. jay-canvas/llm-proxy on
@@ -183,12 +208,18 @@ export const defaultRunnerRegistry: RunnerRegistry = {
     if (config.baseline === 'anthropic_compact') {
       return makeAnthropicCompactRunner()
     }
-    const key = config.baseline ?? (config.ahc_flags ? 'noop_ahc' : null)
-    if (key === null) {
+    // `ahc_flags`-only configs (no explicit `baseline`) route to the real
+    // ahc_core runner — A6 middleware over AI SDK v6 provider, per B5.
+    // To use the offline echo stub instead (smoke without API key), set
+    // `baseline: noop_ahc` explicitly.
+    if (config.baseline === undefined && config.ahc_flags !== undefined) {
+      return makeAhcCoreRunner(config)
+    }
+    if (config.baseline === undefined) {
       throw new Error(`config ${config.id}: must declare baseline or ahc_flags`)
     }
-    const factory = STUB_RUNNER_FACTORIES[key]
-    if (!factory) throw new Error(`unknown runner: ${key}`)
+    const factory = STUB_RUNNER_FACTORIES[config.baseline]
+    if (!factory) throw new Error(`unknown runner: ${config.baseline}`)
     return factory()
   },
 }

@@ -1,0 +1,11 @@
+name: smoke_ahc_core
+benches: [synthetic]
+configs:
+  - id: ahc_core
+    # Default `ahc_flags: {}` → real ahc_core runner over AI SDK v6 +
+    # OpenRouter (Gemini-3-Flash-Preview). Empty flags = defaults from
+    # src/core/featureFlags.ts (full pipeline: classifier, offloader,
+    # observer, reflection). Add model: 'foo/bar' to override actor.
+    ahc_flags: {}
+seeds: [42]
+budget_usd: 0.5

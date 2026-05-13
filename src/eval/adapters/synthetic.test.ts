@@ -19,15 +19,16 @@ describe('synthetic bench adapter', () => {
     expect(a).toEqual(b)
   })
 
-  test('prepare wraps task.input as a single user text message', async () => {
+  test('prepare emits [system, user] — system needed for AHC middleware to engage', async () => {
     const [task] = await syntheticAdapter.loadTasks(42)
     if (!task) throw new Error('expected task')
     const conv = syntheticAdapter.prepare(task)
-    expect(conv.messages).toHaveLength(1)
-    expect(conv.messages[0]?.role).toBe('user')
-    const part = conv.messages[0]?.content[0]
-    expect(part?.type).toBe('text')
-    if (part?.type === 'text') expect(part.text).toBe(String(task.input))
+    expect(conv.messages).toHaveLength(2)
+    expect(conv.messages[0]?.role).toBe('system')
+    expect(conv.messages[1]?.role).toBe('user')
+    const userPart = conv.messages[1]?.content[0]
+    expect(userPart?.type).toBe('text')
+    if (userPart?.type === 'text') expect(userPart.text).toBe(String(task.input))
   })
 })
 

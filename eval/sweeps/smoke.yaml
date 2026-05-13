@@ -3,7 +3,10 @@ benches: [synthetic]
 configs:
   - id: noop_baseline
     baseline: noop_baseline
+  # Explicit `baseline: noop_ahc` — preserves the offline-no-API smoke path.
+  # `ahc_flags: {}`-only configs now route to the real ahc_core runner (B5),
+  # which requires OPENROUTER_API_KEY.
   - id: noop_ahc
-    ahc_flags: {}
+    baseline: noop_ahc
 seeds: [42]
 budget_usd: 1

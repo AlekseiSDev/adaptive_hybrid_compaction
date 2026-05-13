@@ -28,7 +28,9 @@ const smokePlan: SweepPlan = {
   benches: ['synthetic'],
   configs: [
     { id: 'noop_baseline', baseline: 'noop_baseline' },
-    { id: 'noop_ahc', ahc_flags: {} },
+    // B5: `ahc_flags`-only configs now route to the real ahc_core runner.
+    // Tests use the explicit stub to stay offline (no OPENROUTER_API_KEY).
+    { id: 'noop_ahc', baseline: 'noop_ahc' },
   ],
   seeds: [42],
   budget_usd: 1,
@@ -292,15 +294,28 @@ describe('default registries', () => {
     expect(() => defaultAdapterRegistry.resolve('locomo-med')).toThrow(/not registered/)
   })
 
-  test('runner registry resolves noop_baseline by `baseline` field and noop_ahc by `ahc_flags`', () => {
+  test('runner registry: baseline:noop_baseline resolves stub; ahc_flags{} routes to ahc_core (B5)', () => {
     const baseline = defaultRunnerRegistry.resolve({
       id: 'x',
       baseline: 'noop_baseline',
     })
     expect(baseline.name).toBe('noop_baseline')
 
-    const ahc = defaultRunnerRegistry.resolve({ id: 'x', ahc_flags: {} })
-    expect(ahc.name).toBe('noop_ahc')
+    // Explicit baseline:noop_ahc still resolves to the offline stub.
+    const explicitNoop = defaultRunnerRegistry.resolve({ id: 'x', baseline: 'noop_ahc' })
+    expect(explicitNoop.name).toBe('noop_ahc')
+
+    // B5: `ahc_flags`-only routes to the real ahc_core runner. Without
+    // OPENROUTER_API_KEY the factory throws — assert that path is taken.
+    const prevKey = process.env['OPENROUTER_API_KEY']
+    delete process.env['OPENROUTER_API_KEY']
+    try {
+      expect(() => defaultRunnerRegistry.resolve({ id: 'x', ahc_flags: {} })).toThrow(
+        /ahc_core.*OPENROUTER_API_KEY/,
+      )
+    } finally {
+      if (prevKey !== undefined) process.env['OPENROUTER_API_KEY'] = prevKey
+    }
 
     expect(() => defaultRunnerRegistry.resolve({ id: 'x' })).toThrow(/baseline or ahc_flags/)
     expect(() =>

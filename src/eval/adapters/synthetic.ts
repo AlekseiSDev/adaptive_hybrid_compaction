@@ -9,7 +9,16 @@ export const syntheticAdapter: BenchAdapter = {
   name: 'synthetic',
   loadTasks: (_seed) => Promise.resolve(TASKS.map((t) => ({ ...t }))),
   prepare: (task) => ({
-    messages: [{ role: 'user', content: [{ type: 'text', text: String(task.input) }] }],
+    // System message is required for AHC middleware to engage — see
+    // src/adapters/ai-sdk-v6.ts:94 (transformParams passes through when no
+    // system message is present). Single sentence keeps grader simple.
+    messages: [
+      {
+        role: 'system',
+        content: [{ type: 'text', text: 'You are a helpful assistant. Answer concisely.' }],
+      },
+      { role: 'user', content: [{ type: 'text', text: String(task.input) }] },
+    ],
   }),
 }
 
