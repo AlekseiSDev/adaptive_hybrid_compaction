@@ -1,0 +1,10 @@
+{
+  "config": {
+    "id": "tau_bench_agent",
+    "baseline": "tau_bench_agent"
+  },
+  "bench": "tau-bench-retail-med",
+  "seed": 42,
+  "git_sha": "7f95f77b086d322205ec230b29dcc9c064f876fa",
+  "timestamp": "2026-05-13T13:03:14.971Z"
+}
