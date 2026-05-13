@@ -66,6 +66,12 @@ export type RunSweepOptions = {
   // OTel tracer (set up in src/eval/observability/langfuse.ts); becomes a
   // noop tracer when observability is disabled.
   tracer?: Tracer
+  // E0: dry-run mode for pre-flight (E_main-runs §8). When set, cap each
+  // (bench × config × seed) cell at `nTasksPerCell` tasks AND skip NDJSON
+  // / meta.json / summary.json persistence (results returned in-memory only).
+  // CostTracker still observes — caller asserts on result.total_cost_usd /
+  // result.halted to verify circuit-breaker behavior.
+  dryRun?: { nTasksPerCell: number }
 }
 
 const TASK_INPUT_ATTR = 'langfuse.observation.input'
@@ -330,6 +336,7 @@ export async function runSweep(
 
   let halted = false
   let halt_reason: string | undefined
+  const dryRun = options.dryRun
 
   outer: for (const bench of plan.benches) {
     const { adapter, grader } = adapters.resolve(bench)
@@ -338,7 +345,8 @@ export async function runSweep(
       const config_id = computeConfigId(config)
       for (const seed of plan.seeds) {
         const runDir = runDirFor(options.rootDir, bench, config_id, seed)
-        const completed = await readCompletedTaskIds(runDir)
+        // Dry-run skips resume logic — every cell starts fresh, no NDJSON read.
+        const completed = dryRun ? new Set<string>() : await readCompletedTaskIds(runDir)
         const tasks = await adapter.loadTasks(seed)
 
         let n_completed = 0
@@ -349,6 +357,8 @@ export async function runSweep(
             n_skipped += 1
             continue
           }
+          // E0: dry-run cap — stop this cell after nTasksPerCell tasks.
+          if (dryRun && n_completed >= dryRun.nTasksPerCell) break
           const events: InstrumentationEvent[] = []
           const conv = adapter.prepare(task)
           const started_at = Date.now()
@@ -405,7 +415,9 @@ export async function runSweep(
             turns: enrichedTurns,
             errors: response.errors,
           }
-          await appendRecord(runDir, record)
+          // E0: dry-run mode — no NDJSON persistence; CostTracker still observes
+          // in-memory so circuit-breaker behavior remains testable.
+          if (!dryRun) await appendRecord(runDir, record)
           n_completed += 1
 
           costTracker.observe(record)
@@ -417,20 +429,22 @@ export async function runSweep(
             halted = true
             halt_reason = decision.reason
             console.warn(`[runSweep] halting: ${decision.reason}`)
-            await writeMeta(runDir, {
-              config,
-              bench,
-              seed,
-              git_sha: options.gitSha ?? 'unknown',
-              timestamp: new Date().toISOString(),
-            })
-            const allRecords = await readAllRecords(runDir)
-            await writeSummary(
-              runDir,
-              { bench, config_id, seed },
-              allRecords,
-              { status: 'partial', halt_reason: decision.reason },
-            )
+            if (!dryRun) {
+              await writeMeta(runDir, {
+                config,
+                bench,
+                seed,
+                git_sha: options.gitSha ?? 'unknown',
+                timestamp: new Date().toISOString(),
+              })
+              const allRecords = await readAllRecords(runDir)
+              await writeSummary(
+                runDir,
+                { bench, config_id, seed },
+                allRecords,
+                { status: 'partial', halt_reason: decision.reason },
+              )
+            }
             configResults.push({
               bench,
               config_id,
@@ -443,20 +457,22 @@ export async function runSweep(
           }
         }
 
-        await writeMeta(runDir, {
-          config,
-          bench,
-          seed,
-          git_sha: options.gitSha ?? 'unknown',
-          timestamp: new Date().toISOString(),
-        })
-        const allRecords = await readAllRecords(runDir)
-        await writeSummary(
-          runDir,
-          { bench, config_id, seed },
-          allRecords,
-          { status: 'complete' },
-        )
+        if (!dryRun) {
+          await writeMeta(runDir, {
+            config,
+            bench,
+            seed,
+            git_sha: options.gitSha ?? 'unknown',
+            timestamp: new Date().toISOString(),
+          })
+          const allRecords = await readAllRecords(runDir)
+          await writeSummary(
+            runDir,
+            { bench, config_id, seed },
+            allRecords,
+            { status: 'complete' },
+          )
+        }
 
         configResults.push({
           bench,

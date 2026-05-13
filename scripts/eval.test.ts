@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { validateSweep, VALID_PROVIDERS } from './eval.js'
+import { parseArgs, validateSweep, VALID_PROVIDERS } from './eval.js'
 
 // validateSweep — sweep YAML schema sanity. Tests the optional E0 `provider`
 // per-row enum check + the pre-existing required-keys check, so future
@@ -77,5 +77,39 @@ describe('VALID_PROVIDERS constant', () => {
     expect(VALID_PROVIDERS.has('openrouter')).toBe(true)
     expect(VALID_PROVIDERS.has('anthropic_direct')).toBe(true)
     expect(VALID_PROVIDERS.size).toBe(2)
+  })
+})
+
+describe('parseArgs — --dry-run + --n-per-cell (E0)', () => {
+  test('--sweep only: dryRun=false, nPerCell default', () => {
+    const args = parseArgs(['--sweep', 'plan.yaml'])
+    expect(args.sweep).toBe('plan.yaml')
+    expect(args.dryRun).toBe(false)
+    expect(args.nPerCell).toBe(2)
+  })
+
+  test('--dry-run flag: dryRun=true, default n-per-cell still 2', () => {
+    const args = parseArgs(['--sweep', 'plan.yaml', '--dry-run'])
+    expect(args.dryRun).toBe(true)
+    expect(args.nPerCell).toBe(2)
+  })
+
+  test('--n-per-cell=N parses positive integer', () => {
+    const args = parseArgs(['--sweep', 'plan.yaml', '--dry-run', '--n-per-cell=5'])
+    expect(args.nPerCell).toBe(5)
+  })
+
+  test('throws on missing --sweep', () => {
+    expect(() => parseArgs([])).toThrow(/usage:/)
+    expect(() => parseArgs(['--dry-run'])).toThrow(/usage:/)
+  })
+
+  test('throws on --n-per-cell with non-integer', () => {
+    expect(() => parseArgs(['--sweep', 'p.yaml', '--n-per-cell=abc'])).toThrow(/positive integer/)
+  })
+
+  test('throws on --n-per-cell with zero or negative', () => {
+    expect(() => parseArgs(['--sweep', 'p.yaml', '--n-per-cell=0'])).toThrow(/positive integer/)
+    expect(() => parseArgs(['--sweep', 'p.yaml', '--n-per-cell=-3'])).toThrow(/positive integer/)
   })
 })

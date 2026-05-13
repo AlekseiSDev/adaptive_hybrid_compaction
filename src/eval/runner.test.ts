@@ -287,6 +287,44 @@ describe('runSweep — per-task OTel spans (B5)', () => {
   })
 })
 
+describe('runSweep — dry-run mode (E0)', () => {
+  test('dryRun:{nTasksPerCell:1} caps each cell, writes no NDJSON / meta / summary', async () => {
+    const result = await runSweep(smokePlan, defaultAdapterRegistry, defaultRunnerRegistry, {
+      rootDir: workspace,
+      dryRun: { nTasksPerCell: 1 },
+    })
+    expect(result.configs).toHaveLength(2)
+    for (const cfg of result.configs) {
+      // Cell capped at 1 task (synthetic has 2 by default).
+      expect(cfg.n_completed).toBe(1)
+      // No persistence anywhere.
+      expect(existsSync(join(cfg.runDir, 'records.ndjson'))).toBe(false)
+      expect(existsSync(join(cfg.runDir, 'meta.json'))).toBe(false)
+      expect(existsSync(join(cfg.runDir, 'summary.json'))).toBe(false)
+    }
+    // Cost tracking still in-memory.
+    expect(result.total_cost_usd).toBeGreaterThanOrEqual(0)
+    expect(result.halted).toBe(false)
+  })
+
+  test('dryRun also bypasses resume — second run is not affected by phantom NDJSON', async () => {
+    // First write some real records via non-dry-run.
+    await runSweep(smokePlan, defaultAdapterRegistry, defaultRunnerRegistry, {
+      rootDir: workspace,
+    })
+    // Now dry-run on same rootDir — should not skip (because dry-run ignores
+    // existing NDJSON and runs from scratch up to nTasksPerCell).
+    const dryResult = await runSweep(smokePlan, defaultAdapterRegistry, defaultRunnerRegistry, {
+      rootDir: workspace,
+      dryRun: { nTasksPerCell: 2 },
+    })
+    for (const cfg of dryResult.configs) {
+      expect(cfg.n_completed).toBe(2)
+      expect(cfg.n_skipped).toBe(0)
+    }
+  })
+})
+
 describe('default registries', () => {
   test('adapter registry resolves synthetic; throws on unknown bench', () => {
     const synth = defaultAdapterRegistry.resolve('synthetic')

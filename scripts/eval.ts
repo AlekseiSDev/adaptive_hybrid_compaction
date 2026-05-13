@@ -14,25 +14,44 @@ import type { SweepPlan } from '../src/eval/types.js'
 
 const REQUIRED_KEYS = ['name', 'benches', 'configs', 'seeds', 'budget_usd'] as const
 
-function parseArgs(argv: string[]): { sweep: string } {
-  const out: Record<string, string> = {}
+type CliArgs = {
+  sweep: string
+  dryRun: boolean
+  nPerCell: number
+}
+
+const DRY_RUN_DEFAULT_N_PER_CELL = 2
+
+export function parseArgs(argv: string[]): CliArgs {
+  let sweep: string | undefined
+  let dryRun = false
+  let nPerCell = DRY_RUN_DEFAULT_N_PER_CELL
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i]
     if (a === '--sweep') {
       const v = argv[i + 1]
       if (!v) {
-        console.error('error: --sweep requires a path argument')
-        process.exit(1)
+        throw new Error('error: --sweep requires a path argument')
       }
-      out['sweep'] = v
+      sweep = v
       i += 1
+    } else if (a === '--dry-run') {
+      dryRun = true
+    } else if (a !== undefined && a.startsWith('--n-per-cell=')) {
+      const raw = a.slice('--n-per-cell='.length)
+      const parsed = Number.parseInt(raw, 10)
+      if (!Number.isFinite(parsed) || parsed < 1) {
+        throw new Error(`error: --n-per-cell expects positive integer, got "${raw}"`)
+      }
+      nPerCell = parsed
     }
   }
-  if (!out['sweep']) {
-    console.error('usage: tsx scripts/eval.ts --sweep <path/to/sweep.yaml>')
-    process.exit(1)
+  if (!sweep) {
+    throw new Error(
+      'usage: tsx scripts/eval.ts --sweep <path/to/sweep.yaml> [--dry-run [--n-per-cell=N]]',
+    )
   }
-  return { sweep: out['sweep'] }
+  return { sweep, dryRun, nPerCell }
 }
 
 export const VALID_PROVIDERS = new Set(['openrouter', 'anthropic_direct'])
@@ -87,11 +106,16 @@ function printSummary(plan: SweepPlan, result: RunSweepResult, langfuseEnabled: 
 }
 
 async function main(): Promise<void> {
-  const { sweep: sweepPath } = parseArgs(process.argv.slice(2))
-  const absSweep = resolve(sweepPath)
+  const args = parseArgs(process.argv.slice(2))
+  const absSweep = resolve(args.sweep)
   const raw = parseYaml(await readFile(absSweep, 'utf8')) as unknown
   const plan = validateSweep(raw, absSweep)
   const rootDir = resolve(process.cwd(), 'benchmarks/runs')
+  if (args.dryRun) {
+    console.log(
+      `[eval] DRY-RUN mode: ${String(args.nPerCell)} tasks/cell, no persistence`,
+    )
+  }
   const obs = setupObservability()
   try {
     // startActiveSpan (vs startSpan) registers eval.sweep as the active span
@@ -122,7 +146,11 @@ async function main(): Promise<void> {
             plan,
             defaultAdapterRegistry,
             defaultRunnerRegistry,
-            { rootDir, gitSha: gitSha() },
+            {
+              rootDir,
+              gitSha: gitSha(),
+              ...(args.dryRun ? { dryRun: { nTasksPerCell: args.nPerCell } } : {}),
+            },
           )
           span.setAttribute('sweep.halted', result.halted)
           span.setAttribute('sweep.total_cost_usd', result.total_cost_usd)
