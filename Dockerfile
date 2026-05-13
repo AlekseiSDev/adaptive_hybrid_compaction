@@ -29,6 +29,12 @@ COPY --from=builder --chown=nextjs:nodejs /app/src/ui/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/src/ui/.next/static ./src/ui/.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/src/ui/public ./src/ui/public
 
+# Next.js standalone emits a CommonJS server.js, but the monorepo root
+# package.json sets "type": "module". Drop a scope-local package.json
+# next to server.js so Node treats it as CJS.
+RUN echo '{"type":"commonjs"}' > /app/src/ui/package.json \
+ && chown nextjs:nodejs /app/src/ui/package.json
+
 USER nextjs
 EXPOSE 3000
 CMD ["node", "src/ui/server.js"]
