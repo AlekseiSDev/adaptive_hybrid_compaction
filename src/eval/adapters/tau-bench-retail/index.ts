@@ -13,6 +13,7 @@ import { createOpenAI } from '@ai-sdk/openai'
 import { readdir, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { FeatureFlags } from '../../../core/index.js'
+import { buildSystemPrompt } from '../../../core/prompts.js'
 import { createOpenRouterClient } from '../../llm.js'
 import type {
   BenchAdapter,
@@ -133,7 +134,11 @@ export function makeTauBenchRunner(opts: MakeTauBenchRunnerOpts): Runner {
     name: runnerName,
     async execute(_conv: Conversation, ctx: RunnerContext): Promise<RunnerResponse> {
       const episode = ctx.task.input as Episode
-      const actorSystem = await loadWiki()
+      const wiki = await loadWiki()
+      // Wrap retail wiki (tools + policies) with the standard agentic framing
+      // (style, refusal, multi-turn awareness). Wiki itself enumerates tools
+      // so no extra `tools:` hints needed — AI SDK schemas + wiki cover them.
+      const actorSystem = buildSystemPrompt({ benchContext: wiki })
       const result = await runTauEpisode(episode, {
         actorModel,
         userSimModel,

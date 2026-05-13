@@ -7,6 +7,7 @@ import type {
   BetaTextBlockParam,
 } from '@anthropic-ai/sdk/resources/beta/messages/messages.js'
 import type { Model as AnthropicModel } from '@anthropic-ai/sdk/resources/messages/messages.js'
+import { DEFAULT_AGENT_SYSTEM_PROMPT } from '../../core/prompts.js'
 import { composeTurnRecord, mapAnthropicUsage } from '../telemetry.js'
 import type {
   Baseline,
@@ -58,6 +59,12 @@ export type AnthropicCompactDeps = {
   instructions?: string
   /** Max tokens per response. */
   maxTokens?: number
+  /**
+   * System prompt forwarded to Anthropic's top-level `system:` field. Default:
+   * `DEFAULT_AGENT_SYSTEM_PROMPT` from core (shared with all other baselines
+   * for fair-comparison invariant). Pass empty string to disable.
+   */
+  systemPrompt?: string
 }
 
 const DEFAULT_MODEL: NonNullable<AnthropicCompactDeps['model']> = 'claude-sonnet-4-6'
@@ -191,10 +198,12 @@ export function anthropicCompactBaseline(deps: AnthropicCompactDeps): Baseline {
       // beta name dashes, not the strategy's `compact_20260112` underscore
       // form. Source: https://platform.claude.com/docs/en/build-with-claude/
       // compaction.
+      const systemPrompt = deps.systemPrompt ?? DEFAULT_AGENT_SYSTEM_PROMPT
       const response: BetaMessage = await client.beta.messages.create({
         model: scratch.model,
         max_tokens: maxTokens,
         messages: historyBeta,
+        ...(systemPrompt.length > 0 ? { system: systemPrompt } : {}),
         betas: ['compact-2026-01-12'],
         context_management: {
           edits: [

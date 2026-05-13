@@ -31,6 +31,7 @@ import {
   taubenchGrader,
 } from './adapters/tau-bench-retail/index.js'
 import { buildRunnerFromBaseline } from './baseline.js'
+import { DEFAULT_AGENT_SYSTEM_PROMPT } from '../core/prompts.js'
 import { anthropicCompactBaseline } from './baselines/anthropic_compact.js'
 import { fullContextBaseline } from './baselines/full_context.js'
 import { mastraOmBaseline } from './baselines/mastra_om.js'
@@ -167,6 +168,7 @@ function makeFullContextRunner(): Runner {
   const baseline = fullContextBaseline({
     llmClient,
     model: FULL_CONTEXT_DEFAULT_MODEL,
+    systemPrompt: DEFAULT_AGENT_SYSTEM_PROMPT,
   })
   return buildRunnerFromBaseline(baseline)
 }
@@ -178,7 +180,10 @@ function makeMastraOmRunner(): Runner {
       'OPENROUTER_API_KEY env var is required for baseline=mastra_om (Mastra wraps OpenRouter via OpenAI-compatible config)',
     )
   }
-  const baseline = mastraOmBaseline({ apiKey })
+  const baseline = mastraOmBaseline({
+    apiKey,
+    systemPrompt: DEFAULT_AGENT_SYSTEM_PROMPT,
+  })
   return buildRunnerFromBaseline(baseline)
 }
 
@@ -257,6 +262,7 @@ function makeAhcCoreRunner(config: ConfigDef): Runner {
     // Other ahc_flags keys (TRAJECTORY_CLASSIFIER, REFLECTION, etc.) map to
     // FeatureFlags — pass through directly; createAhcMiddleware merges with defaults.
     ahcFlags: featureFlagsRaw,
+    systemPrompt: DEFAULT_AGENT_SYSTEM_PROMPT,
   })
   return buildRunnerFromBaseline(baseline)
 }
@@ -289,10 +295,17 @@ function makeAnthropicCompactRunner(): Runner {
         apiKey: litellmKey,
         baseURL: litellmUrl,
         model: LITELLM_MODEL,
+        systemPrompt: DEFAULT_AGENT_SYSTEM_PROMPT,
       })
     : hasOauth
-      ? anthropicCompactBaseline({ authToken: oauthToken })
-      : anthropicCompactBaseline({ apiKey: apiKey ?? '' })
+      ? anthropicCompactBaseline({
+          authToken: oauthToken,
+          systemPrompt: DEFAULT_AGENT_SYSTEM_PROMPT,
+        })
+      : anthropicCompactBaseline({
+          apiKey: apiKey ?? '',
+          systemPrompt: DEFAULT_AGENT_SYSTEM_PROMPT,
+        })
   return buildRunnerFromBaseline(baseline)
 }
 

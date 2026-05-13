@@ -1,6 +1,7 @@
 import { generateText, type ModelMessage } from 'ai'
 import { createAhcRuntime, type AhcProvider } from '../../adapters/ahc-runtime.js'
 import { SessionScratchpadRegistry } from '../../adapters/sessionScratchpad.js'
+import { DEFAULT_AGENT_SYSTEM_PROMPT } from '../../core/prompts.js'
 import type {
   CoreEvent,
   FeatureFlags,
@@ -55,7 +56,8 @@ function envActorModel(): string | undefined {
 // injection-attack mitigation). A6 middleware's `transformParams` reads the
 // LanguageModelV3Prompt where the SDK has already lifted system into a
 // dedicated entry — so the AHC middleware still observes it correctly.
-const SYSTEM_PROMPT = 'You are a helpful assistant. Answer concisely.'
+// Default content lives in `src/core/prompts.ts` (DEFAULT_AGENT_SYSTEM_PROMPT)
+// so eval baselines, UI, and AHC actor share the same agentic framing.
 
 export type AhcCoreBaselineDeps = {
   apiKey: string
@@ -78,6 +80,12 @@ export type AhcCoreBaselineDeps = {
   llmCaller?: LLMCaller
   /** Optional injected LLMClient wrapper for tests. */
   llmClient?: LLMClient
+  /**
+   * System prompt passed via top-level `system:` to `generateText`. Default:
+   * `DEFAULT_AGENT_SYSTEM_PROMPT` from core (shared with all other baselines
+   * for fair-comparison invariant).
+   */
+  systemPrompt?: string
 }
 
 type AhcScratch = {
@@ -171,7 +179,7 @@ export function ahcCoreBaseline(deps: AhcCoreBaselineDeps): Baseline {
       const start = Date.now()
       const result = await generateText({
         model: wrapped,
-        system: SYSTEM_PROMPT,
+        system: deps.systemPrompt ?? DEFAULT_AGENT_SYSTEM_PROMPT,
         messages,
         experimental_telemetry: {
           isEnabled: true,

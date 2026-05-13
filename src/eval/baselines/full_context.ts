@@ -1,3 +1,4 @@
+import { DEFAULT_AGENT_SYSTEM_PROMPT } from '../../core/prompts.js'
 import { costFromUsage } from '../llm.js'
 import { composeTurnRecord, mapOpenRouterUsage } from '../telemetry.js'
 import type {
@@ -19,6 +20,12 @@ import type {
 export type FullContextDeps = {
   llmClient: LLMClient
   model: string
+  /**
+   * System prompt prepended as `{role:'system'}` LLM message. Default:
+   * `DEFAULT_AGENT_SYSTEM_PROMPT` from core (shared with all other baselines
+   * for fair-comparison invariant). Pass empty string to disable.
+   */
+  systemPrompt?: string
 }
 
 function messageToLLM(msg: Message): LLMMessage | null {
@@ -41,9 +48,14 @@ export function fullContextBaseline(deps: FullContextDeps): Baseline {
     }),
     step: async (state, userMsg, _opts) => {
       const newHistory = [...state.history, userMsg]
-      const llmMessages = newHistory
+      const historyLlmMessages = newHistory
         .map(messageToLLM)
         .filter((m): m is LLMMessage => m !== null)
+      const systemPrompt = deps.systemPrompt ?? DEFAULT_AGENT_SYSTEM_PROMPT
+      const llmMessages: LLMMessage[] =
+        systemPrompt.length > 0
+          ? [{ role: 'system' as const, content: systemPrompt }, ...historyLlmMessages]
+          : historyLlmMessages
       const turn_index = newHistory.filter((m) => m.role === 'user').length - 1
 
       const start = Date.now()

@@ -88,6 +88,7 @@ describe('fullContextBaseline', () => {
     const baseline = fullContextBaseline({
       llmClient: llm,
       model: 'google/gemini-3-flash-preview',
+      systemPrompt: '', // disable auto-prepended system msg for this property test
     })
     let state = baseline.prepare(makeTask())
     state = (await baseline.step(state, makeUser('q1'))).state
@@ -105,6 +106,24 @@ describe('fullContextBaseline', () => {
     expect(secondCall?.messages[0]?.content).toBe('q1')
     expect(secondCall?.messages[1]?.role).toBe('assistant')
     expect(secondCall?.messages[2]?.content).toBe('q2')
+  })
+
+  test('systemPrompt is prepended as {role:"system"} when non-empty (default behavior)', async () => {
+    const llm = okLlm('a', 10, 5)
+    const baseline = fullContextBaseline({
+      llmClient: llm,
+      model: 'google/gemini-3-flash-preview',
+      systemPrompt: 'You are an agent.',
+    })
+    const state = baseline.prepare(makeTask())
+    await baseline.step(state, makeUser('hello'))
+    const firstCall = (llm as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as
+      | { messages: { role: string; content: string }[] }
+      | undefined
+    expect(firstCall?.messages).toHaveLength(2)
+    expect(firstCall?.messages[0]?.role).toBe('system')
+    expect(firstCall?.messages[0]?.content).toBe('You are an agent.')
+    expect(firstCall?.messages[1]?.content).toBe('hello')
   })
 })
 

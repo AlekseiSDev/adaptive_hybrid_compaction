@@ -3,6 +3,7 @@ import { dirname, resolve } from 'node:path'
 import { Agent } from '@mastra/core/agent'
 import { LibSQLStore } from '@mastra/libsql'
 import { Memory } from '@mastra/memory'
+import { DEFAULT_AGENT_SYSTEM_PROMPT } from '../../core/prompts.js'
 import { composeTurnRecord } from '../telemetry.js'
 import type {
   Baseline,
@@ -40,6 +41,11 @@ export type MastraOMDeps = {
   url?: string
   /** Root dir for per-task SQLite files. Default `./.mastra/`. */
   storageRootDir?: string
+  /**
+   * System prompt / agent instructions. Default: `DEFAULT_AGENT_SYSTEM_PROMPT`
+   * from core (shared with all other baselines for fair-comparison invariant).
+   */
+  systemPrompt?: string
 }
 
 const DEFAULT_PROVIDER_ID = 'openrouter'
@@ -110,8 +116,7 @@ function buildAgent(
   const agent = new Agent({
     id: 'ahc_c1_mastra_om',
     name: 'AHC C1 Mastra OM baseline',
-    instructions:
-      'You are a helpful assistant. Respond concisely to user messages.',
+    instructions: deps.systemPrompt ?? DEFAULT_AGENT_SYSTEM_PROMPT,
     model: resolveMastraModel(deps),
     memory,
   })
