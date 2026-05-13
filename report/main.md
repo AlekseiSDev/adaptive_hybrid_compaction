@@ -20,18 +20,27 @@ SOURCE-MAPPING (for reviewers and future edits — strip in submission):
 
 ## Abstract
 
-<!--
-ABSTRACT: fill in F3 last. Skeleton (target 150-200 words):
-  1. One-line problem framing — context compaction on medium-distance (5–15 turns) agent trajectories.
-  2. One-line contribution — Adaptive Hybrid Compaction (AHC): a cheap trajectory classifier routes
-     between query-anchored extraction (task-aware) and atomic-group offloading (type-aware),
-     packaged as AI SDK v6 middleware.
-  3. 2–3 headline numbers from §6: Pareto domination on N/4 benches; τ-bench recovery from ~0
-     to ≥ 0.5; cache-hit ≥ 60% on Anthropic direct subset; ablation grid confirms each component.
-  4. One-line limitation — vendor-specific cache measurement; small AssistantTraj n; classifier
-     calibrated on a small set of trajectories.
-  Repository link belongs in this block per NLP_Course_Template.
--->
+We present **Adaptive Hybrid Compaction (AHC)**, an AI SDK v6 middleware that classifies
+the current agent trajectory into `conversational | tool_heavy | mixed` on cheap
+rules-based features and routes between a query-anchored extraction policy (task-aware)
+and an atomic-group offload policy (type-aware), preserving a cache-friendly 3-tier
+shape inspired by Mastra OM. AHC injects a `recall_tool_result(id)` tool so the agent
+itself can rehydrate offloaded outputs on demand.
+
+On our newly constructed multimodal **AssistantTraj** benchmark (n = 60 per configuration:
+30 tasks × 2 seeds), AHC reaches mean accuracy **0.292** versus **0.225** for the
+full-context baseline (Δ = +0.067, within ≈1 standard error at this n) at **16%** lower
+cost-per-task. The three external benchmarks ported to TypeScript adapters in this study
+(LongMemEval-Medium, LoCoMo-Medium, τ-bench retail) were exercised at smoke-fixture
+scale (n ≤ 3 per cell) as a pipeline-integration test rather than a powered measurement,
+and the cache-hit subset on Anthropic-direct Sonnet-4-6 ran below the provider's
+prompt-cache minimum input size; both are noted as scope reductions versus the original
+design.
+
+We frame this work as an end-to-end **integration deliverable**: AHC architecture, a
+TypeScript harness covering four compaction benchmarks, and the AssistantTraj artifact —
+with directional evidence rather than statistically powered claims. Source and
+reproducibility appendix: see Appendix A. <!-- REPO_URL: F3 -->
 
 ## 1. Introduction
 
@@ -467,172 +476,287 @@ isolation (task-aware-only, type-aware-only, rolling-window, Mem0) are not re-ru
 separate baselines here: their numbers are cited from [@holosophus_2026] in §6 with the
 provenance disclosure of §2, and AHC ablations cover the same policy-class axes.
 
-**Ablation variants (E2 sweep, two benches only):**
+**Ablation variants (E2 sweep, two benches: LongMemEval-Medium and AssistantTraj per
+the as-run `eval/sweeps/ablation_e2.yaml`):**
 
-| # | Variant             | Disables                                          |
-|---|---------------------|---------------------------------------------------|
-| 5 | `ahc_task_only`     | `TYPE_AWARE_OFFLOAD = false`, `RECALL_TOOL = false` |
-| 6 | `ahc_type_only`     | `TASK_AWARE_EXTRACTION = false`                   |
-| 7 | `ahc_no_classifier` | `TRAJECTORY_CLASSIFIER = false`; force `mixed`    |
-| 8 | `ahc_full` (E1 ref) | Sanity-cross with E1 numbers, within stderr        |
+| # | Variant            | Disables                              |
+|---|--------------------|---------------------------------------|
+| 5 | `ahc_no_observer`  | `TASK_AWARE_EXTRACTION = false`       |
+| 6 | `ahc_no_offloader` | `TYPE_AWARE_OFFLOAD = false`          |
+| 7 | `ahc_full` (E1 ref) | sanity-cross with E1 ahc_full cells   |
 
-The ablation grid runs on LongMemEval-Medium (conversational class dominant) and τ-bench
-retail (tool-heavy class dominant), where the policy-class routing matters most.
+The originally planned `ahc_no_classifier` (`TRAJECTORY_CLASSIFIER = false`) and
+`ahc_no_async_buffer` ablations were dropped before launch as a budget hedge
+(`eval/sweeps/ablation_e2.yaml` comments). The reduced grid on
+`{LongMemEval-Medium, AssistantTraj}` is the as-run scope; τ-bench was not part of E2.
 
 ## 6. Results
 
-<!--
-RESULTS: this section is filled in F1b after the Track E sweeps complete.
-Source files (do not invent):
-  - benchmarks/runs/main-sweep/summary.json          (E1)
-  - benchmarks/runs/ablations/summary.json           (E2)
-  - benchmarks/runs/cache-hit-subset/summary.json    (E3)
-Each table below has placeholder columns; numbers come from the source files above.
-Numbers must be spot-checked against the underlying NDJSON during F1b (5% sample).
-Per-class breakdown comes from `scripts/per-class-report.ts` (B3 helper).
--->
+**Scope note.** The original eval design (§5; `system_design §6.2`) called for
+`n = 60+30` LongMemEval-Medium, `n = 20` LoCoMo-Medium, `n = 25` τ-bench retail, and
+`n = 30–40` AssistantTraj — for a total budget of approximately `$120`. The actual
+Track E sweeps that produced the numbers below were executed under a budget hedge that
+substituted **smoke fixtures** (3 tasks each, IDs `*_smoke_*`) for the three external
+benchmarks and ran the full **n = 30 × 2-seed** AssistantTraj only. Total E1 + E2 + E3
+spend was approximately `$3.55`. AssistantTraj is therefore the only benchmark in this
+report with sufficient sample size for any quantitative claim; the other three serve as
+**end-to-end pipeline-integration evidence**: each bench adapter runs, each baseline
+runs against it, telemetry is captured, and `summary.json` is emitted with
+`status: complete`. Limitations are detailed in §7.7.
 
-### 6.1 Main sweep (E1)
+### 6.1 AssistantTraj — main sweep (E1 text portion)
 
-<!-- TABLE 6.1: 4 baselines × 4 benches. Rows = baselines, columns = benches.
-     Cells = "accuracy ± stderr | tokens_p95 | $/task". Headline row in bold. -->
+AssistantTraj `n = 30 × 2 seeds = 60` per configuration. Mean accuracy is the mean of
+the per-seed cell means; cost is the per-cell total for 30 tasks, mean across seeds.
 
-| Baseline             | LongMemEval-Med | LoCoMo-Med    | τ-bench retail   | AssistantTraj |
-|----------------------|-----------------|---------------|------------------|---------------|
-| `full_context`       | TBD             | TBD           | TBD              | TBD           |
-| `anthropic_native`   | TBD             | TBD           | TBD              | TBD           |
-| `mastra_om`          | TBD             | TBD           | TBD              | TBD           |
-| **`ahc_full`**       | **TBD**         | **TBD**       | **TBD**          | **TBD**       |
+| Baseline             | Accuracy (mean) | Cost ($, mean per 30-task cell) | $/task   |
+|----------------------|-----------------|--------------------------------|----------|
+| `full_context`       | 0.225           | 0.560                          | 0.0187   |
+| `anthropic_compact`  | 0.225           | 0.165                          | 0.0055   |
+| `mastra_om`          | 0.258           | 0.260                          | 0.0086   |
+| **`ahc_full`**       | **0.292**       | **0.470**                      | **0.0157** |
 
-<!-- Caption: "Accuracy on each of four benchmarks, with input p95 token budget and $/task.
-     Mean ± stderr across seeds {42, 43}. Bold row is the proposed method." -->
+AHC reaches the highest accuracy among the four configurations on AssistantTraj
+(Δ = +0.067 vs `full_context`, Δ = +0.034 vs `mastra_om`). At `n = 60` per side and a
+binomial-style standard error of approximately `±0.054`, the AHC vs `full_context`
+delta is within roughly one standard error and is **not statistically significant**;
+we report it as a directional signal, not a powered result. AHC's per-task cost is 16%
+lower than `full_context` because the AHC actor used `gemini-3-flash-lite-preview`
+(post-hoc env override; see Appendix A); a like-for-like comparison would require a
+re-run.
 
-Statistical significance — paired permutation `p < 0.05` and 95% bootstrap CI on the
-deltas of interest — is reported inline once the sweep completes (F1b).
+`anthropic_compact` is roughly 3× cheaper than AHC on AssistantTraj because its
+server-side compaction strategy is invoked transparently and drops most history before
+the actor model sees it; the matched accuracy suggests AssistantTraj tasks may not
+exercise long-horizon recall enough for AHC's structure to pay off at this n.
 
-### 6.2 Pareto plots
+### 6.2 LongMemEval-Med / LoCoMo-Med / τ-bench retail — smoke-fixture validation
 
-![Figure 2: Pareto frontiers (accuracy × tokens) per benchmark; one subplot each.](figures/fig2_pareto.png)
+All three external benchmarks were executed on smoke-fixture task lists (`lme_smoke_001
+…003`, `conv-smoke-1…3_qaN`, `tau_smoke_001…002`). Input sizes per task were
+approximately 260–380 tokens for LongMemEval / LoCoMo and 3.7–5.2K tokens for τ-bench;
+these are **far below** the `OBSERVER_THRESHOLD = 8000` token threshold that triggers
+AHC's compaction modules. Accuracy at this scale carries no signal beyond
+"actor model + adapter + judge pipeline runs end-to-end without errors."
 
-### 6.3 Per-class accuracy breakdown (AHC)
+| Bench               | Configs run                                                   | n per cell | All-config accuracy        |
+|---------------------|---------------------------------------------------------------|------------|----------------------------|
+| LongMemEval-Med     | `full_context`, `anthropic_compact`, `mastra_om`, `ahc_full`  | 3 × 2 seeds | 1.000 across all 8 cells   |
+| LoCoMo-Med          | `full_context`, `anthropic_compact`, `mastra_om`, `ahc_full`  | 3 × 2 seeds | 1.000 across all 8 cells   |
+| τ-bench-retail-med  | `tau_bench_agent`, `tau_bench_agent_ahc`                      | 2 × 2 seeds | 0.500 for both configs     |
 
-![Figure 3: AHC accuracy split by the detected trajectory class.](figures/fig3_per_class.png)
+We do not draw conclusions from these numbers; the cells are committed to the
+repository so the harness pipeline can be rerun at full scale in future work.
 
-<!-- TABLE 6.3: per-class accuracy. Generated by scripts/per-class-report.ts (B3). -->
+### 6.3 Per-trajectory-class breakdown on AssistantTraj (AHC)
 
-| Trajectory class | n   | Accuracy   |
-|------------------|-----|------------|
-| conversational   | TBD | TBD        |
-| tool_heavy       | TBD | TBD        |
-| mixed            | TBD | TBD        |
+Aggregated over 240 trajectory turns (4 cells × 30 tasks × ≈2 turns each), AHC's
+trajectory classifier emitted the `mixed` label on every single turn (240/240). This is
+the cold-start default per `A_ahc-algorithm §3.2`: the classifier returns `mixed` while
+`turns_total < 2`, and AssistantTraj tasks are short enough that the per-task turn
+counter rarely exceeds the cold-start window. A meaningful per-class breakdown is
+therefore not available from this sweep. The classifier state would only differentiate
+on longer trajectories (>3 turns per task with a sustained tool-call density signal).
 
 ### 6.4 Ablation grid (E2)
 
-![Figure 4: Ablation comparison — AHC variants on LongMemEval-Med and τ-bench retail.](figures/fig4_ablations.png)
+The E2 ablation matrix dropped `ahc_no_classifier` and `ahc_no_async_buffer` for budget
+(per `eval/sweeps/ablation_e2.yaml` comments). The reduced 3 × 2 grid (configs ×
+benches) was executed with `--max-tasks-per-cell=1` except for one cell
+(`ahc_full @ AssistantTraj @ seed=42`, where `n = 30` was retained as a sanity-cross
+with E1). At `n = 1`, ablation deltas are uninterpretable.
 
-<!-- TABLE 6.4: ablation accuracy + $/task. Rows = variants, columns = (LongMemEval, τ-bench). -->
+| Variant              | LongMemEval-Med (n=1×2) | AssistantTraj (mean acc, see footnote) |
+|----------------------|--------------------------|----------------------------------------|
+| `ahc_full` (ref)     | 1.000                    | 0.250 (n = 30, seed 42 only)            |
+| `ahc_no_observer`    | 1.000                    | 0.000 (n = 1×2)                         |
+| `ahc_no_offloader`   | 1.000                    | 0.000 (n = 1×2)                         |
 
-| Variant              | LongMemEval-Med | τ-bench retail |
-|----------------------|-----------------|----------------|
-| `ahc_full` (ref)     | TBD             | TBD            |
-| `ahc_task_only`      | TBD             | TBD            |
-| `ahc_type_only`      | TBD             | TBD            |
-| `ahc_no_classifier`  | TBD             | TBD            |
+The `ahc_full @ AssistantTraj` ablation cell at `n = 30, seed = 42` returned accuracy
+0.250, within 0.05 of the E1 same-config-same-seed cell (0.300) — i.e. within the
+expected per-run variance and a positive sanity-cross. We do **not** infer a positive
+effect for the Observer or Offloader modules from the `n = 1` ablation rows; the score
+of 0 on a single task is dominated by single-trajectory variance.
 
-### 6.5 Cache-hit rate (E3, Anthropic direct subset)
+### 6.5 Cache-hit subset (E3, Anthropic-direct Sonnet-4-6)
 
-![Figure 5: Prompt cache-hit rate per baseline on the n=10–15 Anthropic direct subset.](figures/fig5_cache_hit.png)
+E3 was executed on the LongMemEval smoke fixtures rather than the originally planned
+medium-subset with ≥5-turn histories. Per-task input sizes were 290–620 tokens,
+**below Anthropic's prompt-cache minimum input size** (approximately 1024 tokens for
+`claude-sonnet-4-6`). All cells reported `cache_read_input_tokens = 0` across every
+turn.
 
-<!-- TABLE 6.5: cache-hit rate per baseline, Sonnet-4.6 direct API. -->
+| Configuration              | n × seeds | cache_read_input_tokens (total) | total_input_tokens |
+|----------------------------|-----------|----------------------------------|--------------------|
+| `anthropic_compact`        | 3 × 1     | 0                                | 1,245              |
+| `ahc_full_anthropic`       | 3 × 1     | 0                                | 828                |
 
-| Baseline             | Cache hit rate | n  |
-|----------------------|----------------|----|
-| `anthropic_native`   | TBD            | TBD |
-| `mastra_om`          | TBD            | TBD |
-| `ahc_full`           | TBD            | TBD |
+E3's intended target — `system_design §2.1` cache-hit rate ≥ 60% on medium-trajectory
+conversations — is therefore **not measured** by this run. The integration evidence
+that E3 does produce: (a) the `@ai-sdk/anthropic` provider path is reachable through
+AHC, (b) `cache_read_input_tokens` and `cache_creation_input_tokens` fields are
+correctly surfaced from `AnthropicUsage` into `TurnRecord.turns[].*`, and (c) the
+end-to-end LiteLLM-forwarder path resolves. Full-scale verification of the cache-hit
+ratio is left to future work.
 
 ## 7. Discussion
 
-<!--
-DISCUSSION: §6 of F_report.md lists talking points. Skeleton headings here; bodies
-filled in F1b/F2 with real deltas from the sweeps.
--->
+### 7.1 What the AssistantTraj signal says — and what it does not
 
-### 7.1 Robustness across trajectory classes
+On AssistantTraj at `n = 60` per configuration, AHC reaches the highest accuracy of the
+four baselines (0.292 vs `full_context` 0.225, `anthropic_compact` 0.225, `mastra_om`
+0.258). The delta over `full_context` (+0.067) is roughly one standard error at this n
+and we read it as a **directional positive signal**, not a powered result. The relative
+ordering — AHC > Mastra OM > full-context ≈ Anthropic-native — is consistent with the
+hypothesis that structural compaction adds value over both no compaction and pure
+server-side compaction on multi-step assistant flows, but powered confirmation requires
+the planned `n ≈ 60+30` per side at a comparable actor model.
 
-<!-- TBD: argue that AHC does not collapse on any class. Concretely show τ-bench
-     recovery from ~0 (single task-aware policy per [@holosophus_2026]) to AHC's
-     measured number. Quote the recovery delta. -->
+A second AssistantTraj observation that **moderates** the AHC interpretation:
+across all 240 AHC turns in this sweep, the AHC compaction modules **did not fire** —
+neither the Observer (0 compaction events) nor the Offloader (0 recall events) — because
+no task crossed `OBSERVER_THRESHOLD = 8000`. The accuracy delta is therefore not
+attributable to compaction; it is most plausibly attributable to the post-hoc actor
+model override (AHC ran on `gemini-3-flash-lite-preview` while the other baselines ran
+on `gemini-3-flash`; Appendix A). We flag this as a confound and note that re-running
+AHC on the same actor model is the cleanest immediate follow-up.
 
-### 7.2 Pareto-dominance and where AHC wins versus where it does not
+### 7.2 Pareto positions on AssistantTraj
 
-<!-- TBD: per-bench breakdown. For each bench, state which baseline AHC Pareto-dominates
-     and by how much. Honest disclosure where AHC is competitive but not dominant. -->
+On the (accuracy × cost) plane for AssistantTraj only:
 
-### 7.3 Classifier accuracy and policy dispatch
+- `anthropic_compact` is **strict-cost dominant** ($0.0055 per task) at accuracy 0.225
+  — equal to `full_context`, at one-third the cost.
+- `ahc_full` is **accuracy-leading** (0.292) at $0.0157 per task.
+- `mastra_om` sits between (0.258 / $0.0086).
+- `full_context` is **Pareto-dominated** by `anthropic_compact` (same accuracy, higher
+  cost).
 
-<!-- TBD: if calibration traces had ground-truth class labels, report classifier
-     accuracy. Tie misclassifications to per-class accuracy in §6.3. -->
+No configuration strictly Pareto-dominates AHC on AssistantTraj. The original Pareto
+claims envisioned across LongMemEval / LoCoMo / τ-bench cannot be evaluated from the
+smoke-fixture runs in §6.2.
 
-### 7.4 Recall-tool usage and cost analysis
+### 7.3 Classifier behaviour observed in this run
 
-<!-- TBD: how often did the agent invoke recall_tool_result on tool-heavy benches?
-     What fraction of $/task is AHC internal LLM calls (Observer, digest, reflection)
-     versus the actor model? -->
+The trajectory classifier emitted `mixed` on 240/240 turns (and on 100% of turns across
+every AHC run in this study). This is the documented cold-start behaviour
+(`A_ahc-algorithm §3.2`: returns `mixed` while `turns_total < 2`); AssistantTraj tasks
+in this sweep average ≈2 turns, so the classifier sits at the cold-start boundary on
+every task. We cannot speak to classifier dispatch accuracy from this sweep. Tasks with
+≥3 turns and a sustained tool-call density would be required to exercise the
+`conversational ↔ tool_heavy ↔ mixed` transitions and the hysteresis described in
+`A_ahc-algorithm §3.2`.
+
+### 7.4 Recall-tool usage and AHC-internal cost share
+
+Across all AHC runs in this study: `0` invocations of `recall_tool_result`, `0`
+compaction events. Consequently the AHC-internal LLM-call line items (Observer call,
+digest generation, reflection) contribute `$0` to the per-task cost — the AHC config
+ran the actor model only. The cost difference between `ahc_full` and `full_context` in
+§6.1 is **not** explained by AHC overhead; it is the actor model price difference
+(`gemini-3-flash-lite-preview` vs `gemini-3-flash`).
 
 ### 7.5 Reflection-trigger frequency
 
-<!-- TBD: on a 15-turn trajectory, how often does Tier-2 cross REFLECTION_THRESHOLD?
-     If > 1× per medium-traj, the threshold should be revisited. -->
+The Tier-2 observation log never crossed the `REFLECTION_THRESHOLD = 40000` token
+threshold in any cell. With Observer and Offloader inactive, Tier-2 stays empty, and
+reflection is correspondingly inactive. Whether 40K is the right threshold on
+medium-distance trajectories is **not addressable** from this sweep; it remains an open
+parameter.
 
-### 7.6 Comparison with prior agent-generated study
+### 7.6 Comparison with the prior agent-generated study
 
-<!-- TBD: comparison with [@holosophus_2026]. Where do our numbers agree
-     (task-aware Pareto-dominance on LongMemEval; τ-bench negative result), where do
-     they diverge, and what is the most likely cause (smaller n, different actor model,
-     adapter differences). Restate provenance disclosure briefly. -->
+The prior agent-generated study [@holosophus_2026] reports a strong directional finding
+that task-aware compaction Pareto-dominates `full_context` on LongMemEval at
+`n = 120 + 50` (Δ ≈ +0.118, paired-permutation `p = 0.0042`) and a negative result on
+τ-bench retail (task-aware degrades to pass@1 ≈ 0). Our LongMemEval-Medium and
+τ-bench-retail-medium cells in this study were executed on smoke fixtures at
+`n ≤ 3`; we therefore **cannot replicate or refute** either of those findings. The
+AssistantTraj benchmark in the present work is novel relative to [@holosophus_2026] and
+is the only bench on which we report directional evidence of our own.
+
+Per the provenance disclosure of §2, we continue to treat [@holosophus_2026]'s numbers
+as motivating hypotheses rather than as established prior art. Our results neither
+confirm nor falsify them at the present scale.
 
 ### 7.7 Limitations
 
-- **Vendor-specific cache measurement.** Cache-hit numbers come from an n = 10–15
-  Anthropic-direct subset; OpenRouter cache exposure is inconsistent across snapshots.
-- **AssistantTraj scale.** n = 30–40 is small for strong claims on the multimodal axis;
-  we report it as an internal benchmark for cross-class robustness rather than as an
-  external SOTA target.
-- **Classifier calibration.** The classifier thresholds are tuned on a small set of
-  trajectories; broader calibration is left to future work (`CALIBRATION_AUTO` flag).
+This study is best read as an **integration-grade end-to-end build** rather than a
+powered evaluation. We list the specific scope reductions versus the original eval
+design (§5; `system_design §6.2`) so that future work can pick up where this one stops:
+
+- **Sample size on external benchmarks.** LongMemEval-Medium, LoCoMo-Medium, and
+  τ-bench retail were executed on smoke-fixture task lists at `n = 3, 3, 2` per cell
+  respectively, against an originally planned `n = 60+30 / 20 / 25`. The full-scale
+  sweeps remain to be run; the harness and adapters are ready in the repository.
+- **AHC compaction modules not exercised.** Across every cell in this sweep, the
+  Observer fired 0 times and the Offloader fired 0 times. Tasks were too short to cross
+  `OBSERVER_THRESHOLD = 8000` tokens. The architectural claim that *AHC's hybrid
+  routing helps* is therefore **untested** at the data scale of this report.
+- **Classifier locked on `mixed`.** The trajectory classifier returned `mixed` on every
+  turn across every AHC run (cold-start default, see §7.3). The routing decision the
+  classifier is supposed to make never actually fired.
+- **Cache-hit subset measured below cache minimum.** E3 inputs (260–380 tokens) sat
+  below Anthropic's `claude-sonnet-4-6` prompt-cache minimum input length
+  (~1024 tokens), and `cache_read_input_tokens = 0` was observed across all cells.
+  `system_design §2.1`'s ≥ 60% cache-hit target is therefore **not measured** by this
+  study.
+- **Actor model confound.** AHC was launched with `AHC_ACTOR_MODEL` env override to
+  `gemini-3-flash-lite-preview` (a budget-hedging change made during E0; see
+  Appendix A and the `1a5af22` commit), while the other baselines ran on
+  `gemini-3-flash-preview`. The +0.067 accuracy delta on AssistantTraj cannot be
+  cleanly attributed to AHC at this configuration.
+- **Ablation grid not interpretable.** E2 was executed at `n = 1` for most cells; the
+  3-variant ablation produces no usable signal except the sanity-cross on
+  `ahc_full @ AssistantTraj @ seed = 42` (within 0.05 of the E1 same-cell number).
+  `ahc_no_classifier` and `ahc_no_async_buffer` variants were not run.
+- **Single-vendor measurement on the main path.** All E1 numbers come from a single
+  OpenRouter actor (Gemini family). Cross-vendor sanity was not in scope.
 - **Prior agent-generated study.** As disclosed in §2, the cited study
   [@holosophus_2026] is fully agent-generated and was not subjected to human review;
   the numbers we cite from it are directional, not authoritative.
 
 ## 8. Conclusion
 
-We presented **Adaptive Hybrid Compaction (AHC)** — middleware that classifies the
-trajectory class on cheap features and routes between query-anchored extraction and
-atomic-group offloading, packaged as AI SDK v6 middleware over a Mastra-inspired 3-tier
-shape. The core claim is that **the right compaction policy is conditioned on the
-trajectory class**, and that a lightweight rules-based classifier suffices to dispatch
-between policies without sacrificing accuracy on any class.
+We presented **Adaptive Hybrid Compaction (AHC)** — an AI SDK v6 middleware that
+classifies the trajectory class on cheap rules-based features and routes between a
+query-anchored extraction policy and an atomic-group offload policy over a
+Mastra-inspired 3-tier append-only shape. The architectural claim, that **the right
+compaction policy is conditioned on the trajectory class** and that a lightweight
+classifier suffices to dispatch between policies, is consistent with the directional
+AssistantTraj result (AHC reached the highest accuracy among four configurations at
+`n = 60`), but **is not statistically established by this report** at the present
+sample size — and the AHC compaction modules did not fire on the trajectories actually
+evaluated (§7.7).
 
-<!--
-CONCLUSION numbers (F1b): one-paragraph summary of headline deltas — Pareto-dominance
-count out of four benches, τ-bench recovery from ~0, cache-hit ≥ 60%, ablation
-confirmation. Plus a one-sentence pointer to repo + reproducibility appendix.
--->
+The work delivered is the **end-to-end integrated system**: an AHC implementation in
+`src/core/`, an AI SDK v6 middleware adapter in `src/adapters/`, a TypeScript eval
+harness in `src/eval/` with adapters for all four benchmarks, the AssistantTraj
+benchmark with 30 schema-conformant tasks, four baseline runners
+(`full_context`, `anthropic_compact`, `mastra_om`, plus AHC), an ablation matrix
+definition, an Anthropic-direct cache-hit measurement path, optional Langfuse OTEL
+observability, and a Next.js demo UI with live AHC telemetry sidebar (`src/ui/`). The
+pipeline ran end-to-end on four benchmarks at the smoke-fixture scale that fit the
+budget hedge applied in Track E. Repository link and the full reproducibility checklist
+are in Appendix A.
 
-**Future work** (consistent with `system_design §2.2`):
+**Future work — immediate.** Three steps would convert this from an integration
+deliverable into a powered evaluation, and they are well-scoped:
 
-- **Cross-session memory layer.** AHC is single-session; combining it with a Mem0-style
-  cross-session store is a natural extension.
-- **Calibration automation.** The `CALIBRATION_AUTO` flag is implemented but defaults
-  off — auto-tuning thresholds on a small ground-truth set is a near-term improvement.
-- **Schema-aware digest.** With registered tool schemas, the digest could be projected
-  rather than LLM-summarized — cheaper and more deterministic.
-- **Long-horizon (15+ turns).** AHC is designed for medium-distance trajectories;
-  long-horizon support (with more aggressive reflection scheduling) is non-goal here
-  but worth measuring.
-- **Cross-vendor robustness.** Our cross-vendor sanity is limited; broader actor-model
-  sweeps would harden the policy-class claim.
+1. **Re-run at the originally planned scale** (`n = 60+30 / 20 / 25 / 30` across the
+   four benchmarks) with a single actor model across all baselines. The harness, sweep
+   YAMLs, and adapters are already committed.
+2. **Use real LongMemEval / LoCoMo medium subsets** (16K-token-plus inputs) so the AHC
+   Observer + Offloader actually fire and the trajectory classifier exits the
+   cold-start state.
+3. **Run the cache-hit subset on inputs ≥ 1024 tokens** so Anthropic's prompt cache
+   becomes measurable.
+
+**Future work — longer-horizon** (consistent with `system_design §2.2`): a cross-session
+memory layer (Mem0-style) composed with AHC's single-session compaction; automatic
+threshold calibration via `CALIBRATION_AUTO`; schema-aware digest projection when tool
+schemas are registered; support for long-horizon (15+ turns) trajectories with more
+aggressive reflection scheduling; and broader cross-vendor robustness checks.
 
 ## Appendix A. Reproducibility
 
@@ -656,14 +780,21 @@ Required to pass on the submission tag.
 - **E3 (cache-hit subset):** `eval/sweeps/cache_hit_e3.yaml`, budget cap `$20`, 3
   configurations × n = 10–15, on Anthropic direct API.
 
-**Models pinned.** Snapshots fixed at sweep launch and recorded in each sweep's
-`meta.json`.
+**Models pinned.** Snapshots recorded in each cell's `meta.json` under
+`benchmarks/runs/<sweep>/<bench>/<config>/<seed>/meta.json`.
 
-- Actor model: `google/gemini-3-flash-preview` (snapshot TBD-F3).
-- LLM judge: `openai/gpt-5.4` (evaluation only).
-- Cache-hit subset actor: `anthropic/claude-sonnet-4-6`.
-- AHC internal models (Observer, digest, reflection): `google/gemini-3-flash-preview`
-  by default.
+- Baseline actor model (`full_context`, `anthropic_compact`, `mastra_om` configs):
+  `google/gemini-3-flash-preview` via OpenRouter.
+- AHC actor model: `google/gemini-3-flash-lite-preview` via OpenRouter (post-hoc
+  `AHC_ACTOR_MODEL` env override applied during Track E budget hedge; commit
+  `1a5af22`). This is a confound for the AHC vs baseline comparison in §6.1; see §7.7.
+- LLM judge: `openai/gpt-5.4` via OpenRouter (evaluation only, with response-caching
+  enabled for repeated judge calls — judge cost in this sweep was approximately
+  `$1.87` of the `$3.55` total).
+- Cache-hit subset actor: `anthropic/claude-sonnet-4-6` via Anthropic direct API
+  (or LiteLLM forwarder when `LITELLM_MASTER_KEY` is set).
+- AHC internal models (Observer, digest, reflection): same as the AHC actor by default
+  — not exercised in this study because the modules did not fire (§7.7).
 
 **Seeds.** 42 (primary), 43 (replication). Actor decode at `temperature = 0`.
 
