@@ -111,20 +111,16 @@ describe('E1/E2/E3 sweep YAML scaffolds (E0)', () => {
     expect(plan.budget_usd).toBe(30)
   })
 
-  test('ablation_e2.yaml: 4 AHC variants × 2 text benches × 2 seeds', async () => {
+  test('ablation_e2.yaml: 3 AHC variants × 2 text benches × 2 seeds (E1 budget hedge)', async () => {
     const raw = parseYaml(
       await readFile(resolve(repoRoot, 'eval/sweeps/ablation_e2.yaml'), 'utf8'),
     ) as unknown
     const plan = validateSweep(raw, 'ablation_e2.yaml')
     expect(plan.benches).toEqual(['assistant-traj', 'longmemeval-med'])
-    expect(plan.configs).toHaveLength(4)
+    // E1 budget cut: dropped ahc_no_async_buffer (lowest-signal ablation).
+    expect(plan.configs).toHaveLength(3)
     const ids = plan.configs.map((c) => c.id).sort()
-    expect(ids).toEqual([
-      'ahc_full',
-      'ahc_no_async_buffer',
-      'ahc_no_observer',
-      'ahc_no_offloader',
-    ])
+    expect(ids).toEqual(['ahc_full', 'ahc_no_observer', 'ahc_no_offloader'])
     // Each non-baseline config sets exactly one flag to false (except ahc_full).
     for (const c of plan.configs) {
       if (c.id === 'ahc_full') continue
