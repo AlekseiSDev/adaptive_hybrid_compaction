@@ -18,10 +18,12 @@ import type {
   BenchAdapter,
   Conversation,
   Grader,
+  InstrumentationEvent,
   RunnerContext,
   RunnerResponse,
   Score,
   Task,
+  TurnRecord,
   Runner,
 } from '../../types.js'
 import {
@@ -140,7 +142,7 @@ export function makeTauBenchRunner(opts: MakeTauBenchRunnerOpts): Runner {
       })
       return {
         text: result.finalText,
-        turns: [],
+        turns: buildEpisodeTurns(result.events),
         errors: result.errors.map((e) => ({
           turn_index: e.turn_index,
           kind: e.kind,
@@ -157,4 +159,37 @@ export function makeTauBenchRunner(opts: MakeTauBenchRunnerOpts): Runner {
       }
     },
   }
+}
+
+// Build TurnRecord skeletons keyed by turn_index seen in events. Events are
+// later attached by runSweep via enrichTurnsWithEvents — that helper filters
+// per turn_index, so a turn without a TurnRecord drops its events silently.
+// tau-bench has no per-step token attribution (tokens aggregated at episode
+// level via result.totals → RunRecord.totals), so individual TurnRecord
+// token counts stay 0 — events flow into them, totals stay episode-level.
+//
+// Vanilla tau_bench_agent (no AHC) emits no compaction/recall events, so
+// this returns []. AHC variant accumulates 1+ events per multi-turn episode
+// → 1+ TurnRecords with attached compaction_events.
+export function buildEpisodeTurns(events: readonly InstrumentationEvent[]): TurnRecord[] {
+  const turnIndices = new Set<number>()
+  for (const e of events) {
+    if (e.kind === 'compaction' || e.kind === 'recall') {
+      turnIndices.add(e.payload.turn_index)
+    } else {
+      turnIndices.add(e.turn_index)
+    }
+  }
+  return [...turnIndices]
+    .sort((a, b) => a - b)
+    .map(
+      (idx): TurnRecord => ({
+        turn_index: idx,
+        input_tokens: 0,
+        output_tokens: 0,
+        wall_clock_ms: 0,
+        recall_events: [],
+        compaction_events: [],
+      }),
+    )
 }
