@@ -50,6 +50,11 @@ function unauthorized(): NextResponse {
 export async function middleware(request: NextRequest): Promise<NextResponse> {
   const password = process.env.DEMO_PASSWORD;
   if (!password) {
+    // Local dev convenience: skip auth when no password is configured. Production
+    // deploys without DEMO_PASSWORD still 503 to avoid accidental open access.
+    if (process.env.NODE_ENV !== 'production') {
+      return NextResponse.next();
+    }
     return new NextResponse('Demo auth not configured (DEMO_PASSWORD unset)', {
       status: 503,
     });
