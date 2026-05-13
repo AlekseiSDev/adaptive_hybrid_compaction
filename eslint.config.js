@@ -12,6 +12,9 @@ export default tseslint.config(
       'observability/data/**',
       'observability/.langfuse/**',
       'benchmarks/runs/**',
+      // Next.js generated artifacts (build output + route type stubs).
+      '**/.next/**',
+      'src/ui/next-env.d.ts',
     ],
   },
   js.configs.recommended,

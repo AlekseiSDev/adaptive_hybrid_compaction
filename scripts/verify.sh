@@ -6,8 +6,10 @@ cd "$(dirname "$0")/.."
 cmd="${1:-all}"
 
 run_typecheck() {
-  echo "→ typecheck"
+  echo "→ typecheck (backend)"
   pnpm exec tsc --noEmit
+  echo "→ typecheck (ui)"
+  pnpm exec tsc --noEmit -p src/ui/tsconfig.json
 }
 
 run_lint() {
