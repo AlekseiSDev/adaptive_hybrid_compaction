@@ -1,0 +1,10 @@
+{
+  "bench": "locomo-med",
+  "config_id": "17e02d3b263d9a00",
+  "seed": 43,
+  "n_total": 3,
+  "n_completed": 3,
+  "mean_primary_score": 1,
+  "total_cost_usd": 0.0039435,
+  "status": "complete"
+}

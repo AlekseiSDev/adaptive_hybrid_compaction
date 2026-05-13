@@ -1,0 +1,10 @@
+{
+  "bench": "assistant-traj",
+  "config_id": "7e22cf2fb044d669",
+  "seed": 43,
+  "n_total": 30,
+  "n_completed": 30,
+  "mean_primary_score": 0.25,
+  "total_cost_usd": 0.159525,
+  "status": "complete"
+}
