@@ -35,13 +35,29 @@ function parseArgs(argv: string[]): { sweep: string } {
   return { sweep: out['sweep'] }
 }
 
-function validateSweep(raw: unknown, source: string): SweepPlan {
+export const VALID_PROVIDERS = new Set(['openrouter', 'anthropic_direct'])
+
+export function validateSweep(raw: unknown, source: string): SweepPlan {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
     throw new Error(`sweep ${source}: must be a YAML object at top level`)
   }
   const obj = raw as Record<string, unknown>
   for (const k of REQUIRED_KEYS) {
     if (!(k in obj)) throw new Error(`sweep ${source}: missing required key: ${k}`)
+  }
+  // E0: per-row `provider` enum check (optional field; only meaningful for
+  // ahc_core baseline, but validated globally so typos surface early).
+  const configs = obj['configs']
+  if (Array.isArray(configs)) {
+    for (const c of configs as Array<Record<string, unknown>>) {
+      const provider = c['provider']
+      if (provider !== undefined && !VALID_PROVIDERS.has(String(provider))) {
+        throw new Error(
+          `sweep ${source}: config "${String(c['id'])}" — invalid provider "${String(provider)}", ` +
+            `must be one of: ${[...VALID_PROVIDERS].join(', ')}`,
+        )
+      }
+    }
   }
   return obj as unknown as SweepPlan
 }
@@ -133,7 +149,13 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch((err: unknown) => {
-  console.error(err instanceof Error ? err.message : String(err))
-  process.exit(1)
-})
+// Run main() only when invoked as a script (tsx scripts/eval.ts ...), not
+// when imported by a test for `validateSweep` / `VALID_PROVIDERS` etc.
+// argv[1] resolves to the absolute path of the entry; URL form must match.
+const entryUrl = `file://${process.argv[1] ?? ''}`
+if (import.meta.url === entryUrl) {
+  main().catch((err: unknown) => {
+    console.error(err instanceof Error ? err.message : String(err))
+    process.exit(1)
+  })
+}

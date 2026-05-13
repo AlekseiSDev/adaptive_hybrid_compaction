@@ -291,7 +291,11 @@ describe('default registries', () => {
   test('adapter registry resolves synthetic; throws on unknown bench', () => {
     const synth = defaultAdapterRegistry.resolve('synthetic')
     expect(synth.adapter.name).toBe('synthetic')
-    expect(() => defaultAdapterRegistry.resolve('locomo-med')).toThrow(/not registered/)
+    // D5 wired locomo-med + tau-bench-retail-med + longmemeval-med. Use an
+    // explicitly-unknown literal cast to exercise the throw path.
+    expect(() =>
+      defaultAdapterRegistry.resolve('fake-bench-unknown' as unknown as 'synthetic'),
+    ).toThrow(/not registered/)
   })
 
   test('runner registry: baseline:noop_baseline resolves stub; ahc_flags{} routes to ahc_core (B5)', () => {
@@ -321,5 +325,43 @@ describe('default registries', () => {
     expect(() =>
       defaultRunnerRegistry.resolve({ id: 'x', baseline: 'unknown_baseline' }),
     ).toThrow(/unknown runner/)
+  })
+
+  test('runner registry: provider:anthropic_direct dispatches to ANTHROPIC_API_KEY env var (E0)', () => {
+    // ahc_core with provider:'anthropic_direct' reads ANTHROPIC_API_KEY, not
+    // OPENROUTER_API_KEY. With both missing, error message mentions the
+    // anthropic-specific env name.
+    const prevOR = process.env['OPENROUTER_API_KEY']
+    const prevAN = process.env['ANTHROPIC_API_KEY']
+    delete process.env['OPENROUTER_API_KEY']
+    delete process.env['ANTHROPIC_API_KEY']
+    try {
+      expect(() =>
+        defaultRunnerRegistry.resolve({
+          id: 'x',
+          ahc_flags: {},
+          provider: 'anthropic_direct',
+        }),
+      ).toThrow(/provider=anthropic_direct.*ANTHROPIC_API_KEY/)
+    } finally {
+      if (prevOR !== undefined) process.env['OPENROUTER_API_KEY'] = prevOR
+      if (prevAN !== undefined) process.env['ANTHROPIC_API_KEY'] = prevAN
+    }
+  })
+
+  test('runner registry: provider:openrouter explicit still reads OPENROUTER_API_KEY (E0 default)', () => {
+    const prevOR = process.env['OPENROUTER_API_KEY']
+    delete process.env['OPENROUTER_API_KEY']
+    try {
+      expect(() =>
+        defaultRunnerRegistry.resolve({
+          id: 'x',
+          ahc_flags: {},
+          provider: 'openrouter',
+        }),
+      ).toThrow(/provider=openrouter.*OPENROUTER_API_KEY/)
+    } finally {
+      if (prevOR !== undefined) process.env['OPENROUTER_API_KEY'] = prevOR
+    }
   })
 })

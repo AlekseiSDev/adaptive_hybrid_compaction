@@ -109,6 +109,13 @@ export type ConfigDef = {
   id: string
   baseline?: string
   ahc_flags?: Record<string, unknown>
+  /**
+   * Optional provider override for `ahc_core` baseline. 'openrouter' (default)
+   * dispatches actor + AHC internal calls through OpenRouter; 'anthropic_direct'
+   * routes through @ai-sdk/anthropic for E3 cache-hit subset. Ignored for other
+   * baselines. Per decisions.md [2026-05-13] E0 — ConfigDef.provider field.
+   */
+  provider?: 'openrouter' | 'anthropic_direct'
 }
 
 export type RunnerContext = {

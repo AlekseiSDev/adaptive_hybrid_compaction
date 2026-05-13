@@ -169,10 +169,17 @@ function makeMastraOmRunner(): Runner {
 const LITELLM_MODEL = 'claude-sonnet-4.6'
 
 function makeAhcCoreRunner(config: ConfigDef): Runner {
-  const apiKey = process.env['OPENROUTER_API_KEY']
+  // E0: provider switch (`'openrouter'` default, `'anthropic_direct'` for E3
+  // cache-hit subset). Env var + actor model resolution diverge per provider.
+  const provider = config.provider ?? 'openrouter'
+  const apiKey =
+    provider === 'anthropic_direct'
+      ? process.env['ANTHROPIC_API_KEY']
+      : process.env['OPENROUTER_API_KEY']
   if (!apiKey) {
+    const envName = provider === 'anthropic_direct' ? 'ANTHROPIC_API_KEY' : 'OPENROUTER_API_KEY'
     throw new Error(
-      'ahc_core runner requires OPENROUTER_API_KEY env var (primary actor model = Gemini-3-Flash-Preview through OpenRouter, per system_design §6.1).',
+      `ahc_core runner with provider=${provider} requires ${envName} env var.`,
     )
   }
   const flagsFromConfig = (config.ahc_flags ?? {}) as Record<string, unknown>
@@ -181,7 +188,9 @@ function makeAhcCoreRunner(config: ConfigDef): Runner {
   const { model: _omitModel, ...featureFlagsRaw } = flagsFromConfig
   const baseline = ahcCoreBaseline({
     apiKey,
-    baseURL: 'https://openrouter.ai/api/v1',
+    provider,
+    // baseURL only meaningful for OpenRouter path; @ai-sdk/anthropic uses SDK default.
+    ...(provider === 'openrouter' ? { baseURL: 'https://openrouter.ai/api/v1' } : {}),
     ...(typeof modelOverride === 'string' ? { model: modelOverride } : {}),
     // Other ahc_flags keys (TRAJECTORY_CLASSIFIER, REFLECTION, etc.) map to
     // FeatureFlags — pass through directly; createAhcMiddleware merges with defaults.
