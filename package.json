@@ -15,9 +15,9 @@
     "test:unit": "vitest run --passWithNoTests --exclude 'src/core/cacheInvariance.test.ts'",
     "test:cache-invariance": "vitest run --passWithNoTests src/core/cacheInvariance.test.ts",
     "verify": "./scripts/verify.sh",
-    "dev:ui": "sh -c 'set -a && . ./.env && set +a && exec next dev src/ui -p 3000 --webpack'",
-    "build:ui": "sh -c 'set -a && . ./.env && set +a && exec next build src/ui --webpack'",
-    "start:ui": "sh -c 'set -a && . ./.env && set +a && exec next start src/ui -p 3000'"
+    "dev:ui": "sh -c 'if [ -f ./.env ]; then set -a && . ./.env && set +a; fi; exec next dev src/ui -p \"${PORT:-3000}\" --webpack'",
+    "build:ui": "sh -c 'if [ -f ./.env ]; then set -a && . ./.env && set +a; fi; exec next build src/ui --webpack'",
+    "start:ui": "sh -c 'if [ -f ./.env ]; then set -a && . ./.env && set +a; fi; exec next start src/ui -p \"${PORT:-3000}\"'"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
