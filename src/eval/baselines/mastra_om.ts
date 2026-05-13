@@ -66,6 +66,35 @@ function extractTextContent(msg: Message): string {
     .join('\n')
 }
 
+function resolveMastraModel(deps: MastraOMDeps): {
+  providerId: string
+  modelId: string
+  url: string
+  apiKey: string
+} {
+  return {
+    providerId: deps.providerId ?? DEFAULT_PROVIDER_ID,
+    modelId: deps.modelId ?? DEFAULT_MODEL_ID,
+    url: deps.url ?? DEFAULT_URL,
+    apiKey: deps.apiKey,
+  }
+}
+
+// Memory options carrying explicit OM model override. Without this, Mastra's
+// OM falls back to hardcoded `google/gemini-2.5-flash` via Google direct API
+// (looks up GOOGLE_GENERATIVE_AI_API_KEY env) — our project uses OpenRouter,
+// so the silent fallback prevents OM from running at all. See investigation
+// in docs/investigations/ + plan S13.
+export function buildMemoryOptions(deps: MastraOMDeps): {
+  observationalMemory: { model: ReturnType<typeof resolveMastraModel> }
+} {
+  return {
+    observationalMemory: {
+      model: resolveMastraModel(deps),
+    },
+  }
+}
+
 function buildAgent(
   deps: MastraOMDeps,
   storagePath: string,
@@ -76,24 +105,14 @@ function buildAgent(
   })
   const memory = new Memory({
     storage,
-    options: {
-      // Observational memory enabled per design §4 (main differentiator vs
-      // raw thread persistence). Mastra default config; agent's compaction
-      // routine kicks in at framework-internal thresholds.
-      observationalMemory: true,
-    },
+    options: buildMemoryOptions(deps),
   })
   const agent = new Agent({
     id: 'ahc_c1_mastra_om',
     name: 'AHC C1 Mastra OM baseline',
     instructions:
       'You are a helpful assistant. Respond concisely to user messages.',
-    model: {
-      providerId: deps.providerId ?? DEFAULT_PROVIDER_ID,
-      modelId: deps.modelId ?? DEFAULT_MODEL_ID,
-      url: deps.url ?? DEFAULT_URL,
-      apiKey: deps.apiKey,
-    },
+    model: resolveMastraModel(deps),
     memory,
   })
   // Mastra agent holds storage refs through memory; cleanup = rm file after

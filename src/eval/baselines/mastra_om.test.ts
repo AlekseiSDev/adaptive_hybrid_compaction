@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
-import { mastraOmBaseline } from './mastra_om.js'
+import { buildMemoryOptions, mastraOmBaseline } from './mastra_om.js'
 import type { Message, Task } from '../types.js'
 
 const makeTask = (id = 'mastra-t1'): Task => ({
@@ -25,6 +25,31 @@ beforeEach(async () => {
 
 afterEach(async () => {
   await rm(workspace, { recursive: true, force: true })
+})
+
+describe('buildMemoryOptions — OM model override (S13)', () => {
+  test('observationalMemory carries explicit model object (not boolean `true`)', () => {
+    const opts = buildMemoryOptions({
+      apiKey: 'sk-test',
+      providerId: 'openrouter',
+      modelId: 'google/gemini-3-flash-preview',
+      url: 'https://openrouter.ai/api/v1',
+    })
+    const model = opts.observationalMemory.model
+    expect(model.providerId).toBe('openrouter')
+    expect(model.modelId).toBe('google/gemini-3-flash-preview')
+    expect(model.url).toBe('https://openrouter.ai/api/v1')
+    expect(model.apiKey).toBe('sk-test')
+  })
+
+  test('defaults applied when deps omit provider/model/url', () => {
+    const opts = buildMemoryOptions({ apiKey: 'sk-test' })
+    const model = opts.observationalMemory.model
+    expect(model.providerId).toBe('openrouter')
+    expect(model.modelId).toBe('google/gemini-3-flash-preview')
+    expect(model.url).toBe('https://openrouter.ai/api/v1')
+    expect(model.apiKey).toBe('sk-test')
+  })
 })
 
 describe('mastraOmBaseline.name + prepare', () => {
