@@ -1,0 +1,20 @@
+{
+  "task_id": "at_research_write_001",
+  "category": "research_write",
+  "source": "real",
+  "turns": [
+    {
+      "role": "user",
+      "content": [{ "type": "text", "text": "Write a one-paragraph summary." }]
+    }
+  ],
+  "tools_available": [],
+  "evaluation": {
+    "strategy": "llm_judge",
+    "rubric_id": "research_write",
+    "expected_summary": "Accurate single-paragraph synthesis."
+  },
+  "provenance": {
+    "review_signoff": "AS 2026-04-13"
+  }
+}

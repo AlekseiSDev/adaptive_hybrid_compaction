@@ -1,0 +1,63 @@
+{
+  "task_id": "at_code_iter_001",
+  "category": "code_iter",
+  "source": "real",
+  "turns": [
+    {
+      "role": "user",
+      "content": [{ "type": "text", "text": "Write a function that reverses a string." }]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "tool_use",
+          "tool_use_id": "tu_001",
+          "name": "run_python",
+          "input": { "code": "def reverse(s):\n    return s[::-1]" }
+        }
+      ],
+      "expected_tool_calls": [
+        { "tool_name": "run_python", "required": true, "args_match": "semantic" }
+      ]
+    },
+    {
+      "role": "tool",
+      "content": [
+        {
+          "type": "tool_result",
+          "tool_use_id": "tu_001",
+          "content": [{ "type": "text", "text": "ok" }]
+        }
+      ]
+    }
+  ],
+  "tools_available": [
+    {
+      "name": "run_python",
+      "description": "Execute python code",
+      "input_schema": {
+        "type": "object",
+        "properties": { "code": { "type": "string" } },
+        "required": ["code"]
+      }
+    }
+  ],
+  "evaluation": {
+    "strategy": "composite",
+    "aggregate": "all",
+    "rules": [
+      { "strategy": "regex", "pattern": "def\\s+\\w+\\(" },
+      {
+        "strategy": "llm_judge",
+        "rubric_id": "code_iter",
+        "expected_summary": "Function correctly reverses any input string."
+      }
+    ]
+  },
+  "provenance": {
+    "anonymized_at": "2026-04-12",
+    "anonymization_steps": ["scrub_user_id", "replace_paths"],
+    "review_signoff": "AS 2026-04-13"
+  }
+}

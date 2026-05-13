@@ -1,0 +1,23 @@
+{
+  "task_id": "at_image_qa_001",
+  "category": "image_qa",
+  "source": "opensource",
+  "turns": [
+    {
+      "role": "user",
+      "content": [
+        { "type": "text", "text": "What is in this image?" },
+        { "type": "image", "path": "input_image.png", "alt": "A still-life photo" }
+      ]
+    }
+  ],
+  "tools_available": [],
+  "evaluation": {
+    "strategy": "llm_judge",
+    "rubric_id": "image_qa",
+    "expected_summary": "A red apple on a wooden table."
+  },
+  "provenance": {
+    "review_signoff": "AS 2026-04-13"
+  }
+}

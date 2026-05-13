@@ -1,0 +1,17 @@
+{
+  "category": "image_qa",
+  "source": "opensource",
+  "turns": [
+    {
+      "role": "user",
+      "content": [{ "type": "text", "text": "What is in this image?" }]
+    }
+  ],
+  "tools_available": [],
+  "evaluation": {
+    "strategy": "llm_judge",
+    "rubric_id": "image_qa",
+    "expected_summary": "A red apple."
+  },
+  "provenance": {}
+}

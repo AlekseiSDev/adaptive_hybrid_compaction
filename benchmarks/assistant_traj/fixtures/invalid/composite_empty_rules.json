@@ -1,0 +1,18 @@
+{
+  "task_id": "at_mixed_001",
+  "category": "mixed",
+  "source": "opensource",
+  "turns": [
+    {
+      "role": "user",
+      "content": [{ "type": "text", "text": "Mixed assistant flow." }]
+    }
+  ],
+  "tools_available": [],
+  "evaluation": {
+    "strategy": "composite",
+    "aggregate": "all",
+    "rules": []
+  },
+  "provenance": {}
+}
