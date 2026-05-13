@@ -1,0 +1,23 @@
+name: main_e1_tau
+# E1 main sweep — tau-bench-retail-med. Tau-bench uses live agent loop (env
+# state + tool calls + user-sim), so it ships separate baselines from text
+# benches: tau_bench_agent (no compaction baseline) and tau_bench_agent_ahc
+# (AHC middleware over actor).
+#
+# Asymmetric matrix per decisions.md [2026-05-13] E0 — Single shared AHC-over-
+# AI-SDK runtime: full_context / mastra_om / anthropic_compact baselines do
+# not naturally fit tau-bench Runner shape (they are per-turn LLM step, not
+# multi-step tool loop); F report discloses this in Methodology.
+#
+# 1 bench × 2 baselines × 2 seeds = 4 cells. Budget ~$30 (tau-bench episodes
+# multi-step → higher cost than text-bench single-step).
+#
+# Run: pnpm tsx scripts/eval.ts --sweep eval/sweeps/main_e1_tau.yaml
+
+benches:
+  - tau-bench-retail-med
+configs:
+  - { id: tau_bench_agent,     baseline: tau_bench_agent }
+  - { id: tau_bench_agent_ahc, baseline: tau_bench_agent_ahc, ahc_flags: {} }
+seeds: [42, 43]
+budget_usd: 30

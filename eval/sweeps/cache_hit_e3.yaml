@@ -1,0 +1,41 @@
+name: cache_hit_e3
+# E3 cache-hit subset — Anthropic-direct Sonnet-4-6 against LongMemEval-med
+# ≥5-turn subset. Verifies system_design §2.1 target cache_read_input_tokens
+# ratio ≥ 60%. Single seed (no replication needed for cache-rate metric —
+# deterministic at temp=0).
+#
+# Provider switch (decisions.md [2026-05-13] E0 — ConfigDef.provider field):
+#   ahc_full × anthropic_direct  — main test; @ai-sdk/anthropic provider
+#                                  surfaces cache_read_input_tokens via
+#                                  AnthropicUsage in TurnRecord.
+#   anthropic_compact            — reference baseline (Anthropic's native
+#                                  server-side compact_20260112 strategy);
+#                                  always Anthropic-native, no provider
+#                                  switch needed.
+#
+# mastra_om × anthropic_direct deferred — Mastra agent stack does not yet
+# accept the Anthropic-direct provider through its OpenAICompatibleConfig
+# surface. Out of E3 scope per E_main-runs.md §7 (3 of 4 configs).
+#
+# Budget caveat: actor model is claude-sonnet-4-6 ($3/M input, $15/M output)
+# — pricier than Gemini-3-flash. LME ≥5-turn tasks have ~16k input tokens
+# each → ~$0.20 / task × ~10 tasks × 2 configs ≈ $4 + judge calls. Cap $20
+# leaves headroom for retries.
+#
+# Pre-flight smoke (assertion: turns[1].cache_read_input_tokens > 0 on 2nd
+# turn — see src/eval/cache_hit_e3.smoke.test.ts):
+#   ANTHROPIC_API_KEY=... pnpm vitest run src/eval/cache_hit_e3.smoke.test.ts
+#
+# Run:
+#   ANTHROPIC_API_KEY=... pnpm tsx scripts/eval.ts --sweep eval/sweeps/cache_hit_e3.yaml
+
+benches:
+  - longmemeval-med
+configs:
+  - id: ahc_full_anthropic
+    ahc_flags: { model: claude-sonnet-4-6 }
+    provider: anthropic_direct
+  - id: anthropic_compact
+    baseline: anthropic_compact
+seeds: [42]
+budget_usd: 20

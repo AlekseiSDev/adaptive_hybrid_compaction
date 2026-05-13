@@ -1,0 +1,27 @@
+name: ablation_e2
+# E2 ablation grid — 4 AHC configs × 2 text benches × 2 seeds = 16 cells.
+# Per E_main-runs.md §2 (ablations isolate which AHC component drives the gain).
+# ahc_full reference is cross-checked against E1 main_e1_text ahc_full as a
+# sanity replication signal before consuming ablation deltas.
+#
+# AHC flag map (src/core/flags.ts):
+#   TASK_AWARE_EXTRACTION — observer Tier-2 enrichment
+#   TYPE_AWARE_OFFLOAD    — Type-Aware Offloader to scratchpad
+#   ASYNC_BUFFER          — Async Buffer (delays observer until idle)
+#   TRAJECTORY_CLASSIFIER — Trajectory Classifier (per-turn class signal)
+#   REFLECTION            — Reflection on Tier-2 size threshold
+#
+# tau-bench ablations deferred — E2 budget covers text only.
+#
+# Run: pnpm tsx scripts/eval.ts --sweep eval/sweeps/ablation_e2.yaml
+
+benches:
+  - assistant-traj
+  - longmemeval-med
+configs:
+  - { id: ahc_full,             ahc_flags: {} }
+  - { id: ahc_no_observer,      ahc_flags: { TASK_AWARE_EXTRACTION: false } }
+  - { id: ahc_no_offloader,     ahc_flags: { TYPE_AWARE_OFFLOAD: false } }
+  - { id: ahc_no_async_buffer,  ahc_flags: { ASYNC_BUFFER: false } }
+seeds: [42, 43]
+budget_usd: 30

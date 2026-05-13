@@ -1,0 +1,25 @@
+name: main_e1_text
+# E1 main sweep — text benches (AssistantTraj / LongMemEval-med / LoCoMo-med).
+# 3 benches × 4 baselines × 2 seeds = 24 cells. Budget per plan = ~$90 (text
+# portion of E1 total ~$120; tau-bench portion lives in main_e1_tau.yaml).
+#
+# Per-bench compaction failure modes (docs/design/D_assistant-traj.md §9):
+#   assistant-traj    — agent trajectory coherence (replay across 5-15 turns)
+#   longmemeval-med   — passive recall (long single-turn input ~16k tokens)
+#   locomo-med        — multi-session dialog recall
+#
+# Run: pnpm tsx scripts/eval.ts --sweep eval/sweeps/main_e1_text.yaml
+# Dry-run (E §8 pre-flight, ~$2 spend):
+#   pnpm tsx scripts/eval.ts --sweep eval/sweeps/main_e1_text.yaml --dry-run --n-per-cell=2
+
+benches:
+  - assistant-traj
+  - longmemeval-med
+  - locomo-med
+configs:
+  - { id: full_context,      baseline: full_context }
+  - { id: mastra_om,         baseline: mastra_om }
+  - { id: anthropic_compact, baseline: anthropic_compact }
+  - { id: ahc_full,          ahc_flags: {} }   # ahc_full = all AHC defaults ON
+seeds: [42, 43]
+budget_usd: 90

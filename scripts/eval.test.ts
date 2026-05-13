@@ -1,4 +1,7 @@
 import { describe, expect, test } from 'vitest'
+import { readFile } from 'node:fs/promises'
+import { resolve } from 'node:path'
+import { parse as parseYaml } from 'yaml'
 import { parseArgs, sweepRootDir, validateSweep, VALID_PROVIDERS } from './eval.js'
 
 // validateSweep — sweep YAML schema sanity. Tests the optional E0 `provider`
@@ -77,6 +80,71 @@ describe('VALID_PROVIDERS constant', () => {
     expect(VALID_PROVIDERS.has('openrouter')).toBe(true)
     expect(VALID_PROVIDERS.has('anthropic_direct')).toBe(true)
     expect(VALID_PROVIDERS.size).toBe(2)
+  })
+})
+
+describe('E1/E2/E3 sweep YAML scaffolds (E0)', () => {
+  const repoRoot = resolve(__dirname, '..')
+
+  test('main_e1_text.yaml: 3 text benches × 4 baselines × 2 seeds', async () => {
+    const raw = parseYaml(
+      await readFile(resolve(repoRoot, 'eval/sweeps/main_e1_text.yaml'), 'utf8'),
+    ) as unknown
+    const plan = validateSweep(raw, 'main_e1_text.yaml')
+    expect(plan.name).toBe('main_e1_text')
+    expect(plan.benches).toEqual(['assistant-traj', 'longmemeval-med', 'locomo-med'])
+    expect(plan.configs).toHaveLength(4)
+    expect(plan.seeds).toEqual([42, 43])
+    expect(plan.budget_usd).toBe(90)
+    const ids = plan.configs.map((c) => c.id).sort()
+    expect(ids).toEqual(['ahc_full', 'anthropic_compact', 'full_context', 'mastra_om'])
+  })
+
+  test('main_e1_tau.yaml: tau-bench × 2 agent variants × 2 seeds', async () => {
+    const raw = parseYaml(
+      await readFile(resolve(repoRoot, 'eval/sweeps/main_e1_tau.yaml'), 'utf8'),
+    ) as unknown
+    const plan = validateSweep(raw, 'main_e1_tau.yaml')
+    expect(plan.benches).toEqual(['tau-bench-retail-med'])
+    const ids = plan.configs.map((c) => c.id).sort()
+    expect(ids).toEqual(['tau_bench_agent', 'tau_bench_agent_ahc'])
+    expect(plan.budget_usd).toBe(30)
+  })
+
+  test('ablation_e2.yaml: 4 AHC variants × 2 text benches × 2 seeds', async () => {
+    const raw = parseYaml(
+      await readFile(resolve(repoRoot, 'eval/sweeps/ablation_e2.yaml'), 'utf8'),
+    ) as unknown
+    const plan = validateSweep(raw, 'ablation_e2.yaml')
+    expect(plan.benches).toEqual(['assistant-traj', 'longmemeval-med'])
+    expect(plan.configs).toHaveLength(4)
+    const ids = plan.configs.map((c) => c.id).sort()
+    expect(ids).toEqual([
+      'ahc_full',
+      'ahc_no_async_buffer',
+      'ahc_no_observer',
+      'ahc_no_offloader',
+    ])
+    // Each non-baseline config sets exactly one flag to false (except ahc_full).
+    for (const c of plan.configs) {
+      if (c.id === 'ahc_full') continue
+      const flags = c.ahc_flags as Record<string, unknown>
+      const falsies = Object.values(flags).filter((v) => v === false)
+      expect(falsies).toHaveLength(1)
+    }
+  })
+
+  test('cache_hit_e3.yaml: LME × 2 configs (ahc_full_anthropic + anthropic_compact), seed 42 only', async () => {
+    const raw = parseYaml(
+      await readFile(resolve(repoRoot, 'eval/sweeps/cache_hit_e3.yaml'), 'utf8'),
+    ) as unknown
+    const plan = validateSweep(raw, 'cache_hit_e3.yaml')
+    expect(plan.benches).toEqual(['longmemeval-med'])
+    expect(plan.configs).toHaveLength(2)
+    expect(plan.seeds).toEqual([42])
+    // anthropic_direct provider on ahc_full config — E3 cache-hit dispatch.
+    const ahcConfig = plan.configs.find((c) => c.id === 'ahc_full_anthropic')
+    expect(ahcConfig?.provider).toBe('anthropic_direct')
   })
 })
 
