@@ -83254,5 +83254,36 @@
       }
     }
   },
-  "expected_end_state": {}
+  "expected_end_state": {
+    "orders": {
+      "#W9373487": {
+        "status": "cancelled",
+        "items": [
+          {
+            "item_id": "4063401924"
+          }
+        ]
+      },
+      "#W7449508": {
+        "status": "return requested",
+        "items": [
+          {
+            "item_id": "6200867091"
+          },
+          {
+            "item_id": "6477915553"
+          }
+        ]
+      }
+    },
+    "users": {
+      "olivia_lopez_3865": {
+        "address": {
+          "address1": "310 Laurel Lane",
+          "city": "Fort Worth",
+          "zip": "76171"
+        }
+      }
+    }
+  }
 }

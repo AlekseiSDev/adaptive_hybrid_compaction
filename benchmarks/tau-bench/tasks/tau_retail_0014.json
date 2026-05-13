@@ -83254,5 +83254,34 @@
       }
     }
   },
-  "expected_end_state": {}
+  "expected_end_state": {
+    "orders": {
+      "#W5490111": {
+        "status": "return requested",
+        "items": [
+          {
+            "item_id": "4579334072"
+          },
+          {
+            "item_id": "1421289881"
+          },
+          {
+            "item_id": "6117189161"
+          },
+          {
+            "item_id": "4947717507"
+          }
+        ]
+      },
+      "#W7387996": {
+        "status": "return requested",
+        "items": [
+          {
+            "item_id": "5796612084"
+          }
+        ]
+      }
+    },
+    "users": {}
+  }
 }

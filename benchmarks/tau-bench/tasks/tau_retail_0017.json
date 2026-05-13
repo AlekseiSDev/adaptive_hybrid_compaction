@@ -83254,5 +83254,29 @@
       }
     }
   },
-  "expected_end_state": {}
+  "expected_end_state": {
+    "orders": {
+      "#W8665881": {
+        "status": "pending",
+        "items": [
+          {
+            "item_id": "5855700373"
+          },
+          {
+            "item_id": "9408160950"
+          },
+          {
+            "item_id": "4422467033"
+          },
+          {
+            "item_id": "1157853815"
+          },
+          {
+            "item_id": "8725040869"
+          }
+        ]
+      }
+    },
+    "users": {}
+  }
 }

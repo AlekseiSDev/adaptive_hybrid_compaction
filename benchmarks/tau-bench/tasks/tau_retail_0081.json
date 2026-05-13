@@ -83254,5 +83254,40 @@
       }
     }
   },
-  "expected_end_state": {}
+  "expected_end_state": {
+    "orders": {
+      "#W3289292": {
+        "status": "cancelled",
+        "items": [
+          {
+            "item_id": "4127323219"
+          },
+          {
+            "item_id": "1355937109"
+          },
+          {
+            "item_id": "9025753381"
+          }
+        ]
+      },
+      "#W9722559": {
+        "status": "cancelled",
+        "items": [
+          {
+            "item_id": "8827799340"
+          },
+          {
+            "item_id": "8964750292"
+          },
+          {
+            "item_id": "4728397765"
+          },
+          {
+            "item_id": "4107812777"
+          }
+        ]
+      }
+    },
+    "users": {}
+  }
 }

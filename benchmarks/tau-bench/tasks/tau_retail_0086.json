@@ -83254,5 +83254,31 @@
       }
     }
   },
-  "expected_end_state": {}
+  "expected_end_state": {
+    "orders": {
+      "#W2466703": {
+        "status": "pending (item modified)",
+        "items": [
+          {
+            "item_id": "7848293342"
+          },
+          {
+            "item_id": "4894369688"
+          },
+          {
+            "item_id": "8733974883"
+          }
+        ]
+      }
+    },
+    "users": {
+      "yusuf_hernandez_6785": {
+        "address": {
+          "address1": "565 Maple Drive",
+          "city": "Washington",
+          "zip": "20307"
+        }
+      }
+    }
+  }
 }

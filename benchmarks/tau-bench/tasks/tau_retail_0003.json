@@ -83254,5 +83254,20 @@
       }
     }
   },
-  "expected_end_state": {}
+  "expected_end_state": {
+    "orders": {
+      "#W4776164": {
+        "status": "pending (item modified)",
+        "items": [
+          {
+            "item_id": "9647292434"
+          },
+          {
+            "item_id": "6324294385"
+          }
+        ]
+      }
+    },
+    "users": {}
+  }
 }

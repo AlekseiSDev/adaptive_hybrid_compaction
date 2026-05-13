@@ -83254,5 +83254,46 @@
       }
     }
   },
-  "expected_end_state": {}
+  "expected_end_state": {
+    "orders": {
+      "#W9672333": {
+        "status": "pending (item modified)",
+        "items": [
+          {
+            "item_id": "3778566150"
+          },
+          {
+            "item_id": "3714494375"
+          },
+          {
+            "item_id": "1345513440"
+          },
+          {
+            "item_id": "7747408585"
+          },
+          {
+            "item_id": "5052031638"
+          }
+        ]
+      },
+      "#W8528674": {
+        "status": "return requested",
+        "items": [
+          {
+            "item_id": "4716977452"
+          },
+          {
+            "item_id": "6704763132"
+          },
+          {
+            "item_id": "5111440845"
+          },
+          {
+            "item_id": "4024196380"
+          }
+        ]
+      }
+    },
+    "users": {}
+  }
 }

@@ -83254,5 +83254,29 @@
       }
     }
   },
-  "expected_end_state": {}
+  "expected_end_state": {
+    "orders": {
+      "#W2905754": {
+        "status": "exchange requested",
+        "items": [
+          {
+            "item_id": "5206946487"
+          },
+          {
+            "item_id": "9973034634"
+          },
+          {
+            "item_id": "3478699712"
+          },
+          {
+            "item_id": "4329558751"
+          },
+          {
+            "item_id": "7903094618"
+          }
+        ]
+      }
+    },
+    "users": {}
+  }
 }
