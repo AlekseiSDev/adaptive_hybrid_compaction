@@ -2,6 +2,7 @@ import type {
   LanguageModelV3CallOptions,
   LanguageModelV3FunctionTool,
   LanguageModelV3Middleware,
+  LanguageModelV3Prompt,
 } from '@ai-sdk/provider'
 import {
   classifyWithHysteresis,
@@ -39,6 +40,28 @@ export type AhcMiddlewareDeps = {
   // Fires after compact() completes; consumer reads newTier2 / events from result.
   // Not called on passthrough paths (no system message / tierize failure).
   onCompactResult?: (sessionId: SessionId, result: CompactResult) => void
+  /**
+   * E1: when true, mark the assembled system message with
+   * `providerOptions.anthropic.cacheControl = { type: 'ephemeral' }`. Anthropic
+   * API uses this hint to cache the prompt prefix up to and including the
+   * marked message, enabling cache_read_input_tokens on subsequent turns.
+   *
+   * Consumers should set this iff the underlying provider speaks the
+   * Anthropic protocol (anthropic_direct or LiteLLM-forwarded Anthropic);
+   * OpenRouter/OpenAI passthrough ignores the field but emitting it on
+   * non-Anthropic providers is wasted JSON. Default false (E0 semantics).
+   *
+   * Placement rationale: system prompt is the most stable element in the
+   * AHC assembled context (Tier-1.systemPrompt; see assembleContext.ts).
+   * Tier-2 observations / Tier-3 recent turns churn per-turn and would
+   * invalidate any cache breakpoint placed past the system message.
+   *
+   * Cache-invariance: the providerOptions field is metadata, not content.
+   * AHC output (assembledMessages) is byte-identical regardless of this
+   * flag — only the SDK→provider serialization differs. Verified by
+   * pnpm test:cache-invariance.
+   */
+  cacheControlEnabled?: boolean
 }
 
 // Synthesize light metadata so classifierFeatures.computeFeatures has turn_index hooks.
@@ -83,6 +106,31 @@ function buildRecallFunctionTool(): LanguageModelV3FunctionTool {
 }
 
 const RECALL_FN_TOOL: LanguageModelV3FunctionTool = buildRecallFunctionTool()
+
+// Marks the first system message in the assembled prompt with Anthropic's
+// `cacheControl: ephemeral` hint so api.anthropic.com caches the prompt
+// prefix up through that message. @ai-sdk/anthropic forwards providerOptions
+// untouched; OpenRouter / OpenAI provider ignore it (no-op overhead).
+//
+// Returns a NEW prompt — never mutates the input. If no system message is
+// present (compact() passthrough path returns params unchanged anyway, but
+// belt-and-suspenders), returns the prompt as-is.
+function withAnthropicCacheControlOnSystem(
+  prompt: LanguageModelV3Prompt,
+): LanguageModelV3Prompt {
+  const idx = prompt.findIndex((m) => m.role === 'system')
+  if (idx < 0) return prompt
+  const cacheHint = {
+    providerOptions: { anthropic: { cacheControl: { type: 'ephemeral' as const } } },
+  }
+  const target = prompt[idx]
+  if (target === undefined) return prompt
+  return prompt.map((m, i) =>
+    i === idx
+      ? { ...m, ...cacheHint, providerOptions: { ...m.providerOptions, ...cacheHint.providerOptions } }
+      : m,
+  )
+}
 
 export function createAhcMiddleware(deps: AhcMiddlewareDeps): LanguageModelV3Middleware {
   const registry = deps.scratchpadRegistry ?? new SessionScratchpadRegistry()
@@ -147,6 +195,9 @@ export function createAhcMiddleware(deps: AhcMiddlewareDeps): LanguageModelV3Mid
       deps.onCompactResult?.(sessionId, result)
 
       const newPrompt = convertCoreMessagesToSdk(result.assembledMessages)
+      const promptWithCacheHint = deps.cacheControlEnabled
+        ? withAnthropicCacheControlOnSystem(newPrompt)
+        : newPrompt
       const baseTools = (params.tools ?? []) as LanguageModelV3CallOptions['tools']
       const newTools =
         flags.RECALL_TOOL && scratchpad.size() > 0
@@ -155,7 +206,7 @@ export function createAhcMiddleware(deps: AhcMiddlewareDeps): LanguageModelV3Mid
 
       const merged: LanguageModelV3CallOptions = {
         ...params,
-        prompt: newPrompt,
+        prompt: promptWithCacheHint,
         ...(newTools !== undefined ? { tools: newTools } : {}),
       }
       // Classifier hysteresis update happens implicitly via compact(); we just need to

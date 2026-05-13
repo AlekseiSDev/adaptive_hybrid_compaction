@@ -96,9 +96,16 @@ function buildBaseModel(opts: AhcRuntimeOptions): LanguageModelV3 {
 export function createAhcRuntime(opts: AhcRuntimeOptions): AhcRuntime {
   const baseModel = buildBaseModel(opts)
 
+  // E1: Anthropic-protocol providers honor providerOptions.anthropic.cacheControl
+  // to cache prompt prefix; OpenRouter/OpenAI passthrough ignores it. AHC marks
+  // the system message in the assembled prompt — most stable element across
+  // turns (see assembleContext.ts: tier1.systemPrompt). Enabled only for
+  // anthropic_direct provider (whether direct API or LiteLLM-forwarded).
+  const cacheControlEnabled = opts.provider === 'anthropic_direct'
   const middlewareDeps: AhcMiddlewareDeps = {
     sessionId: opts.sessionId,
     scratchpadRegistry: opts.scratchpadRegistry,
+    cacheControlEnabled,
     ...(opts.flags !== undefined ? { flags: opts.flags } : {}),
     ...(opts.hysteresisStateOverride !== undefined
       ? { hysteresisStateOverride: opts.hysteresisStateOverride }

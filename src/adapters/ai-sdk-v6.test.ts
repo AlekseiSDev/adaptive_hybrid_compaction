@@ -185,4 +185,55 @@ describe('createAhcMiddleware — A6 LanguageModelV3Middleware', () => {
     })
     expect(seen).toHaveLength(0)
   })
+
+  test('cacheControlEnabled=false (default) → no providerOptions.anthropic.cacheControl on system message', async () => {
+    const mw = createAhcMiddleware({})
+    const result = await mw.transformParams?.({
+      type: 'generate',
+      params: baseParams([sys, user('hello')]),
+      model: stubModel(),
+    })
+    expect(result).toBeDefined()
+    if (result === undefined) return
+    const sysMsg = result.prompt.find((m) => m.role === 'system')
+    expect(sysMsg).toBeDefined()
+    // No providerOptions at all on the system message (or, if present, no
+    // anthropic.cacheControl marker).
+    const opts = sysMsg?.providerOptions as
+      | { anthropic?: { cacheControl?: unknown } }
+      | undefined
+    expect(opts?.anthropic?.cacheControl).toBeUndefined()
+  })
+
+  test('cacheControlEnabled=true → providerOptions.anthropic.cacheControl=ephemeral on system message', async () => {
+    const mw = createAhcMiddleware({ cacheControlEnabled: true })
+    const result = await mw.transformParams?.({
+      type: 'generate',
+      params: baseParams([sys, user('hello')]),
+      model: stubModel(),
+    })
+    expect(result).toBeDefined()
+    if (result === undefined) return
+    const sysMsg = result.prompt.find((m) => m.role === 'system')
+    expect(sysMsg).toBeDefined()
+    const opts = sysMsg?.providerOptions as
+      | { anthropic?: { cacheControl?: { type: string } } }
+      | undefined
+    expect(opts?.anthropic?.cacheControl).toEqual({ type: 'ephemeral' })
+  })
+
+  test('cacheControlEnabled=true but no system message in passthrough → prompt unchanged', async () => {
+    const mw = createAhcMiddleware({ cacheControlEnabled: true })
+    // No system message → compact() returns passthrough (params as-is, no
+    // assembledMessages serialization), so cacheControl injection skipped.
+    const result = await mw.transformParams?.({
+      type: 'generate',
+      params: baseParams([user('hello, no system')]),
+      model: stubModel(),
+    })
+    expect(result).toBeDefined()
+    if (result === undefined) return
+    // Result prompt should not contain a system message (it didn't have one).
+    expect(result.prompt.find((m) => m.role === 'system')).toBeUndefined()
+  })
 })
