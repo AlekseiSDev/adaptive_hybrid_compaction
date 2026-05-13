@@ -1,0 +1,10 @@
+{
+  "bench": "longmemeval-med",
+  "config_id": "1b7c3ab06a3da7d8",
+  "seed": 42,
+  "n_total": 3,
+  "n_completed": 3,
+  "mean_primary_score": 1,
+  "total_cost_usd": 0.0018900000000000002,
+  "status": "complete"
+}

@@ -1,0 +1,10 @@
+{
+  "config": {
+    "id": "anthropic_compact",
+    "baseline": "anthropic_compact"
+  },
+  "bench": "longmemeval-med",
+  "seed": 42,
+  "git_sha": "1e9e375c30bf3aaa8e8eadeafe3fb608e1b6b960",
+  "timestamp": "2026-05-13T11:53:12.099Z"
+}
