@@ -17,6 +17,23 @@ function extractStats(messages: AhcUIMessage[]): AhcStatsEnvelope[] {
   return out;
 }
 
+const KNOWN_TOOL_NAMES = ['fetch_url', 'google_search', 'create_image'] as const;
+
+function countToolCalls(messages: AhcUIMessage[]): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const name of KNOWN_TOOL_NAMES) counts[name] = 0;
+  for (const msg of messages) {
+    if (msg.role !== 'assistant') continue;
+    for (const part of msg.parts) {
+      if (!part.type.startsWith('tool-')) continue;
+      if ('state' in part && part.state !== 'output-available') continue;
+      const name = part.type.slice('tool-'.length);
+      counts[name] = (counts[name] ?? 0) + 1;
+    }
+  }
+  return counts;
+}
+
 function fmtNumber(n: number): string {
   return n.toLocaleString('en-US');
 }
@@ -43,6 +60,8 @@ export function TelemetrySidebar({
   const latest = stats.at(-1) ?? null;
   const cumTokens = stats.reduce((s, e) => s + e.tokens.input + e.tokens.output, 0);
   const cumCost = stats.reduce((s, e) => s + e.cost_usd, 0);
+  const toolCounts = countToolCalls(messages);
+  const toolTotal = Object.values(toolCounts).reduce((s, n) => s + n, 0);
 
   const activeSet = new Set<string>(activeFlags);
 
@@ -123,6 +142,26 @@ export function TelemetrySidebar({
           </section>
         </div>
       )}
+
+      <section className="mt-3 border-t border-gray-200 pt-2">
+        <details data-testid="telemetry-toolcalls">
+          <summary className="cursor-pointer text-[10px] uppercase tracking-wide text-gray-500">
+            tool calls ({toolTotal})
+          </summary>
+          <ul className="mt-1 space-y-0.5">
+            {KNOWN_TOOL_NAMES.map((name) => (
+              <li
+                key={name}
+                data-testid={`telemetry-toolcall-${name}`}
+                className="flex items-baseline justify-between"
+              >
+                <span className="text-gray-500">{name}</span>
+                <span className="font-mono text-gray-800">{fmtNumber(toolCounts[name] ?? 0)}</span>
+              </li>
+            ))}
+          </ul>
+        </details>
+      </section>
 
       <section className="mt-3 border-t border-gray-200 pt-2">
         <div className="mb-1 text-[10px] uppercase tracking-wide text-gray-500">flags</div>

@@ -248,11 +248,7 @@ function renderPart(part: AhcUIMessage['parts'][number], key: string) {
     }
   }
   if (part.type.startsWith('tool-')) {
-    return (
-      <pre key={key} className="rounded bg-blue-50 px-2 py-1 text-[11px] text-blue-700">
-        {JSON.stringify(part, null, 2)}
-      </pre>
-    );
+    return null;
   }
   return null;
 }
