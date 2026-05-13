@@ -2,7 +2,7 @@
 
 **Author:** Aleksei Stepin
 **Course:** NLP, 2026 spring
-**Repository:** <!-- REPO_URL: fill in F3 (github URL or anonymised tarball) -->
+**Repository:** <FILL_REPO_URL_BEFORE_SUBMISSION> (course-submission link to be inserted by the author prior to upload).
 
 <!--
 SOURCE-MAPPING (for reviewers and future edits — strip in submission):
@@ -40,7 +40,7 @@ design.
 We frame this work as an end-to-end **integration deliverable**: AHC architecture, a
 TypeScript harness covering four compaction benchmarks, and the AssistantTraj artifact —
 with directional evidence rather than statistically powered claims. Source and
-reproducibility appendix: see Appendix A. <!-- REPO_URL: F3 -->
+reproducibility appendix: see Appendix A.
 
 ## 1. Introduction
 
@@ -781,7 +781,9 @@ aggressive reflection scheduling; and broader cross-vendor robustness checks.
 
 ## Appendix A. Reproducibility
 
-**Repository.** <!-- REPO_URL placeholder (F3) -->
+**Repository.** <FILL_REPO_URL_BEFORE_SUBMISSION>. The repository contains all source,
+evaluation harness, sweep YAMLs, AssistantTraj task fixtures, the AHC core, the AI SDK v6
+middleware adapter, the demo UI, and the run summaries that underpin every number in §6.
 
 **Verification command.**
 
