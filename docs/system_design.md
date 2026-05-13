@@ -408,9 +408,11 @@ numbers процитированы; повторно интегрировать 
 - **D1. AssistantTraj design + JSON schema (2 дня).** Финализировать категории (8/8/8/14),
   схему задач (input messages, expected outputs, eval rubric), tooling skeleton.
 
-- **D2. Сбор реальных трасс (3 дня).** Aleksei отбирает анонимизированные production
-  traces из 2D-canvas, мы их форматируем под schema. Параллельно поиск open-source
-  benches.
+- **D2. Сбор jay-canvas-seeded + open-source трасс (3 дня).** Импорт scenarios из
+  jay-canvas golden-set (синтетические e2e фикстуры, нет PII) через
+  `scripts/import-jay-canvas.ts`, hand-extend до medium-traj 5–15 turns.
+  Параллельно поиск open-source benches. §4 anonymization protocol
+  superseded — см. `decisions.md [2026-05-13]`.
 
 - **D3. Synthetic top-up + manual review (3 дня).** Если real + open-source < 30 трасс
   — догенерация через Sonnet с разнообразными prompts; 100% manual review каждой трассы
@@ -546,7 +548,7 @@ Wall-clock с Track G: ~31 день при 2–3 ч/день. Buffer на UI sco
 | Артефакт | Где | Назначение |
 |---|---|---|
 | **AHC middleware** | `src/core/` + `src/adapters/ai-sdk-v6.ts` | Сама контрибьюция: AI SDK v6 совместимое middleware. Не публикуется на npm (см. §2.2). |
-| **AssistantTraj benchmark** | `benchmarks/assistant_traj/` | 30–40 anonymized real + opensource + synthetic tasks с rubrics. Released как самостоятельный artifact. |
+| **AssistantTraj benchmark** | `benchmarks/assistant_traj/` | 30–40 schema-conformant tasks (jay-canvas-seeded + opensource + synthetic) с rubrics. Released как самостоятельный artifact. |
 | **Eval harness** | `src/eval/` + `eval/sweeps/` | Реусеблый harness с telemetry, statistical pipeline, sweep configs для replication. |
 | **Demo UI** | `src/ui/` | Local Next.js app, runnable `npm run dev:ui`. Interactive demo + defense surface. Text + image URL. |
 | **Run results** | `benchmarks/runs/` + `figures/` | NDJSON + summary tables + Pareto plots + ablation comparisons. |

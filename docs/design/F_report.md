@@ -178,7 +178,7 @@ A. Reproducibility
 - Seeds: 42, 43
 - Data:
   - LongMemEval, LoCoMo, τ-bench — public, instructions to obtain в repo README
-  - AssistantTraj — released в `benchmarks/assistant_traj/`, anonymized; provenance documented
+  - AssistantTraj — released в `benchmarks/assistant_traj/`, synthetic-sourced; provenance documented
 ```
 
 ---
