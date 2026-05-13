@@ -1,0 +1,81 @@
+{
+  "task_id": "at_code_iter_001",
+  "category": "code_iter",
+  "source": "opensource",
+  "turns": [
+    {
+      "role": "user",
+      "content": [
+        { "type": "text", "text": "Калькулятор загрузки, как максимально разместить груз в машине" }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        { "type": "text", "text": "Концепция: 3D bin-packing задача. Подход — First-Fit Decreasing с extreme-point эвристикой.\n\nВходные данные: габариты кузова (Д×Ш×В), грузоподъёмность; per-item размеры, вес, штабелируемость, допустимые ориентации.\n\nАлгоритм:\n1. Сортировка items по убыванию объёма.\n2. Greedy placement в первую подходящую extreme-point позицию.\n3. Проверка ограничений: суммарный вес, вес на нижней коробке, ориентация.\n4. Optional: оптимизация плотности через simulated annealing.\n\nВыход: координаты (x,y,z) каждого груза + коэффициенты загрузки по объёму/массе.\n\nСтек: Python (py3dbp), визуализация через matplotlib/three.js." }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        { "type": "text", "text": "Покажи минимальный Python код с py3dbp и пример входных данных." }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        { "type": "text", "text": "```python\nfrom py3dbp import Packer, Bin, Item\n\npacker = Packer()\npacker.add_bin(Bin('truck', 6.0, 2.4, 2.6, 5000))  # Д×Ш×В м, payload кг\n\npacker.add_item(Item('box-A', 1.2, 0.8, 1.0, 120))\npacker.add_item(Item('box-B', 0.6, 0.6, 0.6, 35))\npacker.add_item(Item('box-C', 0.8, 0.8, 0.4, 50))\n\npacker.pack()\nfor b in packer.bins:\n    print(f'Fitted: {len(b.items)} / Unfitted: {len(b.unfitted_items)}')\n    for it in b.items:\n        print(f'  {it.name}: pos={it.position}, rot={it.rotation_type}')\n```" }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        { "type": "text", "text": "Запустил — получаю TypeError: 'Bin' object is not iterable при packer.pack(). py3dbp@1.1.2." }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        { "type": "text", "text": "В 1.1.2 поменялась сигнатура: pack() ожидает kwargs. Замени на:\n\n```python\npacker.pack(\n    bigger_first=True,\n    distribute_items=False,\n    number_of_decimals=3,\n)\n```\n\nЕсли всё ещё падает — проверь что Decimal-конверсия не теряет точность: переведи габариты в мм (целые) перед add_item." }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        { "type": "text", "text": "Заработало. Теперь надо учитывать центр тяжести: после раскладки должно быть |COG_x - L/2| < 0.15·L (где L — длина кузова), иначе перевернёт. Добавь проверку." }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        { "type": "text", "text": "```python\nfrom decimal import Decimal\n\ndef cog_check(bin_, max_offset_ratio: float = 0.15):\n    total_w = sum(Decimal(str(i.weight)) for i in bin_.items)\n    if total_w == 0:\n        return True, 0.0\n    moment_x = sum(\n        Decimal(str(i.weight)) * (Decimal(str(i.position[0])) + Decimal(str(i.get_dimension()[0])) / 2)\n        for i in bin_.items\n    )\n    cog_x = float(moment_x / total_w)\n    target_x = float(bin_.width) / 2\n    offset = abs(cog_x - target_x)\n    return offset < float(bin_.width) * max_offset_ratio, offset\n\nok, offset = cog_check(packer.bins[0])\nprint(f'COG OK: {ok}, offset: {offset:.3f} m')\n```\n\nЕсли False — переупорядочь items (тяжёлые ближе к центру) или перепакуй с другим bigger_first порядком." }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        { "type": "text", "text": "Собери всё вместе: self-contained Python скрипт cargo_packer.py, читает items + bin из input.json, пишет результат + cog_check в output.json. Exit 1 если COG не прошёл." }
+      ]
+    }
+  ],
+  "tools_available": [
+    { "name": "run_python", "description": "Execute a Python snippet and return stdout/stderr.", "input_schema": {} }
+  ],
+  "evaluation": {
+    "strategy": "composite",
+    "aggregate": "all",
+    "rules": [
+      { "strategy": "regex", "pattern": "from py3dbp import", "flags": "" },
+      { "strategy": "regex", "pattern": "json\\.load|json\\.loads", "flags": "" },
+      { "strategy": "regex", "pattern": "json\\.dump|json\\.dumps", "flags": "" },
+      {
+        "strategy": "llm_judge",
+        "rubric_id": "code_iter",
+        "expected_summary": "Self-contained Python script named cargo_packer.py: (1) imports py3dbp Packer/Bin/Item; (2) reads items + bin def from input.json; (3) calls packer.pack() with v1.1.2 kwargs (bigger_first, distribute_items, number_of_decimals); (4) implements COG check formula |COG_x - L/2| < 0.15·L using Decimal arithmetic per the conversation; (5) writes output.json containing fitted items with (x,y,z) positions, unfitted items, utilisation%, and cog tuple (ok, offset); (6) sys.exit(1) when COG check fails. Single fenced python block, no surrounding prose."
+      }
+    ]
+  },
+  "provenance": {
+    "original_session_hash": "CD.json::CD1"
+  }
+}

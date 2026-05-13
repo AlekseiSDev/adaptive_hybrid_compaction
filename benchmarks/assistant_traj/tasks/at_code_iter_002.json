@@ -1,0 +1,136 @@
+{
+  "task_id": "at_code_iter_002",
+  "category": "code_iter",
+  "source": "opensource",
+  "turns": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "сделай скрипт для роблокс студио чтобы через 10 секунд спавнил модель из replicatedstorage на том же месте где и стоит"
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "Положи Server Script внутрь Part или Model, чья позиция станет точкой спавна. Модель в ReplicatedStorage назови, например, `MyModel`.\n\n```lua\nlocal ReplicatedStorage = game:GetService(\"ReplicatedStorage\")\nlocal MODEL_NAME = \"MyModel\"\nlocal DELAY = 10\n\ntask.wait(DELAY)\n\nlocal template = ReplicatedStorage:FindFirstChild(MODEL_NAME)\nif not template then warn(\"model not found\"); return end\n\nlocal clone = template:Clone()\nlocal host = script.Parent\nif host:IsA(\"BasePart\") then\n    clone:PivotTo(host.CFrame)\nend\nclone.Parent = workspace\n```"
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "Запустил — клон появляется, но проваливается под пол. Нужно поднять на половину высоты модели по Y."
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "Это из-за того, что pivot модели в её локальной точке (0,0,0), а нужно опираться на bounding box. Используй `GetBoundingBox`:\n\n```lua\nlocal cf, size = clone:GetBoundingBox()\nlocal targetCFrame = host.CFrame * CFrame.new(0, size.Y / 2, 0)\nclone:PivotTo(targetCFrame)\n```\n\nЭто гарантирует, что нижняя грань модели окажется на уровне центра хоста. Если хост — пол, скорректируй: `host.CFrame * CFrame.new(0, host.Size.Y/2 + size.Y/2, 0)`."
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "Теперь хочу не одну модель а 5, через равные промежутки 2 секунды, и каждый клон — со случайным поворотом по Y."
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "Цикл с `task.wait`:\n\n```lua\nlocal COUNT = 5\nlocal INTERVAL = 2\n\nfor i = 1, COUNT do\n    local clone = template:Clone()\n    local _, size = clone:GetBoundingBox()\n    local yRot = math.rad(math.random(0, 359))\n    local target = host.CFrame\n        * CFrame.new(0, host.Size.Y/2 + size.Y/2, 0)\n        * CFrame.Angles(0, yRot, 0)\n    clone:PivotTo(target)\n    clone.Parent = workspace\n    if i < COUNT then task.wait(INTERVAL) end\nend\n```\n\nПервый спавн — сразу после начального DELAY, между остальными — INTERVAL."
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "Окей. Добавь: если клон коллидится с уже спавненным — сдвинь его на 4 студа вбок и попробуй снова, максимум 3 попытки."
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "Использую `Workspace:GetPartsInPart` для проверки оверлапа:\n\n```lua\nlocal MAX_TRIES = 3\nlocal OFFSET_STUDS = 4\n\nlocal function isClear(model, ignoreList)\n    local params = OverlapParams.new()\n    params.FilterDescendantsInstances = ignoreList\n    params.FilterType = Enum.RaycastFilterType.Exclude\n    for _, part in ipairs(model:GetDescendants()) do\n        if part:IsA(\"BasePart\") then\n            local hits = workspace:GetPartsInPart(part, params)\n            if #hits > 0 then return false end\n        end\n    end\n    return true\nend\n\nlocal spawned = {}\nfor i = 1, COUNT do\n    local clone = template:Clone()\n    local _, size = clone:GetBoundingBox()\n    local base = host.CFrame * CFrame.new(0, host.Size.Y/2 + size.Y/2, 0)\n    for try = 1, MAX_TRIES do\n        local offset = (try - 1) * OFFSET_STUDS\n        clone:PivotTo(base * CFrame.new(offset, 0, 0) * CFrame.Angles(0, math.rad(math.random(0,359)), 0))\n        clone.Parent = workspace\n        if isClear(clone, {clone, host}) then break end\n        if try == MAX_TRIES then warn((\"clone %d collides after %d tries — kept anyway\"):format(i, MAX_TRIES)) end\n    end\n    table.insert(spawned, clone)\n    if i < COUNT then task.wait(INTERVAL) end\nend\n```"
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "Хорошо. Вынеси параметры (MODEL_NAME, DELAY, COUNT, INTERVAL, OFFSET_STUDS, MAX_TRIES) наверх как Attributes хоста — чтобы менять из Properties панели студии без правки кода."
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "Через `script.Parent:GetAttribute(name)` с дефолтами:\n\n```lua\nlocal host = script.Parent\nlocal function attr(name, default)\n    local v = host:GetAttribute(name)\n    if v == nil then return default end\n    return v\nend\n\nlocal MODEL_NAME = attr(\"ModelName\", \"MyModel\")\nlocal DELAY = attr(\"Delay\", 10)\nlocal COUNT = attr(\"Count\", 5)\nlocal INTERVAL = attr(\"Interval\", 2)\nlocal OFFSET_STUDS = attr(\"OffsetStuds\", 4)\nlocal MAX_TRIES = attr(\"MaxTries\", 3)\n```\n\nВ Properties панели хоста добавь атрибуты через Attribute → Add Attribute (тип string/number). Если атрибут не задан — используется дефолт."
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "Собери финальный скрипт в один lua-блок: атрибуты с дефолтами → ожидание DELAY → цикл COUNT раз через INTERVAL → каждый клон со случайным поворотом по Y, проверкой коллизий и retry до MAX_TRIES → размещение на host. Один цельный ```lua``` блок без вступительной болтовни."
+        }
+      ]
+    }
+  ],
+  "tools_available": [],
+  "evaluation": {
+    "strategy": "composite",
+    "aggregate": "all",
+    "rules": [
+      {
+        "strategy": "regex",
+        "pattern": "^```lua\\b[\\s\\S]+?```\\s*$",
+        "flags": "m"
+      },
+      {
+        "strategy": "regex",
+        "pattern": "GetAttribute",
+        "flags": ""
+      },
+      {
+        "strategy": "regex",
+        "pattern": "task\\.wait|wait\\(",
+        "flags": ""
+      },
+      {
+        "strategy": "llm_judge",
+        "rubric_id": "code_iter",
+        "expected_summary": "Single self-contained Roblox Server Script in one ```lua``` block: (1) reads attributes from script.Parent via GetAttribute with defaults (ModelName='MyModel', Delay=10, Count=5, Interval=2, OffsetStuds=4, MaxTries=3); (2) waits initial Delay seconds via task.wait; (3) loops Count times, task.wait(Interval) between iterations (not after the last); (4) per iteration: clones template from ReplicatedStorage, uses GetBoundingBox to compute size, places clone on top of host with Y offset = host.Size.Y/2 + bbox.Size.Y/2, applies random CFrame.Angles(0, math.rad(math.random(0,359)), 0) yaw; (5) collision-retry loop up to MaxTries via Workspace:GetPartsInPart with OverlapParams excluding host+self, lateral offset = (try-1) * OffsetStuds; (6) guards against missing template (warn + return); (7) clone parented to workspace. No prose outside the lua block."
+      }
+    ]
+  },
+  "provenance": {
+    "original_session_hash": "CD.json::CD4"
+  }
+}

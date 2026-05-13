@@ -1,0 +1,49 @@
+{
+  "task_id": "at_image_qa_004",
+  "category": "image_qa",
+  "source": "opensource",
+  "turns": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "Нарисованная черника в минималистичном стиле на однотипном фоне."
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "Готово — минималистичная иллюстрация черники на однотонном фоне.\n\n**Промпт для create_image:**\n> Hand-drawn minimalist illustration of blueberries, 3-4 berries on a stem with two simple leaves, flat colour fill, no shading, thin clean outlines, isolated on a single uniform pastel background, vector-style, centered composition.\n\n**Параметры:** style=minimalist, aspect=1:1.\n\n![blueberries](https://fb2679aa-8d64-4a3c-8ef7-ba93abea130b.selstorage.ru/5d5983b9-e28f-4642-857d-d341747cbfa6_7753ffca-0c09-4be2-8f59-2d517c89675d.png)"
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "Окей. Финальное: выдай только итоговый промпт для create_image (на английском, синтаксис SD) — без картинки, без описания, без вступления. Чтобы я мог его скопировать и переиспользовать."
+        }
+      ]
+    }
+  ],
+  "tools_available": [
+    {
+      "name": "create_image",
+      "description": "Generate an image from a text prompt.",
+      "input_schema": {}
+    }
+  ],
+  "evaluation": {
+    "strategy": "llm_judge",
+    "rubric_id": "image_qa",
+    "expected_summary": "A single English-language Stable-Diffusion-style prompt (comma-separated tokens or natural-language sentence) for generating a minimalist hand-drawn blueberry illustration on a uniform pastel background. Must mention: blueberries (the subject), minimalist / flat / hand-drawn style, uniform single-colour background, no shading or thin clean outlines, isolated/centered composition. No preamble, no markdown headers, no image URL, no commentary — only the reusable prompt text."
+  },
+  "provenance": {
+    "original_session_hash": "MX.json::MX1"
+  }
+}

@@ -1,0 +1,121 @@
+{
+  "task_id": "at_image_qa_003",
+  "category": "image_qa",
+  "source": "opensource",
+  "turns": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "Сделай короткое кинематографическое видео, 5 секунд: золотистый закат над океаном, мягкие волны, силуэт яхты вдалеке. Стиль cinematic, 4K. Используй generate_video, выведи ссылку."
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "Готово, сгенерил 5-секундный клип.\n\n**Промпт:**\n> Cinematic 5s clip, golden hour sunset over a calm ocean, soft rolling waves with specular highlights, distant yacht silhouette on the horizon, warm orange-magenta sky, lens flare, slight handheld camera drift, 4K, 24fps, anamorphic 2.39:1.\n\n**Параметры:** duration=5, resolution=4K, ratio=2.39:1, style=cinematic.\n\n**Результат:** https://ca793242-1d74-4b37-aeef-651589cfa28f.selstorage.ru/1778073304426-019dfd6a-d430-7073-9155-d74defd30837.mp4"
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "Яхта слишком далеко — её почти не видно. Приблизь силуэт примерно на 30%, и чтобы она медленно дрейфовала справа налево."
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "Перегенерил.\n\n**Изменения в промпте:** «distant yacht silhouette» → «medium-distance yacht silhouette, ~70% original distance, drifting slowly right-to-left across the frame».\n\n**Параметры motion:** добавлен motion_path для яхты (rtl, скорость 0.3 units/sec).\n\n**Результат:** https://ca793242-1d74-4b37-aeef-651589cfa28f.selstorage.ru/1778073512426-019dfd6a-yacht-closer.mp4"
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "Лучше. А небо сделай менее оранжевым — больше пурпур и тёплый розовый, как в фильмах Малика. И облака — высокие перистые, не толстые."
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "Перегенерил палитру.\n\n**Изменения:**\n- цвет неба: orange-magenta → magenta-rose с тёплыми розовыми оттенками в зените, бледно-золотой только у самой линии горизонта;\n- облака: low cumulus → high cirrus wisps, тонкие, подсвеченные снизу;\n- референс: «Terrence Malick golden hour palette, Days of Heaven».\n\n**Результат:** https://ca793242-1d74-4b37-aeef-651589cfa28f.selstorage.ru/1778073824426-019dfd6a-malick-palette.mp4"
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "Добавь звук: тихий шум прибоя + одна далёкая чайка примерно на 3-й секунде. И аккуратный fade-out (видео + аудио) последние 0.5 секунды."
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "Добавил аудиодорожку.\n\n**Audio mix:**\n- ambient ocean surf, –16 dB, постоянный;\n- distant seagull, transient на t=3.0s, –10 dB;\n- master fade-out: t=4.5s → t=5.0s (linear, до –∞).\n\n**Видео fade-out:** последние 500ms, opacity 100→0.\n\n**Результат:** https://ca793242-1d74-4b37-aeef-651589cfa28f.selstorage.ru/1778074120426-019dfd6a-audio-mix.mp4"
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "Хорошо. Теперь добавь титр в начале (первые 1.5 с): «THE QUIET HOUR» — белый serif, центр, opacity 100 → 0 (плавно уходит). И субтильную плёночную зернистость через всё видео."
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "Добавил титр и грейн.\n\n**Title overlay:**\n- текст: «THE QUIET HOUR», шрифт Cormorant Garamond Regular, 64px, белый #FFFFFF;\n- позиция: centered;\n- timing: t=0s opacity 100, t=1.0s opacity 100, t=1.5s opacity 0 (linear fade).\n\n**Film grain:** uniform 35mm-style, intensity 0.15, blend = overlay, через всё видео.\n\n**Результат:** https://ca793242-1d74-4b37-aeef-651589cfa28f.selstorage.ru/1778074418426-019dfd6a-titled-grain.mp4"
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "Финальное: проверь что все накопленные настройки сохранены, и собери одну итоговую спецификацию — как тех-задание для повторной генерации идентичного клипа. Структурированно (sections: Видео, Камера, Палитра, Аудио, Overlay, Постпродакшн), без вступительных фраз. В конце — URL финального файла."
+        }
+      ]
+    }
+  ],
+  "tools_available": [
+    {
+      "name": "generate_video",
+      "description": "Generate a video clip from a prompt.",
+      "input_schema": {}
+    }
+  ],
+  "evaluation": {
+    "strategy": "llm_judge",
+    "rubric_id": "image_qa",
+    "expected_summary": "A single structured spec document with section headers: Видео / Камера / Палитра / Аудио / Overlay / Постпродакшн (or equivalent), followed by the final result URL. Required content: (1) duration 5s, 4K, cinematic 2.39:1; (2) camera with slight handheld drift; (3) medium-distance yacht silhouette drifting right-to-left ≈30% closer than initial; (4) Malick-style magenta-rose palette with high cirrus wisps (not heavy cumulus); (5) audio = ambient ocean surf + distant seagull at t≈3.0s + fade-out last 0.5s; (6) title overlay 'THE QUIET HOUR' white serif (Cormorant Garamond or similar), centered, opacity 100→0 across first 1.5s; (7) uniform 35mm film grain through full clip. Format spec-like (key:value or bullets), no conversational preamble."
+  },
+  "provenance": {
+    "original_session_hash": "VG.json::VG5"
+  }
+}

@@ -1,0 +1,112 @@
+{
+  "task_id": "at_image_qa_001",
+  "category": "image_qa",
+  "source": "opensource",
+  "turns": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "image",
+          "path": "attachments/at_image_qa_001/1.svg"
+        },
+        {
+          "type": "text",
+          "text": "визуализируй полностью логику в Mermaid"
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "Вот логика схемы оплаты виртуальной картой в виде Mermaid-диаграммы:\n\n```mermaid\nflowchart TD\n    Start([Начало: пользователь инициирует оплату]) --> Auth{Авторизован?}\n    Auth -- Нет --> Login[Перенаправить на авторизацию]\n    Login --> Auth\n    Auth -- Да --> HasCard{Есть активная виртуальная карта?}\n    HasCard -- Нет --> Issue[Выпустить виртуальную карту]\n    Issue --> SaveCard[Сохранить карту в профиле]\n    SaveCard --> SelectCard\n    HasCard -- Да --> SelectCard[Выбор карты как способа оплаты]\n    SelectCard --> EnterAmount[Ввод суммы и реквизитов получателя]\n    EnterAmount --> CheckBalance{Достаточно средств?}\n    CheckBalance -- Нет --> TopUp[Предложить пополнение]\n    TopUp --> CheckBalance\n    CheckBalance -- Да --> AntiFraud[Антифрод-проверка]\n    AntiFraud --> FraudOk{Проверка пройдена?}\n    FraudOk -- Нет --> Decline[Отклонить операцию, уведомить]\n    Decline --> End([Конец])\n    FraudOk -- Да --> ThreeDS[3-D Secure / OTP]\n    ThreeDS --> Confirmed{Подтверждение получено?}\n    Confirmed -- Нет --> Decline\n    Confirmed -- Да --> Charge[Списание средств]\n    Charge --> Success{Транзакция успешна?}\n    Success -- Нет --> ErrorLog[Логировать ошибку и вернуть результат]\n    ErrorLog --> End\n    Success -- Да --> Receipt[Чек и уведомление]\n    Receipt --> End\n```\n\nЕсли на исходной схеме есть специфика (лимиты, комиссия, особая ветка отказа) — пришлите уточнение, скорректирую диаграмму."
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "Добавь сценарий когда у пользователя не хватает средств И пополнение недоступно — нужна ветка \"оплата с другой карты\" через отдельный эндпойнт `/pay-with-alt-card`. Алгоритм: если TopUp вернулся неуспешным, предлагаем альтернативную карту, при выборе — уходим в отдельный flow."
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "Расширяю диаграмму — добавил ветку альтернативной карты через `/pay-with-alt-card`. Узлы `TopUp` и `TopUpFailed` теперь разделены, отказ на пополнении ведёт к выбору альтернативной карты:\n\n```mermaid\nflowchart TD\n    Start([Начало]) --> Auth{Авторизован?}\n    Auth -- Нет --> Login --> Auth\n    Auth -- Да --> HasCard{Есть активная карта?}\n    HasCard -- Нет --> Issue[Выпуск карты] --> SelectCard\n    HasCard -- Да --> SelectCard[Выбор карты]\n    SelectCard --> EnterAmount[Ввод суммы]\n    EnterAmount --> CheckBalance{Достаточно средств?}\n    CheckBalance -- Да --> AntiFraud\n    CheckBalance -- Нет --> TopUp[Предложить пополнение]\n    TopUp --> TopUpResult{Пополнение успешно?}\n    TopUpResult -- Да --> CheckBalance\n    TopUpResult -- Нет --> AltOffer[Предложить альтернативную карту]\n    AltOffer -- Согласен --> AltFlow[/pay-with-alt-card flow/]\n    AltOffer -- Отказ --> Decline\n    AltFlow --> End([Конец])\n    AntiFraud --> FraudOk{Проверка пройдена?}\n    FraudOk -- Нет --> Decline[Отклонить операцию]\n    FraudOk -- Да --> ThreeDS[3-D Secure]\n    ThreeDS --> Confirmed{Подтверждено?}\n    Confirmed -- Нет --> Decline\n    Confirmed -- Да --> Charge[Списание] --> Success{Успешно?}\n    Success -- Да --> Receipt[Чек]\n    Success -- Нет --> ErrorLog[Лог ошибки]\n    Receipt --> End\n    ErrorLog --> End\n    Decline --> End\n```"
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "А что если 3-D Secure не подтвердился из-за таймаута (не отказ пользователя, а нет ответа)? Нужен retry с лимитом 3 попытки, после третьего таймаута — отклоняем. И различай в логе causes: `user_rejected` vs `timeout_exhausted`."
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "Добавил retry-loop на 3DS с лимитом попыток и разграничением причин отказа в логе:\n\n```mermaid\nflowchart TD\n    ThreeDS[3-D Secure запрос] --> Wait{Получен ответ?}\n    Wait -- Подтверждено --> Charge\n    Wait -- Отказ пользователя --> LogReject[Лог: user_rejected] --> Decline\n    Wait -- Таймаут --> Retry{attempts < 3?}\n    Retry -- Да --> Increment[attempts += 1] --> ThreeDS\n    Retry -- Нет --> LogTimeout[Лог: timeout_exhausted] --> Decline\n```\n\nОстальные ветки диаграммы без изменений. Hint: счётчик `attempts` инициализируется при первом входе в `ThreeDS` (state на уровне session, не глобальный)."
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "Хорошо. И последнее: добавь явную ветку \"отмена операции пользователем\" — она должна быть доступна из ЛЮБОГО узла где есть Confirmation (включая EnterAmount, SelectCard, AltOffer, ThreeDS). При отмене — лог cause: `user_cancelled`, переход в End."
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "Чтобы не дублировать стрелки от каждого Confirmation-узла, использую агрегирующий узел `UserCancel` с входами от всех точек подтверждения. Это идиоматичный паттерн для Mermaid:\n\n```mermaid\nflowchart TD\n    EnterAmount -. Cancel .-> UserCancel\n    SelectCard -. Cancel .-> UserCancel\n    AltOffer -. Cancel .-> UserCancel\n    ThreeDS -. Cancel .-> UserCancel\n    UserCancel[Отмена пользователем] --> LogCancel[Лог: user_cancelled]\n    LogCancel --> End\n```\n\nПунктирные стрелки (`-. Cancel .->`) отделяют отмену от основного потока визуально. В финальной диаграмме все ветки сольются в единый блок."
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "Хорошо. Теперь собери финальную диаграмму как один Mermaid-блок `flowchart TD`, включающий все накопленные изменения: альтернативная карта, 3DS retry с разделением причин, user_cancel из всех Confirmation узлов. Без дополнительных комментариев и без частичных фрагментов — только один цельный валидный Mermaid блок."
+        }
+      ]
+    }
+  ],
+  "tools_available": [],
+  "evaluation": {
+    "strategy": "composite",
+    "aggregate": "all",
+    "rules": [
+      {
+        "strategy": "regex",
+        "pattern": "^```mermaid\\s*\\nflowchart\\s+TD\\b[\\s\\S]+?```\\s*$",
+        "flags": "m"
+      },
+      {
+        "strategy": "llm_judge",
+        "rubric_id": "image_qa",
+        "expected_summary": "A single Mermaid `flowchart TD` block covering the full evolved payment-with-virtual-card flow. Must include: (1) baseline path auth → card-presence → amount → balance → anti-fraud → 3DS → charge → success → receipt → End; (2) alternative-card branch reached when top-up fails (TopUpResult=Нет → AltOffer → /pay-with-alt-card flow); (3) 3DS retry loop with attempts<3 counter, distinct log causes `user_rejected` vs `timeout_exhausted` on terminal failure; (4) user-cancel branch reachable from each Confirmation node (EnterAmount, SelectCard, AltOffer, ThreeDS), terminating with log cause `user_cancelled`. Single fenced Mermaid block, no prose before/after, valid Mermaid syntax."
+      }
+    ]
+  },
+  "provenance": {
+    "original_session_hash": "A.json::A2"
+  }
+}

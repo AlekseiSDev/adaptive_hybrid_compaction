@@ -1,0 +1,77 @@
+{
+  "task_id": "at_code_iter_004",
+  "category": "code_iter",
+  "source": "opensource",
+  "turns": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "Есть ли CTE в postgres?"
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "Да, PostgreSQL полностью поддерживает CTE через `WITH`. Минимальный пример:\n\n```sql\nWITH recent_orders AS (\n  SELECT id, user_id, total\n  FROM orders\n  WHERE created_at > now() - interval '7 days'\n)\nSELECT user_id, sum(total)\nFROM recent_orders\nGROUP BY user_id;\n```\n\nС PG12+ оптимизатор inlin'ит CTE по умолчанию; явное управление — `MATERIALIZED` / `NOT MATERIALIZED`."
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "Нужен рекурсивный CTE — развернуть дерево сотрудников (employees: id, manager_id, name) от заданного root_id. Запрос должен возвращать ещё и depth (0 для root)."
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "```sql\nWITH RECURSIVE subordinates AS (\n  SELECT id, manager_id, name, 0 AS depth\n  FROM employees\n  WHERE id = :root_id\n  UNION ALL\n  SELECT e.id, e.manager_id, e.name, s.depth + 1\n  FROM employees e\n  JOIN subordinates s ON e.manager_id = s.id\n)\nSELECT id, manager_id, name, depth\nFROM subordinates\nORDER BY depth, id;\n```\n\nКорневой ряд depth=0, каждый дочерний — `parent.depth + 1`. Сортировка `depth, id` даёт стабильный обход по уровням."
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "Финал: собери одной SQL-командой, с параметром :root_id и защитой от циклов (если в графе есть кольцо — не уходи в бесконечность). Один sql-блок, без пояснений."
+        }
+      ]
+    }
+  ],
+  "tools_available": [],
+  "evaluation": {
+    "strategy": "composite",
+    "aggregate": "all",
+    "rules": [
+      {
+        "strategy": "regex",
+        "pattern": "WITH\\s+RECURSIVE",
+        "flags": "i"
+      },
+      {
+        "strategy": "regex",
+        "pattern": ":root_id",
+        "flags": ""
+      },
+      {
+        "strategy": "llm_judge",
+        "rubric_id": "code_iter",
+        "expected_summary": "A single ```sql``` block containing a recursive CTE on employees(id, manager_id, name) starting from :root_id, returning id/manager_id/name/depth (depth=0 for root, parent.depth+1 for descendants), with cycle protection. Cycle protection must use one of: PostgreSQL's CYCLE clause (CYCLE id SET is_cycle USING path), an array path accumulator with NOT id = ANY(path) guard, or a depth limit (e.g. WHERE s.depth < some_max). Final SELECT orders by depth. No prose around the SQL block."
+      }
+    ]
+  },
+  "provenance": {
+    "original_session_hash": "MX.json::MX3"
+  }
+}

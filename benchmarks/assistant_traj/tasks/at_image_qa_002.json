@@ -1,0 +1,89 @@
+{
+  "task_id": "at_image_qa_002",
+  "category": "image_qa",
+  "source": "opensource",
+  "turns": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "image",
+          "path": "attachments/at_image_qa_002/1.png"
+        },
+        {
+          "type": "text",
+          "text": "Создай видео из этого изображения. При наличии картинки видео должно начинаться с неё. Стиль — на твоё усмотрение, придумай подходящий сюжет. Используй функцию generate_video, не задавай уточняющих вопросов, выведи в ответе ссылку на получившееся видео."
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "Готово — сгенерировал короткое видео (5 секунд), стартует с присланного кадра.\n\n**Промпт для generate_video:**\n> Static frame slowly comes alive: soft cinematic camera dolly-in (~5% zoom), gentle ambient light shift from cool to warm, subtle particle drift in foreground, shallow depth of field, 24fps, photorealistic, cinematic colour grade.\n\n**Параметры:** длительность 5 с, aspect = исходный, motion intensity = low.\n\n**Результат:** https://ca793242-1d74-4b37-aeef-651589cfa28f.selstorage.ru/1777044243421-019dc015-9f34-7c61-a018-b7b11a839064.mp4"
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "Стиль слишком спокойный. Сделай драматичнее: добавь движение камеры (orbit вокруг центрального объекта), резкую смену освещения посередине, и финальный slow-motion на 1.5 сек. Длительность увеличь до 8 секунд."
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "Перегенерил с новыми параметрами.\n\n**Промпт:**\n> Cinematic 8-second sequence: starts on provided still frame; camera orbits 180° around central subject (medium speed); at t=4s sharp lighting shift from warm golden hour to cool moonlit blue with lens flare; final 1.5s in 0.4x slow-motion, deep contrast, anamorphic flare, 24fps, photorealistic.\n\n**Параметры:** duration=8, motion=high, camera_path=orbit, light_change=on (t=4s), slowmo_segment=[6.5s–8s].\n\n**Результат:** https://ca793242-1d74-4b37-aeef-651589cfa28f.selstorage.ru/1777044598221-019dc015-orbit-dramatic.mp4"
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "Хорошо. Теперь добавь звук: ambient soundscape — лёгкий ветер + один акцент (woosh) на моменте смены освещения. И титр в финальном кадре: \"AELINDOR\" по центру, белый sans-serif, fade-in за 0.5 с."
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "Добавил звук и титр.\n\n**Audio:** ambient wind (low rumble, –18dB) + woosh transient на t=4.0s (+2dB), fade-out последние 0.5 с.\n\n**Текстовый overlay:** «AELINDOR», шрифт Inter Bold, размер 72px, цвет #FFFFFF, позиция centered, появляется на t=6.5s с opacity 0→100 за 500ms, держится до конца.\n\n**Промпт обновлён** (добавлены: \"ambient wind soundscape, woosh accent at midpoint, AELINDOR title card fade-in at 6.5s\").\n\n**Результат:** https://ca793242-1d74-4b37-aeef-651589cfa28f.selstorage.ru/1777045012221-019dc015-aelindor-final.mp4"
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "Окей. Собери финальную спецификацию одним блоком: исходник, промпт, все параметры (длительность, движение, свет, slow-mo, audio, overlay), URL результата. Без вступительных фраз, только структурированная спецификация — как тех-задание на повторную генерацию."
+        }
+      ]
+    }
+  ],
+  "tools_available": [
+    {
+      "name": "generate_video",
+      "description": "Generate a video clip from a prompt and optional starting image.",
+      "input_schema": {}
+    }
+  ],
+  "evaluation": {
+    "strategy": "llm_judge",
+    "rubric_id": "image_qa",
+    "expected_summary": "A single structured specification block (no preamble) covering: (1) source image reference (attachments/at_image_qa_002/1.png as starting frame); (2) full generate_video prompt — cinematic orbit camera, mid-sequence light shift cool→warm or warm→cool with lens flare, slow-motion tail segment; (3) duration = 8 seconds; (4) motion params (orbit camera path, motion=high); (5) lighting change marker at t≈4s; (6) slow-motion segment 6.5s–8s at ~0.4x; (7) audio: ambient wind bed + woosh accent at the light-change moment, fade-out at end; (8) text overlay: 'AELINDOR' white sans-serif, centered, fade-in 0.5s at t≈6.5s; (9) result URL. Format must be spec-like (key: value or bulleted), not conversational prose."
+  },
+  "provenance": {
+    "original_session_hash": "VG.json::VG2"
+  }
+}

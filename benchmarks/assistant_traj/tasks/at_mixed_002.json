@@ -1,0 +1,43 @@
+{
+  "task_id": "at_mixed_002",
+  "category": "mixed",
+  "source": "opensource",
+  "turns": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "Придумай звучные 2–4 строчки, которые будут припевом для песни про богатую, прекрасную, полную красок и урожая осень. Можно начать со строчки «Эта русская осень нравится нам очень»."
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "**Припев**\n\nЭта русская осень нравится нам очень —\nЗолото берёзы, кумач рябиновых гроздей.\nЭта русская осень — щедрые деньки,\nДым костров под небом да улыбки земляков."
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "Хорошо, но третья строчка ритмически выпадает — короче остальных. Перепиши только её, чтобы по слогам совпадала с первой, и финальный припев выдай одним блоком без комментариев."
+        }
+      ]
+    }
+  ],
+  "tools_available": [],
+  "evaluation": {
+    "strategy": "llm_judge",
+    "rubric_id": "mixed",
+    "expected_summary": "A single chorus block in Russian, exactly 4 lines, opening with «Эта русская осень нравится нам очень». Theme: rich/beautiful/colourful/harvest Russian autumn. Lines 1 and 3 must have roughly matching syllable counts (line 3 rewritten to scan with line 1 — typically 12–13 syllables), lines 2 and 4 are longer descriptive lines. No preamble, no commentary, no labels other than perhaps a 'Припев' heading. Imagery should evoke autumn richness (берёзы / рябина / урожай / дым / краски etc.)."
+  },
+  "provenance": {
+    "original_session_hash": "A.json::A5"
+  }
+}
