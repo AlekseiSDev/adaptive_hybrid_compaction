@@ -42,10 +42,20 @@ export async function userSimStep(
   instruction: string,
   deps: UserSimDeps,
 ): Promise<UserSimResult> {
+  // On the kickoff turn `history` is empty — OpenAI Chat Completions API
+  // (used by openai/gpt-4o-mini through OpenRouter) rejects an empty messages
+  // array with "Invalid prompt: messages must not be empty". Seed with a
+  // benign assistant greeting so the customer (user-sim) takes the next turn
+  // organically. The greeting is generic enough that it doesn't bias the
+  // customer's opening line.
+  const seeded: ModelMessage[] =
+    history.length === 0
+      ? [{ role: 'assistant', content: 'Hello! How can I help you today?' }]
+      : history
   const result = await generateText({
     model: deps.model,
     system: userSimSystemPrompt(instruction),
-    messages: history,
+    messages: seeded,
   })
   const text = result.text.trim()
   const done = text.includes('##STOP##')
