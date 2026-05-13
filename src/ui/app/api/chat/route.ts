@@ -26,7 +26,11 @@ export const runtime = 'nodejs';
 
 const DEFAULT_MAX_STEPS = 8;
 const MAX_STEPS_HARD_CAP = 16;
-const MODEL_ID = 'google/gemini-3-flash-preview';
+// openai/gpt-5.4-mini chosen for demo over google/gemini-3-flash-preview because
+// OpenRouter passes through OpenAI's prompt-cache reporting (cached_tokens in
+// usage), but does NOT surface Gemini's implicit cache — verified via probes
+// 2026-05-13, see docs/investigations/openrouter-cache-passthrough.md.
+const MODEL_ID = 'openai/gpt-5.4-mini';
 
 type AhcUIMessage = UIMessage<unknown, { ahc_stats: AhcStatsEnvelope }>;
 

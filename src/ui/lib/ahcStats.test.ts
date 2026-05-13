@@ -133,6 +133,23 @@ describe('buildAhcStats', () => {
     expect(envelope.cost_usd).toBeCloseTo(0.8, 4);
   });
 
+  it('cost_usd computed via UI-local pricing override for openai/gpt-5.4-mini', () => {
+    // openai/gpt-5.4-mini: prompt $0.75 / 1M, completion $4.50 / 1M
+    // (cached prompt $0.075/1M discount not folded into cost yet — v1 uses flat prompt rate).
+    const envelope = buildAhcStats(
+      baseInput({
+        usage: {
+          inputTokens: 1_000_000,
+          outputTokens: 100_000,
+          inputTokenDetails: { cacheReadTokens: 500_000 },
+        },
+        modelId: 'openai/gpt-5.4-mini',
+      }),
+    );
+    // 1M*0.75 + 0.1M*4.5 = 0.75 + 0.45 = 1.20 USD
+    expect(envelope.cost_usd).toBeCloseTo(1.2, 4);
+  });
+
   it('unknown model → cost_usd = 0', () => {
     const envelope = buildAhcStats(
       baseInput({
