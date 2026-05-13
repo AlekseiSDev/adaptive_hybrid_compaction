@@ -112,7 +112,12 @@ export type MakeTauBenchRunnerOpts = {
 export function makeTauBenchRunner(opts: MakeTauBenchRunnerOpts): Runner {
   const baseURL = opts.baseURL ?? 'https://openrouter.ai/api/v1'
   const openai = createOpenAI({ apiKey: opts.apiKey, baseURL })
-  const actorModelId = opts.actorModelId ?? TAU_ACTOR_DEFAULT_MODEL
+  // E1: AHC_ACTOR_MODEL env var overrides defaults at runner construction.
+  // Explicit opts.actorModelId still wins (sweep YAML / test path).
+  const envActor = process.env['AHC_ACTOR_MODEL']
+  const actorModelId =
+    opts.actorModelId ??
+    (envActor && envActor.length > 0 ? envActor : TAU_ACTOR_DEFAULT_MODEL)
   const userSimModelId = opts.userSimModelId ?? TAU_USER_SIM_DEFAULT_MODEL
   const actorModel = openai.chat(actorModelId)
   const userSimModel = openai.chat(userSimModelId)

@@ -21,6 +21,14 @@ export const OPENROUTER_PRICING: Record<string, ModelPricing> = Object.freeze({
     input_per_million_usd: 0.5,
     output_per_million_usd: 3.0,
   },
+  // E1: cheaper actor fallback (2× cheaper than flash-preview). Used when
+  // cross-phase budget tracker detects OpenRouter overspend mid-pipeline —
+  // swap actor model for remaining sweeps via AHC_ACTOR_MODEL env var.
+  // Pricing verified live 2026-05-13 vs OpenRouter /api/v1/models.
+  'google/gemini-3.1-flash-lite-preview': {
+    input_per_million_usd: 0.25,
+    output_per_million_usd: 1.5,
+  },
   // D4 judge model. Sonnet 4-7 not yet on OpenRouter (2026-05-13 verified via
   // /api/v1/models); fallback to 4.6 per plan. Note: OpenRouter uses dot
   // notation (4.6), Anthropic SDK uses dash (4-6). Pricing verified live.

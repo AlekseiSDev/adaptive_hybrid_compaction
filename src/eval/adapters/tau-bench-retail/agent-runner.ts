@@ -32,7 +32,16 @@ import { retailTools } from './tools.js'
 import type { Episode, EnvState } from './types.js'
 import { userSimStep } from './user-sim.js'
 
-export const TAU_ACTOR_DEFAULT_MODEL = 'google/gemini-3-flash-preview'
+// E1: AHC_ACTOR_MODEL env var overrides this default when set. Used for
+// cross-phase budget hedge (swap to flash-lite if OpenRouter credit runs low).
+// User-sim model NOT subject to override — customer behavior should stay
+// consistent across sweeps for comparable success rates.
+const TAU_ACTOR_FLASH_DEFAULT = 'google/gemini-3-flash-preview'
+function resolveTauActorDefault(): string {
+  const env = process.env['AHC_ACTOR_MODEL']
+  return env && env.length > 0 ? env : TAU_ACTOR_FLASH_DEFAULT
+}
+export const TAU_ACTOR_DEFAULT_MODEL = TAU_ACTOR_FLASH_DEFAULT
 export const TAU_USER_SIM_DEFAULT_MODEL = 'openai/gpt-4o-mini'
 
 export type RunTauEpisodeDeps = {
@@ -75,7 +84,7 @@ export async function runTauEpisode(
   const events: InstrumentationEvent[] = []
   const errors: EpisodeResult['errors'] = []
 
-  const actorModelId = deps.actorModelId ?? TAU_ACTOR_DEFAULT_MODEL
+  const actorModelId = deps.actorModelId ?? resolveTauActorDefault()
   const userSimModelId = deps.userSimModelId ?? TAU_USER_SIM_DEFAULT_MODEL
   const actorPricing = deps.actorPricing ?? OPENROUTER_PRICING[actorModelId] ?? FALLBACK_PRICING
 
