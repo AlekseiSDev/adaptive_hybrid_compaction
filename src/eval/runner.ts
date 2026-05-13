@@ -8,6 +8,7 @@ import {
   writeMeta,
   writeSummary,
 } from './persist.js'
+import { assistantTrajAdapter, assistantTrajGrader } from './adapters/assistant-traj.js'
 import { syntheticAdapter, syntheticGrader } from './adapters/synthetic.js'
 import { buildRunnerFromBaseline } from './baseline.js'
 import { anthropicCompactBaseline } from './baselines/anthropic_compact.js'
@@ -70,6 +71,11 @@ export const defaultAdapterRegistry: AdapterRegistry = {
   resolve: (bench) => {
     if (bench === 'synthetic') {
       return { adapter: syntheticAdapter, grader: syntheticGrader }
+    }
+    if (bench === 'assistant-traj') {
+      // assistantTrajGrader uses a stub for `llm_judge` until D4 Step 3 wires
+      // the real vision-capable judge via createAssistantTrajGrader({llmJudge}).
+      return { adapter: assistantTrajAdapter, grader: assistantTrajGrader }
     }
     throw new Error(`bench not registered: ${bench}`)
   },
@@ -244,6 +250,10 @@ export async function runSweep(
           const score = grader.score(task, response)
           const completed_at = Date.now()
           const enrichedTurns = enrichTurnsWithEvents(response.turns, events)
+          // Roll judge cost (D4) into record.cost_usd so CostTracker.observe()
+          // counts it against the sweep budget. See decisions.md [2026-05-13]
+          // D4 — Score.judge_cost_usd rolled into record.cost_usd.
+          const recordCost = response.cost_usd + (score.judge_cost_usd ?? 0)
           const record: RunRecord = {
             run_id: randomUUID(),
             bench,
@@ -254,7 +264,7 @@ export async function runSweep(
             completed_at,
             score,
             totals: response.totals,
-            cost_usd: response.cost_usd,
+            cost_usd: recordCost,
             turns: enrichedTurns,
             errors: response.errors,
           }

@@ -20,6 +20,10 @@ export type Score = {
   primary: number
   secondary?: Record<string, number>
   judge_explanation?: string
+  // Per-record judge call cost (D4). Rolled into RunRecord.cost_usd in runSweep
+  // before CostTracker.observe(). Separate field so test/eval can distinguish
+  // baseline cost from judge cost.
+  judge_cost_usd?: number
 }
 
 export type TokenUsage = {
