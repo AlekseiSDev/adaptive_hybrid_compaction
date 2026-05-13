@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+<!--
+  ClickHouse listen-host override.
+
+  Default 24.x image binds to [::] (IPv6 wildcard); Docker Desktop containers
+  без IPv6 → bind fails → server stays on 127.0.0.1 only → /ping unreachable
+  from network → healthcheck fails. Force IPv4-only listen host.
+-->
+<clickhouse>
+  <listen_host>0.0.0.0</listen_host>
+</clickhouse>

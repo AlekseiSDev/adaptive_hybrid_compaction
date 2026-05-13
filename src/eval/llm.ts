@@ -8,17 +8,16 @@ import type {
 
 // OpenRouter pricing snapshot — manual maintenance, fresh per commit.
 // Cost calc: (prompt_tokens × input + completion_tokens × output) / 1e6.
-// Numbers are placeholder ballpark for Gemini-3.1-Flash family — refresh from
-// https://openrouter.ai/models before any main sweep (E1).
+// Verified против OpenRouter /models 2026-05-13 (B4). Refresh перед main sweep (E1).
 export type ModelPricing = {
   input_per_million_usd: number
   output_per_million_usd: number
 }
 
 export const OPENROUTER_PRICING: Record<string, ModelPricing> = Object.freeze({
-  'google/gemini-3.1-flash': {
-    input_per_million_usd: 0.075,
-    output_per_million_usd: 0.3,
+  'google/gemini-3.1-flash-lite': {
+    input_per_million_usd: 0.25,
+    output_per_million_usd: 1.5,
   },
 })
 

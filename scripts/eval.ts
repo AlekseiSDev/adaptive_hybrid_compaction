@@ -78,11 +78,30 @@ async function main(): Promise<void> {
   const rootDir = resolve(process.cwd(), 'benchmarks/runs')
   const obs = setupObservability()
   try {
-    const result = await runSweep(plan, defaultAdapterRegistry, defaultRunnerRegistry, {
-      rootDir,
-      gitSha: gitSha(),
+    // Wrap runSweep in single eval.sweep span — minimum trace для B4 verifier.
+    // Per-config / per-task / per-turn spans — следующий iteration (отдельная фаза
+    // или часть AHC integration после A6 wiring).
+    const span = obs.tracer.startSpan('eval.sweep', {
+      attributes: {
+        'sweep.name': plan.name,
+        'sweep.benches': plan.benches.join(','),
+        'sweep.configs_count': plan.configs.length,
+        'sweep.seeds': plan.seeds.join(','),
+        'sweep.budget_usd': plan.budget_usd,
+      },
     })
-    printSummary(plan, result, obs.enabled)
+    try {
+      const result = await runSweep(plan, defaultAdapterRegistry, defaultRunnerRegistry, {
+        rootDir,
+        gitSha: gitSha(),
+      })
+      span.setAttribute('sweep.halted', result.halted)
+      span.setAttribute('sweep.total_cost_usd', result.total_cost_usd)
+      span.setAttribute('sweep.configs_completed', result.configs.length)
+      printSummary(plan, result, obs.enabled)
+    } finally {
+      span.end()
+    }
   } finally {
     await obs.dispose()
   }

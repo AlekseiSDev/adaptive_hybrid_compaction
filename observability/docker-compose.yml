@@ -21,6 +21,8 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
     ports:
       - "3001:3000"
     environment:
@@ -28,7 +30,10 @@ services:
       NEXTAUTH_URL: http://localhost:3001
       NEXTAUTH_SECRET: ahc-dev-nextauth-secret-CHANGEME
       SALT: ahc-dev-salt-CHANGEME
-      ENCRYPTION_KEY: 0000000000000000000000000000000000000000000000000000000000000000
+      # Generated openssl rand -hex 32 для local dev — рандом, чтобы Zod hex check
+      # пропустил. Для production override в .env.local + secrets.
+      ENCRYPTION_KEY: a21fa4b217d23206b610069ba863d6ee667ce8116908d1b377495d40c894e5b9
+      CLICKHOUSE_CLUSTER_ENABLED: "false"
       CLICKHOUSE_URL: http://clickhouse:8123
       CLICKHOUSE_USER: clickhouse
       CLICKHOUSE_PASSWORD: clickhouse
@@ -42,6 +47,19 @@ services:
       LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: miniosecret
       LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: http://minio:9000
       LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE: "true"
+      # Headless bootstrap (B4) — pre-create org/project/admin user/API keys.
+      # Idempotent: re-applied на subsequent restarts без error. Values must
+      # match LANGFUSE_PUBLIC_KEY/LANGFUSE_SECRET_KEY in .env.example для local dev.
+      # Не quote'им values (per Langfuse docs).
+      LANGFUSE_INIT_ORG_ID: ahc-dev
+      LANGFUSE_INIT_ORG_NAME: AHC Dev
+      LANGFUSE_INIT_PROJECT_ID: ahc
+      LANGFUSE_INIT_PROJECT_NAME: AHC eval
+      LANGFUSE_INIT_PROJECT_PUBLIC_KEY: pk-lf-ahc-dev-deterministic
+      LANGFUSE_INIT_PROJECT_SECRET_KEY: sk-lf-ahc-dev-deterministic
+      LANGFUSE_INIT_USER_EMAIL: dev@ahc.local
+      LANGFUSE_INIT_USER_NAME: AHC Dev
+      LANGFUSE_INIT_USER_PASSWORD: ahc-dev-CHANGEME
 
   langfuse-worker:
     image: docker.io/langfuse/langfuse-worker:3
@@ -55,10 +73,15 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
     environment:
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/postgres
       SALT: ahc-dev-salt-CHANGEME
-      ENCRYPTION_KEY: 0000000000000000000000000000000000000000000000000000000000000000
+      # Generated openssl rand -hex 32 для local dev — рандом, чтобы Zod hex check
+      # пропустил. Для production override в .env.local + secrets.
+      ENCRYPTION_KEY: a21fa4b217d23206b610069ba863d6ee667ce8116908d1b377495d40c894e5b9
+      CLICKHOUSE_CLUSTER_ENABLED: "false"
       CLICKHOUSE_URL: http://clickhouse:8123
       CLICKHOUSE_USER: clickhouse
       CLICKHOUSE_PASSWORD: clickhouse
@@ -99,8 +122,12 @@ services:
     volumes:
       - ./data/clickhouse:/var/lib/clickhouse
       - ./data/clickhouse-logs:/var/log/clickhouse-server
+      # Force IPv4-only listen host (Docker Desktop без IPv6 в контейнерах).
+      - ./clickhouse-config/listen.xml:/etc/clickhouse-server/config.d/listen.xml:ro
     healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8123/ping || exit 1"]
+      # 127.0.0.1 (not localhost) — wget resolves localhost to ::1 first; container
+      # is IPv4-only (см. listen.xml override).
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1:8123/ping || exit 1"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -129,5 +156,21 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+
+  # One-shot init: create `langfuse` bucket в MinIO (langfuse-web падает на S3 upload
+  # если bucket не существует). Idempotent через --ignore-existing.
+  minio-init:
+    image: docker.io/minio/mc:RELEASE.2024-11-21T17-21-54Z
+    depends_on:
+      minio:
+        condition: service_healthy
+    restart: "no"
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        mc alias set local http://minio:9000 minio miniosecret &&
+        mc mb local/langfuse --ignore-existing &&
+        echo "minio-init: bucket 'langfuse' ready"
 
 # Volumes are bind-mounted under observability/data/ (gitignored).

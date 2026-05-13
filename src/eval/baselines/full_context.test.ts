@@ -25,19 +25,19 @@ describe('fullContextBaseline', () => {
   test('prepare → state with task_id, empty history, scratch.model', () => {
     const baseline = fullContextBaseline({
       llmClient: okLlm('hi'),
-      model: 'google/gemini-3.1-flash',
+      model: 'google/gemini-3.1-flash-lite',
     })
     const state = baseline.prepare(makeTask())
     expect(state.task_id).toBe('t1')
     expect(state.history).toEqual([])
-    expect(state.scratch?.['model']).toBe('google/gemini-3.1-flash')
+    expect(state.scratch?.['model']).toBe('google/gemini-3.1-flash-lite')
   })
 
   test('step adds user + assistant to history; TurnRecord populated with tokens', async () => {
     const llm = okLlm('answer', 100, 50)
     const baseline = fullContextBaseline({
       llmClient: llm,
-      model: 'google/gemini-3.1-flash',
+      model: 'google/gemini-3.1-flash-lite',
     })
     const state0 = baseline.prepare(makeTask())
     const result = await baseline.step(state0, makeUser('q1'))
@@ -57,7 +57,7 @@ describe('fullContextBaseline', () => {
   test('multiple steps grow history (length == 2*N after N turns)', async () => {
     const baseline = fullContextBaseline({
       llmClient: okLlm('reply', 50, 25),
-      model: 'google/gemini-3.1-flash',
+      model: 'google/gemini-3.1-flash-lite',
     })
     let state = baseline.prepare(makeTask())
     state = (await baseline.step(state, makeUser('q1'))).state
@@ -76,7 +76,7 @@ describe('fullContextBaseline', () => {
     })
     const baseline = fullContextBaseline({
       llmClient: errLlm,
-      model: 'google/gemini-3.1-flash',
+      model: 'google/gemini-3.1-flash-lite',
     })
     const state = baseline.prepare(makeTask())
     await expect(baseline.step(state, makeUser('q'))).rejects.toThrow(/rate_limit/)
@@ -86,7 +86,7 @@ describe('fullContextBaseline', () => {
     const llm = okLlm('a', 10, 5)
     const baseline = fullContextBaseline({
       llmClient: llm,
-      model: 'google/gemini-3.1-flash',
+      model: 'google/gemini-3.1-flash-lite',
     })
     let state = baseline.prepare(makeTask())
     state = (await baseline.step(state, makeUser('q1'))).state

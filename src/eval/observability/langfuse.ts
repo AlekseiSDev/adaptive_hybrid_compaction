@@ -55,10 +55,16 @@ export function setupObservability(
     )
   }
 
+  // shouldExportSpan: true override — default heuristics в LangfuseSpanProcessor
+  // are AI-SDK-aware и могут drop'нуть наши ручные spans (eval.sweep, eval.task, etc.).
+  // Для AHC eval pipeline мы хотим экспортировать ВСЕ spans, включая generic ones.
   const processor = new LangfuseSpanProcessor({
     publicKey,
     secretKey,
     baseUrl,
+    flushAt: 1,
+    flushInterval: 1000,
+    shouldExportSpan: () => true,
   })
   const provider = new NodeTracerProvider({
     resource: resourceFromAttributes({ [ATTR_SERVICE_NAME]: 'ahc-eval' }),

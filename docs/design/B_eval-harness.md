@@ -23,7 +23,7 @@
 > для demo / acceptance gate (для пользователя / защиты). Per-phase — exit signal
 > для агента-реализатора, симметричный TDD seed на входе.
 
-### Track B (после B3)
+### Track B (после B4)
 
 **Доступно:**
 - `src/eval/` экспортирует run lifecycle (§2): `loadTasks → adapter.prepare →
@@ -48,21 +48,40 @@
   через NoopTracerProvider иначе, нулевой overhead на main sweep'ах).
 - Per-class breakdown report (`scripts/per-class-report.ts`) — accuracy split
   по `trajectory_class` на AHC runs.
+- **Zero-touch Langfuse bootstrap**: `observability/docker-compose.yml` использует
+  `LANGFUSE_INIT_*` env vars (org/project/admin user/API keys pre-created на
+  первом старте контейнера) — no UI walk требуется (см. §9.1). `.env.example`
+  fixирует deterministic `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` literals
+  для local dev; production / shared deployments — отдельные значения через
+  `.env.local`.
+- **End-to-end Langfuse trace verifier** (`scripts/check-langfuse-trace.ts`):
+  CLI fetch'ит Langfuse REST API `/api/public/traces` с public/secret key + filter
+  по timestamp, печатает trace_id/observation count, exit 0 если ≥ 1 trace
+  поднялся за last N секунд. Programmatic acceptance вместо visual UI walk.
 
-**Demo (e2e):** Два smoke-режима:
+**Demo (e2e):** Три smoke-режима:
 - Stub-only (B1 regression, no API key): `pnpm tsx scripts/eval.ts --sweep
   eval/sweeps/smoke.yaml` — synthetic 2-task config (`noop_baseline` + `noop_ahc`,
   1 seed), пишет `benchmarks/runs/<bench>/<config_id>/<seed>/records.ndjson` и
   summary.json. Создан в B1.
-- Vertical slice (B2, manual gate, нужен `OPENROUTER_API_KEY`):
+- Vertical slice — code path (B2, manual gate, нужен `OPENROUTER_API_KEY`):
   `OPENROUTER_API_KEY=... pnpm tsx scripts/eval.ts --sweep
   eval/sweeps/smoke_full_context.yaml` — synthetic + `full_context` baseline →
   real Gemini-3.1-Flash через OpenRouter; NDJSON содержит provider-reported
-  tokens; `LANGFUSE_ENABLED=true` показывает spans в Langfuse UI.
+  tokens.
+- End-to-end с Langfuse (B4, manual gate, нужен Langfuse stack + keys):
+  `docker compose -f observability/docker-compose.yml up -d` →
+  `LANGFUSE_ENABLED=true OPENROUTER_API_KEY=... pnpm tsx scripts/eval.ts
+  --sweep eval/sweeps/smoke_full_context.yaml` →
+  `pnpm tsx scripts/check-langfuse-trace.ts --since-seconds=60` (REST API
+  verifier — exit 0 если ≥ 1 trace доехал в Langfuse за последние 60 сек).
+  Артефакты от real run в git **не** попадают (per `decisions.md 2026-05-13`
+  B4 entries) — это validation step, не reproducibility evidence.
 
 **Acceptance gate:** `./scripts/verify.sh` зелёный + stub-only smoke не падает
 + vertical-slice smoke (с key) не падает + NDJSON содержит все required поля
-из §3 telemetry schema. `cache_read_input_tokens` non-empty появляется на E3
+из §3 telemetry schema + B4 end-to-end Langfuse trace verifier exit 0 (когда
+Langfuse stack поднят). `cache_read_input_tokens` non-empty появляется на E3
 Anthropic-direct subset, не на main OpenRouter sweep'ах; non-empty
 `compaction_events` появятся когда AHC integration (через `createAhcMiddleware`
 из A6 или ahc_core runner) станет default на ahc config'е.
@@ -74,6 +93,7 @@ Anthropic-direct subset, не на main OpenRouter sweep'ах; non-empty
 | **B1** | `src/eval/{runner,persist,types}.ts` + `scripts/eval.ts` + `eval/sweeps/smoke.yaml`; smoke run на 1-2 tasks пишет append-safe NDJSON в `benchmarks/runs/<bench>/<config_id>/<seed>/records.ndjson`; повторный run resume'ится в ту же папку | `pnpm exec vitest run src/eval/persist.test.ts` (NDJSON append + resume по `config_id`) + `pnpm tsx scripts/eval.ts --sweep eval/sweeps/smoke.yaml` |
 | **B2** | Telemetry fields (`cache_read_input_tokens`, `compaction_events`, `recall_events`, `class_signal`) присутствуют в `TurnRecord`; `LLMClient` + OpenRouter wire; `Baseline` interface + `buildRunnerFromBaseline`; `full_context` baseline ships (de-facto C3); CostTracker активен в `runSweep`; OTel pipeline через `@langfuse/otel` `LangfuseSpanProcessor`, exporter no-op при `LANGFUSE_ENABLED=false` | `pnpm exec vitest run src/eval/telemetry.test.ts` (provider tokens authoritative) + `pnpm exec vitest run src/eval/observability/langfuse.test.ts` (exporter no-op при `LANGFUSE_ENABLED=false`) + manual: `OPENROUTER_API_KEY=... pnpm tsx scripts/eval.ts --sweep eval/sweeps/smoke_full_context.yaml` |
 | **B3** | `scripts/per-class-report.ts` — CLI читает NDJSON, агрегирует mode-class per task, печатает accuracy split по `conversational/tool_heavy/mixed` с stderr | `pnpm exec vitest run src/eval/stats.test.ts` (per-class aggregate матчится с mode-class на synthetic NDJSON) + `pnpm tsx scripts/per-class-report.ts benchmarks/runs/<bench>/<config_id>` |
+| **B4** | `observability/docker-compose.yml` zero-touch boots Langfuse v3 (`LANGFUSE_INIT_*` env vars pre-create org/project/admin user/API keys); `scripts/check-langfuse-trace.ts` — CLI REST verifier; vertical-slice smoke с `LANGFUSE_ENABLED=true` доставляет ≥ 1 trace в Langfuse | `docker compose -f observability/docker-compose.yml up -d` (wait healthchecks) + `LANGFUSE_ENABLED=true OPENROUTER_API_KEY=... pnpm tsx scripts/eval.ts --sweep eval/sweeps/smoke_full_context.yaml` + `pnpm tsx scripts/check-langfuse-trace.ts --since-seconds=60` (exit 0) |
 
 ---
 
@@ -93,8 +113,9 @@ Pointer-маппинг «фаза → секции». Source of truth по фа�
 | **B1** Wire existing harness | — | B2, B3, C1/C2/C3, E1 | §2 run lifecycle, §4 persistence, §8 sweep YAML | `RunRecord`, `TurnRecord`, `Score`, `TokenUsage`, `ErrorRecord` | NDJSON append-safety + resume по `config_id` (повторный run пишет в ту же папку) | §1 scope |
 | **B2** Token/cache/latency telemetry + Langfuse + ships `full_context` (C3) | B1 | C1, C2, E1, G3 | §2 run lifecycle (LLMClient wire), §3 telemetry schema (full), §6 (CostTracker active), §9 (all) | `CompactionEvent`, `RecallEvent`, `class_signal`, provider-reported `cache_read_input_tokens`; `Baseline` interface + `buildRunnerFromBaseline` helper | exporter no-op при `LANGFUSE_ENABLED=false`; provider tokens authoritative (не offline tokenizer); CostTracker `shouldHalt` projection halts при > 1.5× budget после 20 tasks | §6 CostTracker (активный); `design/C_baselines.md §1` (Baseline contract) |
 | **B3** Per-class breakdown | B1, B2 | F2 | §7 (all) | `class_signal` в `TurnRecord` | per-class aggregate матчится с mode-class на synthetic NDJSON; paired permutation по `task_id` | §5 stats pipeline |
+| **B4** End-to-end Langfuse vertical-slice verification | B2 | E1 (real-LLM main sweep), F1 (Methods reproducibility appendix) | §9 (full Langfuse stack), §9.1 (`docker-compose.yml` headless init) | (no new schema — verifies §9.2 export pipeline end-to-end) | smoke с `LANGFUSE_ENABLED=true` → trace доезжает в Langfuse REST API (`/api/public/traces?fromTimestamp=...`) ≥ 1 за 60 сек | §9.5 failure modes (Langfuse down handled gracefully); `decisions.md 2026-05-13` B4 entries |
 
-**Parallelization:** внутри Track B всё sequential — `B1 → B2 → B3` (B2 расширяет B1 telemetry, B3 consume'ит `class_signal` из B2). Cross-track: B1 разблокирует C1/C2/C3 (baseline interface потребляет `RunRecord`) параллельно с B2.
+**Parallelization:** внутри Track B всё sequential — `B1 → B2 → B3 → B4` (B2 расширяет B1 telemetry, B3 consume'ит `class_signal` из B2, B4 verifies §9 end-to-end). Cross-track: B1 разблокирует C1/C2/C3 (baseline interface потребляет `RunRecord`) параллельно с B2.
 
 **Orthogonal / deferred:**
 - §5 Statistical pipeline — pure functions поверх NDJSON; реализуется по необходимости (часть B2-tail или E pre-report).
@@ -358,15 +379,41 @@ opt-in (runs работают без observability, если она не под�
 
 ### 9.1 Stack
 
+Langfuse v3 self-hosted (6 services per upstream compose template):
+
 ```
-docker-compose.yml
-  langfuse-web   # UI на :3001
-  langfuse-pg    # internal storage; не пересекается с runtime AHC / Mastra
+observability/docker-compose.yml
+  langfuse-web      # UI на :3001 + REST API
+  langfuse-worker   # async event processing
+  postgres:17       # auth/users/projects metadata
+  clickhouse:24.12  # trace storage
+  redis:7           # queue / pubsub
+  minio             # S3-compatible blob storage для events
 ```
 
-Запускается отдельной командой: `docker-compose up langfuse -d`. Не required для
-`verify.sh` или runs — но рекомендуется во время A2–A6 development и при interactive
-debug Track G UI.
+Запускается отдельной командой: `docker compose -f observability/docker-compose.yml
+up -d`. Не required для `verify.sh` или main sweep'ов — но **обязательно** для
+B4 acceptance gate (end-to-end Langfuse trace verifier).
+
+**Headless bootstrap (B4):** `langfuse-web` env содержит `LANGFUSE_INIT_*` блок:
+
+```yaml
+LANGFUSE_INIT_ORG_ID: ahc-dev
+LANGFUSE_INIT_ORG_NAME: AHC Dev
+LANGFUSE_INIT_PROJECT_ID: ahc
+LANGFUSE_INIT_PROJECT_NAME: AHC eval
+LANGFUSE_INIT_PROJECT_PUBLIC_KEY: pk-lf-ahc-dev-deterministic
+LANGFUSE_INIT_PROJECT_SECRET_KEY: sk-lf-ahc-dev-deterministic
+LANGFUSE_INIT_USER_EMAIL: dev@ahc.local
+LANGFUSE_INIT_USER_NAME: AHC Dev
+LANGFUSE_INIT_USER_PASSWORD: ahc-dev-CHANGEME
+```
+
+Org/project/admin user/API keys создаются на первом старте container'а (idempotent
+на subsequent restarts). `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` для SDK
+читаются из тех же deterministic значений в `.env.example` (committed) — local dev
+не требует UI walk. Production / shared deployments — другие keys через `.env.local`
+(gitignored).
 
 ### 9.2 Telemetry export
 
@@ -442,6 +489,30 @@ Langfuse UI после initial setup). Tracks:
 Track G UI consume'ит ту же telemetry, что и eval harness — единый поток событий из
 `core/`. UI отображает их inline (sidebar); Langfuse — для post-hoc analysis. Один
 источник, два consumer'а.
+
+### 9.7 End-to-end verification (B4)
+
+`scripts/check-langfuse-trace.ts` — programmatic acceptance gate, заменяет visual
+UI walk. CLI:
+
+```bash
+pnpm tsx scripts/check-langfuse-trace.ts --since-seconds=60 [--min-traces=1]
+```
+
+Поведение:
+1. Читает `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` / `LANGFUSE_BASE_URL` из env.
+2. `fetch GET ${baseUrl}/api/public/traces?fromTimestamp=<now - since_seconds>` с
+   HTTP Basic auth (`publicKey:secretKey`).
+3. Печатает `trace_id`, `name`, `observation_count` для каждого trace.
+4. Exit 0 если `data.length >= min-traces`; exit 1 иначе (с stderr explanation).
+
+Acceptance gate (B4): после `LANGFUSE_ENABLED=true ... pnpm tsx scripts/eval.ts
+--sweep eval/sweeps/smoke_full_context.yaml` (vertical-slice smoke) — verifier
+exit 0. End-to-end pipeline доказан без visual confirm.
+
+Real-run артефакты (NDJSON / summary / meta) от B4 verification **не** коммитятся
+в git — это validation step, а не reproducibility evidence. См. `decisions.md
+2026-05-13` B4 entries.
 
 ---
 

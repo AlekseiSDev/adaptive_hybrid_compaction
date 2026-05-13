@@ -382,6 +382,15 @@ numbers процитированы; повторно интегрировать 
 - **B3. Per-class breakdown reporting (1 день).** Скрипт, который для AHC показывает
   accuracy split по detected trajectory_class — это важно для Discussion в отчёте.
 
+- **B4. End-to-end Langfuse vertical-slice verification (0.5 дня).** Поднимаем
+  локальный Langfuse stack через `observability/docker-compose.yml` (zero-touch
+  bootstrap через `LANGFUSE_INIT_*` env vars — admin user/org/project/API keys
+  pre-created на старте); прогоняем real OpenRouter+Gemini smoke с
+  `LANGFUSE_ENABLED=true`; `scripts/check-langfuse-trace.ts` через REST API
+  верифицирует что ≥ 1 trace доехал в Langfuse. Programmatic acceptance gate
+  для §9 pipeline. Real-run артефакты не коммитятся (validation step, не
+  reproducibility evidence). См. `decisions.md 2026-05-13` B4 entries.
+
 **Track C — Baselines integration**
 
 - **C1. Mastra OM baseline (2 дня).** Поднять Mastra с default config (PG storage,

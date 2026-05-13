@@ -75,7 +75,7 @@ export const defaultAdapterRegistry: AdapterRegistry = {
   },
 }
 
-const FULL_CONTEXT_DEFAULT_MODEL = 'google/gemini-3.1-flash'
+const FULL_CONTEXT_DEFAULT_MODEL = 'google/gemini-3.1-flash-lite'
 
 function makeFullContextRunner(): Runner {
   const apiKey = process.env['OPENROUTER_API_KEY']

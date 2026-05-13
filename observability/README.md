@@ -4,34 +4,39 @@ Local Langfuse v3 stack для inspect AHC-traces during dev / interactive demo.
 opt-in: `verify.sh` и main sweep'ы (E1/E2) работают без поднятого Langfuse, нулевой
 overhead на disabled пути (см. `src/eval/observability/langfuse.ts`).
 
-## Quick start
+## Quick start (zero-touch, B4)
 
 ```bash
 docker compose -f observability/docker-compose.yml up -d
-# Wait ~30s for healthchecks; then visit http://localhost:3001
+# Wait ~30s for healthchecks (postgres + clickhouse + redis + minio); ~30s more
+# for langfuse-web init migrations. После этого:
+#   - UI на http://localhost:3001 (login dev@ahc.local / ahc-dev-CHANGEME)
+#   - REST API доступен; pk/sk pre-created по LANGFUSE_INIT_* в compose.
 ```
 
-В UI:
+`.env.example` уже содержит deterministic dev keys, matching `LANGFUSE_INIT_*` в
+compose:
 
-1. Регистрируешь user (only first run).
-2. Создаёшь Project — копируешь Public Key + Secret Key.
-3. Экспортируешь env vars:
+- `LANGFUSE_PUBLIC_KEY=pk-lf-ahc-dev-deterministic`
+- `LANGFUSE_SECRET_KEY=sk-lf-ahc-dev-deterministic`
 
-```bash
-export LANGFUSE_ENABLED=true
-export LANGFUSE_PUBLIC_KEY=pk-lf-...
-export LANGFUSE_SECRET_KEY=sk-lf-...
-export LANGFUSE_BASE_URL=http://localhost:3001
-```
+Никакой UI walk не требуется — `cp .env.example .env.local` достаточно. Production /
+shared deployments — override keys в `.env.local` (gitignored).
 
-4. Прогоняешь vertical-slice smoke (требует `OPENROUTER_API_KEY`):
+Прогоняешь vertical-slice smoke (требует `OPENROUTER_API_KEY` в `.env.local`):
 
 ```bash
-OPENROUTER_API_KEY=sk-... pnpm tsx scripts/eval.ts \
+set -a && source .env.local && set +a
+LANGFUSE_ENABLED=true pnpm tsx scripts/eval.ts \
   --sweep eval/sweeps/smoke_full_context.yaml
 ```
 
-5. Trace появляется в Langfuse UI на проекте.
+End-to-end verification (B4 acceptance gate):
+
+```bash
+pnpm tsx scripts/check-langfuse-trace.ts --since-seconds=60
+# exit 0 + печатает trace_id/observation_count если ≥ 1 trace доехал.
+```
 
 ## Stop / wipe
 
