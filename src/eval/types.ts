@@ -80,6 +80,14 @@ export type RunRecord = {
   cost_usd: number
   turns: TurnRecord[]
   errors: ErrorRecord[]
+  /**
+   * Final assistant response text — the same string that the grader/judge
+   * scores against. Without this field, post-hoc audit of why a task scored
+   * 0 / 0.5 / 1 is impossible (NDJSON was previously token-only). Optional
+   * because old NDJSON predates the field and must still parse; new writes
+   * always set it.
+   */
+  final_response_text?: string
 }
 
 // Harness-side interfaces (B1).

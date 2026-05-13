@@ -232,9 +232,10 @@ A. Reproducibility
   - Ablations: `eval/sweeps/ablation_e2.yaml`, ~$30
   - Cache hit: `eval/sweeps/cache_hit_e3.yaml`, ~$20 на Anthropic direct
 - Models pinned:
-  - Actor: google/gemini-3-flash-preview (snapshot YYYY-MM-DD)
-  - Judge: openai/gpt-5.4
-  - Cache hit: anthropic/claude-sonnet-4-6
+  - Actor: openai/gpt-5.4-mini (snapshot YYYY-MM-DD; selected for automatic prompt-caching on OpenRouter — see `decisions.md` 2026-05-13)
+  - Secondary actor (cross-vendor sanity, opt-in): google/gemini-3-flash-preview
+  - Judge: anthropic/claude-sonnet-4.6 via OpenRouter
+  - Cache-hit subset (E3): anthropic/claude-sonnet-4-6 via Anthropic direct API
 - Seeds: 42, 43
 - Data:
   - LongMemEval, LoCoMo, τ-bench — public, instructions to obtain в repo README

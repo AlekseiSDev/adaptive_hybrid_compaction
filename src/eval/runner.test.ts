@@ -71,6 +71,33 @@ describe('runSweep — lifecycle smoke (synthetic + stub runners)', () => {
     expect(ids.size).toBe(2)
   })
 
+  test('records persist final_response_text — what the grader scored against', async () => {
+    // Regression for "ну judge же на чем-то считается?" — pre-fix the response
+    // text was passed to grader and to the OTel span but dropped from NDJSON.
+    await runSweep(smokePlan, defaultAdapterRegistry, defaultRunnerRegistry, {
+      rootDir: workspace,
+      gitSha: 'test-sha',
+    })
+    const cfg = (
+      await runSweep(smokePlan, defaultAdapterRegistry, defaultRunnerRegistry, {
+        rootDir: workspace,
+        gitSha: 'test-sha',
+      })
+    ).configs[0]
+    if (!cfg) throw new Error('expected at least one config')
+    const ndjson = await readFile(join(cfg.runDir, 'records.ndjson'), 'utf8')
+    const records = ndjson
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line) as { final_response_text?: string })
+    expect(records).toHaveLength(2)
+    for (const r of records) {
+      const text = r.final_response_text
+      expect(typeof text).toBe('string')
+      expect((text ?? '').length).toBeGreaterThan(0)
+    }
+  })
+
   test('re-run on same rootDir is idempotent (skips completed task_ids)', async () => {
     await runSweep(smokePlan, defaultAdapterRegistry, defaultRunnerRegistry, {
       rootDir: workspace,

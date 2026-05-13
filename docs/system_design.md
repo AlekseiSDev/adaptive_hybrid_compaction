@@ -234,18 +234,30 @@ AssistantTraj):
 ### 6.1 LLM provider и модели
 
 - **Provider**: OpenRouter для всех experiments (единый ключ, единый billing).
-- **Primary actor model**: `google/gemini-3-flash-preview` — main experiments, cheap, fast.
-- **Secondary actor model**: `openai/gpt-5.4-mini` — если budget и время позволят
-  (cross-vendor sanity на small subset).
-- **Judge model для LLM-judge eval**: `openai/gpt-5.4` (более capable, но используется
-  только для финальной оценки, не в loop).
-- **Cheap models для AHC internals** (Observer, digest gen, classifier): дефолтный
-  тоже Gemini-3.1-Flash на OpenRouter; в production можно конфигурировать (Mastra-style
-  `ModelByInputTokens`).
+- **Primary actor model**: `openai/gpt-5.4-mini` — main experiments. Pricing snapshot
+  2026-05-13: $0.75 in / $4.50 out per 1M tokens. **Выбран намеренно за automatic
+  prompt caching** на OpenRouter — OpenAI кеширует префикс при ≥1024-token prompt'е
+  без explicit `cache_control` (как у Anthropic). Проверено live (`scripts/probe-openai-cache.ts`,
+  decisions 2026-05-13): на ~3340-token system prompt'е cached_tokens flips 0 → 2304
+  (80.8% hit) на calls 2-3, latency 903ms cold → ~500ms warm. AHC telemetry
+  (`src/eval/telemetry.ts:42-49`) уже маппит `prompt_tokens_details.cached_tokens` →
+  `cache_read_input_tokens` в NDJSON.
+- **Secondary actor model**: `google/gemini-3-flash-preview` — для cross-vendor sanity
+  на small subset, если budget позволит.
+- **Judge model для LLM-judge eval**: `anthropic/claude-sonnet-4.6` via OpenRouter
+  (capable, используется только для финальной оценки).
+- **Cheap models для AHC internals** (Observer, digest gen, classifier): тот же
+  `openai/gpt-5.4-mini` по умолчанию — кэширование амортизирует Observer/digest cost
+  внутри сессии. В production можно конфигурировать (Mastra-style `ModelByInputTokens`).
 
-**Cache hit rate caveat**: OpenRouter не всегда expose cache headers. Cache hit rate как
-метрика замеряется на дополнительном small subset (n=10–15) через **direct Anthropic API**
-с Sonnet-4.6. Главные accuracy/tokens числа берём с OpenRouter+Gemini.
+**Caching prerequisite**: чтобы automatic cache fired надо emit **stable, ≥1024-token
+system prompt**. Минималистичный `'You are a helpful assistant. Answer concisely.'`
+(~7 words) — не подходит; harness вешает enlarged system prompt (см.
+`src/eval/runners/ahc_core.ts` / `src/ui/lib/systemPrompt.ts` integration).
+
+**Cache hit rate cross-check**: дополнительный small subset (n=10–15) через **direct
+Anthropic API** c Sonnet-4.6 остаётся в плане (E3) для cross-vendor validation, но
+primary cache numbers теперь приходят с OpenRouter+OpenAI пути.
 
 ### 6.2 Бенчмарки
 

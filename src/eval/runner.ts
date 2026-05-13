@@ -441,6 +441,7 @@ async function executeOneTask(args: {
     cost_usd: recordCost,
     turns: enrichedTurns,
     errors: response.errors,
+    final_response_text: response.text,
   }
   return { task_id: task.id, record }
 }
