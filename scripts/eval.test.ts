@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { parseArgs, validateSweep, VALID_PROVIDERS } from './eval.js'
+import { parseArgs, sweepRootDir, validateSweep, VALID_PROVIDERS } from './eval.js'
 
 // validateSweep — sweep YAML schema sanity. Tests the optional E0 `provider`
 // per-row enum check + the pre-existing required-keys check, so future
@@ -77,6 +77,23 @@ describe('VALID_PROVIDERS constant', () => {
     expect(VALID_PROVIDERS.has('openrouter')).toBe(true)
     expect(VALID_PROVIDERS.has('anthropic_direct')).toBe(true)
     expect(VALID_PROVIDERS.size).toBe(2)
+  })
+})
+
+describe('sweepRootDir — per-sweep output convention (E0)', () => {
+  test('appends plan.name segment between rootDir and bench subdirs', () => {
+    const result = sweepRootDir('/work', 'main_e1')
+    expect(result).toBe('/work/benchmarks/runs/main_e1')
+  })
+
+  test('distinguishes sweeps with same configs but different names', () => {
+    expect(sweepRootDir('/w', 'e1')).not.toBe(sweepRootDir('/w', 'e2'))
+  })
+
+  test('resolves relative cwd to absolute', () => {
+    const result = sweepRootDir('relative/path', 'test_sweep')
+    expect(result.startsWith('/')).toBe(true)
+    expect(result.endsWith('benchmarks/runs/test_sweep')).toBe(true)
   })
 })
 

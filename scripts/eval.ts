@@ -56,6 +56,14 @@ export function parseArgs(argv: string[]): CliArgs {
 
 export const VALID_PROVIDERS = new Set(['openrouter', 'anthropic_direct'])
 
+// E0: sweep output dir convention. benchmarks/runs/<plan.name>/<bench>/<cfg>/<seed>
+// — per-sweep subdir so E1/E2/E3 outputs don't collide on shared
+// (bench, config_id, seed) triples. Exported pure helper so tests can verify
+// the path-mapping without invoking the CLI.
+export function sweepRootDir(cwd: string, planName: string): string {
+  return resolve(cwd, 'benchmarks/runs', planName)
+}
+
 export function validateSweep(raw: unknown, source: string): SweepPlan {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
     throw new Error(`sweep ${source}: must be a YAML object at top level`)
@@ -110,7 +118,7 @@ async function main(): Promise<void> {
   const absSweep = resolve(args.sweep)
   const raw = parseYaml(await readFile(absSweep, 'utf8')) as unknown
   const plan = validateSweep(raw, absSweep)
-  const rootDir = resolve(process.cwd(), 'benchmarks/runs')
+  const rootDir = sweepRootDir(process.cwd(), plan.name)
   if (args.dryRun) {
     console.log(
       `[eval] DRY-RUN mode: ${String(args.nPerCell)} tasks/cell, no persistence`,
