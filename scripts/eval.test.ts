@@ -198,3 +198,44 @@ describe('parseArgs — --dry-run + --n-per-cell (E0)', () => {
     expect(() => parseArgs(['--sweep', 'p.yaml', '--n-per-cell=-3'])).toThrow(/positive integer/)
   })
 })
+
+describe('parseArgs — --concurrency + --max-tasks-per-cell (E1)', () => {
+  test('default --concurrency is 1, maxTasksPerCell undefined', () => {
+    const args = parseArgs(['--sweep', 'p.yaml'])
+    expect(args.concurrency).toBe(1)
+    expect(args.maxTasksPerCell).toBeUndefined()
+  })
+
+  test('--concurrency=5 parses', () => {
+    const args = parseArgs(['--sweep', 'p.yaml', '--concurrency=5'])
+    expect(args.concurrency).toBe(5)
+  })
+
+  test('--concurrency rejects 0 / negative / > 50', () => {
+    expect(() => parseArgs(['--sweep', 'p.yaml', '--concurrency=0'])).toThrow(/integer in/)
+    expect(() => parseArgs(['--sweep', 'p.yaml', '--concurrency=-1'])).toThrow(/integer in/)
+    expect(() => parseArgs(['--sweep', 'p.yaml', '--concurrency=51'])).toThrow(/integer in/)
+  })
+
+  test('--max-tasks-per-cell=N parses positive integer', () => {
+    const args = parseArgs(['--sweep', 'p.yaml', '--max-tasks-per-cell=3'])
+    expect(args.maxTasksPerCell).toBe(3)
+  })
+
+  test('--max-tasks-per-cell rejects 0 / negative', () => {
+    expect(() => parseArgs(['--sweep', 'p.yaml', '--max-tasks-per-cell=0'])).toThrow(/positive integer/)
+    expect(() => parseArgs(['--sweep', 'p.yaml', '--max-tasks-per-cell=-1'])).toThrow(/positive integer/)
+  })
+
+  test('combines with --dry-run independently', () => {
+    const args = parseArgs([
+      '--sweep', 'p.yaml',
+      '--dry-run', '--n-per-cell=2',
+      '--concurrency=4',
+    ])
+    expect(args.dryRun).toBe(true)
+    expect(args.nPerCell).toBe(2)
+    expect(args.concurrency).toBe(4)
+    expect(args.maxTasksPerCell).toBeUndefined()
+  })
+})

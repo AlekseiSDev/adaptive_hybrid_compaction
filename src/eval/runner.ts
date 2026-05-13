@@ -48,6 +48,7 @@ import type {
   RunRecord,
   Runner,
   SweepPlan,
+  Task,
   TurnRecord,
 } from './types.js'
 
@@ -72,6 +73,17 @@ export type RunSweepOptions = {
   // CostTracker still observes — caller asserts on result.total_cost_usd /
   // result.halted to verify circuit-breaker behavior.
   dryRun?: { nTasksPerCell: number }
+  // E1: task-level parallelism within each (bench × config × seed) cell.
+  // Default 1 (sequential — backwards-compat). When >1, tasks within a cell
+  // execute in chunks of size `concurrency` via Promise.all; halt poll runs
+  // after each chunk (so up to (concurrency-1) extra tasks may complete past
+  // the halt threshold). Cells themselves remain sequential — file lock /
+  // CostTracker projection accounting easier to reason about.
+  concurrency?: number
+  // E1: live cap on tasks per cell, orthogonal to `dryRun`. Persists records
+  // (unlike dryRun.nTasksPerCell). Used for "mini-smoke" mode: 1 task per
+  // cell live spend → validity check → auto-resume to full sweep skips those.
+  maxTasksPerCell?: number
 }
 
 const TASK_INPUT_ATTR = 'langfuse.observation.input'
@@ -321,6 +333,77 @@ function enrichTurnsWithEvents(
   })
 }
 
+type TaskOutcome = {
+  task_id: string
+  record: RunRecord
+}
+
+async function executeOneTask(args: {
+  bench: Bench
+  config: ConfigDef
+  config_id: string
+  seed: number
+  task: Task
+  runner: Runner
+  grader: Grader
+  adapter: BenchAdapter
+  tracer: Tracer
+}): Promise<TaskOutcome> {
+  const { bench, config, config_id, seed, task, runner, grader, adapter, tracer } = args
+  const events: InstrumentationEvent[] = []
+  const conv = adapter.prepare(task)
+  const started_at = Date.now()
+  const taskSpan = tracer.startSpan('eval.task', {
+    attributes: {
+      'task.id': task.id,
+      bench,
+      config_id,
+      seed: String(seed),
+      [TASK_INPUT_ATTR]: JSON.stringify(conv.messages),
+    },
+  })
+  let response
+  try {
+    response = await context.with(
+      trace.setSpan(context.active(), taskSpan),
+      () =>
+        runner.execute(conv, {
+          bench,
+          config,
+          seed,
+          task,
+          instrumentation: (e) => events.push(e),
+        }),
+    )
+    taskSpan.setAttribute(TASK_OUTPUT_ATTR, response.text)
+  } catch (err) {
+    taskSpan.recordException(err as Error)
+    taskSpan.setStatus({ code: SpanStatusCode.ERROR })
+    taskSpan.end()
+    throw err
+  }
+  taskSpan.end()
+  const score = await grader.score(task, response)
+  const completed_at = Date.now()
+  const enrichedTurns = enrichTurnsWithEvents(response.turns, events)
+  const recordCost = response.cost_usd + (score.judge_cost_usd ?? 0)
+  const record: RunRecord = {
+    run_id: randomUUID(),
+    bench,
+    config_id,
+    seed,
+    task_id: task.id,
+    started_at,
+    completed_at,
+    score,
+    totals: response.totals,
+    cost_usd: recordCost,
+    turns: enrichedTurns,
+    errors: response.errors,
+  }
+  return { task_id: task.id, record }
+}
+
 export async function runSweep(
   plan: SweepPlan,
   adapters: AdapterRegistry,
@@ -330,14 +413,13 @@ export async function runSweep(
   const configResults: RunSweepConfigResult[] = []
   const costTracker = new CostTracker()
   const totalTasks = await computeTotalTasks(plan, adapters)
-  // Noop-safe: when LANGFUSE_ENABLED unset, this is a noop tracer and the
-  // span calls below are zero-cost. When enabled, eval.task spans appear as
-  // children of the outer eval.sweep span set up in scripts/eval.ts.
   const tracer = options.tracer ?? trace.getTracer('ahc-eval')
 
   let halted = false
   let halt_reason: string | undefined
   const dryRun = options.dryRun
+  const concurrency = Math.max(1, options.concurrency ?? 1)
+  const maxTasksPerCell = options.maxTasksPerCell
 
   outer: for (const bench of plan.benches) {
     const { adapter, grader } = adapters.resolve(bench)
@@ -351,111 +433,79 @@ export async function runSweep(
         const tasks = await adapter.loadTasks(seed)
 
         let n_completed = 0
-        let n_skipped = 0
 
-        for (const task of tasks) {
-          if (completed.has(task.id)) {
-            n_skipped += 1
-            continue
+        // Filter out already-completed tasks, apply caps before chunking.
+        const pending = tasks.filter((t) => !completed.has(t.id))
+        const n_skipped = tasks.length - pending.length
+        let cap: number = pending.length
+        if (dryRun) cap = Math.min(cap, dryRun.nTasksPerCell)
+        if (maxTasksPerCell !== undefined) cap = Math.min(cap, maxTasksPerCell)
+        const limited = pending.slice(0, cap)
+
+        // Chunked Promise.all execution. concurrency=1 preserves sequential
+        // semantics (chunks of size 1). Halt poll runs after each chunk
+        // completes — within-chunk halt cannot interrupt in-flight tasks.
+        let cellHalted = false
+        for (let i = 0; i < limited.length; i += concurrency) {
+          const chunk = limited.slice(i, i + concurrency)
+          const outcomes = await Promise.all(
+            chunk.map((task) =>
+              executeOneTask({
+                bench,
+                config,
+                config_id,
+                seed,
+                task,
+                runner,
+                grader,
+                adapter,
+                tracer,
+              }),
+            ),
+          )
+          for (const outcome of outcomes) {
+            if (!dryRun) await appendRecord(runDir, outcome.record)
+            n_completed += 1
+            costTracker.observe(outcome.record)
+            const decision = costTracker.shouldHalt({
+              budget_usd: plan.budget_usd,
+              total_tasks: totalTasks,
+            })
+            if (decision.halt) {
+              halted = true
+              halt_reason = decision.reason
+              console.warn(`[runSweep] halting: ${decision.reason}`)
+              cellHalted = true
+            }
           }
-          // E0: dry-run cap — stop this cell after nTasksPerCell tasks.
-          if (dryRun && n_completed >= dryRun.nTasksPerCell) break
-          const events: InstrumentationEvent[] = []
-          const conv = adapter.prepare(task)
-          const started_at = Date.now()
-          const taskSpan = tracer.startSpan('eval.task', {
-            attributes: {
-              'task.id': task.id,
+          if (cellHalted) break
+        }
+        if (cellHalted) {
+          if (!dryRun) {
+            await writeMeta(runDir, {
+              config,
               bench,
-              config_id,
-              seed: String(seed),
-              [TASK_INPUT_ATTR]: JSON.stringify(conv.messages),
-            },
-          })
-          let response
-          try {
-            response = await context.with(
-              trace.setSpan(context.active(), taskSpan),
-              () =>
-                runner.execute(conv, {
-                  bench,
-                  config,
-                  seed,
-                  task,
-                  instrumentation: (e) => events.push(e),
-                }),
+              seed,
+              git_sha: options.gitSha ?? 'unknown',
+              timestamp: new Date().toISOString(),
+            })
+            const allRecords = await readAllRecords(runDir)
+            await writeSummary(
+              runDir,
+              { bench, config_id, seed },
+              allRecords,
+              { status: 'partial', halt_reason: halt_reason ?? 'unknown' },
             )
-            taskSpan.setAttribute(TASK_OUTPUT_ATTR, response.text)
-          } catch (err) {
-            taskSpan.recordException(err as Error)
-            taskSpan.setStatus({ code: SpanStatusCode.ERROR })
-            taskSpan.end()
-            throw err
           }
-          taskSpan.end()
-          // Grader.score is async (D4 Step 3) so llm_judge can call the
-          // real LLM. Sync graders (synthetic) wrap in Promise.resolve.
-          const score = await grader.score(task, response)
-          const completed_at = Date.now()
-          const enrichedTurns = enrichTurnsWithEvents(response.turns, events)
-          // Roll judge cost (D4) into record.cost_usd so CostTracker.observe()
-          // counts it against the sweep budget. See decisions.md [2026-05-13]
-          // D4 — Score.judge_cost_usd rolled into record.cost_usd.
-          const recordCost = response.cost_usd + (score.judge_cost_usd ?? 0)
-          const record: RunRecord = {
-            run_id: randomUUID(),
+          configResults.push({
             bench,
             config_id,
             seed,
-            task_id: task.id,
-            started_at,
-            completed_at,
-            score,
-            totals: response.totals,
-            cost_usd: recordCost,
-            turns: enrichedTurns,
-            errors: response.errors,
-          }
-          // E0: dry-run mode — no NDJSON persistence; CostTracker still observes
-          // in-memory so circuit-breaker behavior remains testable.
-          if (!dryRun) await appendRecord(runDir, record)
-          n_completed += 1
-
-          costTracker.observe(record)
-          const decision = costTracker.shouldHalt({
-            budget_usd: plan.budget_usd,
-            total_tasks: totalTasks,
+            n_completed,
+            n_skipped,
+            runDir,
           })
-          if (decision.halt) {
-            halted = true
-            halt_reason = decision.reason
-            console.warn(`[runSweep] halting: ${decision.reason}`)
-            if (!dryRun) {
-              await writeMeta(runDir, {
-                config,
-                bench,
-                seed,
-                git_sha: options.gitSha ?? 'unknown',
-                timestamp: new Date().toISOString(),
-              })
-              const allRecords = await readAllRecords(runDir)
-              await writeSummary(
-                runDir,
-                { bench, config_id, seed },
-                allRecords,
-                { status: 'partial', halt_reason: decision.reason },
-              )
-            }
-            configResults.push({
-              bench,
-              config_id,
-              seed,
-              n_completed,
-              n_skipped,
-              runDir,
-            })
-            break outer
-          }
+          break outer
         }
 
         if (!dryRun) {

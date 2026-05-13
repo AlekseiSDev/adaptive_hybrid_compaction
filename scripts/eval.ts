@@ -18,14 +18,20 @@ type CliArgs = {
   sweep: string
   dryRun: boolean
   nPerCell: number
+  concurrency: number
+  maxTasksPerCell: number | undefined
 }
 
 const DRY_RUN_DEFAULT_N_PER_CELL = 2
+const CONCURRENCY_DEFAULT = 1
+const CONCURRENCY_MAX = 50
 
 export function parseArgs(argv: string[]): CliArgs {
   let sweep: string | undefined
   let dryRun = false
   let nPerCell = DRY_RUN_DEFAULT_N_PER_CELL
+  let concurrency = CONCURRENCY_DEFAULT
+  let maxTasksPerCell: number | undefined
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i]
     if (a === '--sweep') {
@@ -44,14 +50,33 @@ export function parseArgs(argv: string[]): CliArgs {
         throw new Error(`error: --n-per-cell expects positive integer, got "${raw}"`)
       }
       nPerCell = parsed
+    } else if (a !== undefined && a.startsWith('--concurrency=')) {
+      const raw = a.slice('--concurrency='.length)
+      const parsed = Number.parseInt(raw, 10)
+      if (!Number.isFinite(parsed) || parsed < 1 || parsed > CONCURRENCY_MAX) {
+        throw new Error(
+          `error: --concurrency expects integer in [1, ${String(CONCURRENCY_MAX)}], got "${raw}"`,
+        )
+      }
+      concurrency = parsed
+    } else if (a !== undefined && a.startsWith('--max-tasks-per-cell=')) {
+      const raw = a.slice('--max-tasks-per-cell='.length)
+      const parsed = Number.parseInt(raw, 10)
+      if (!Number.isFinite(parsed) || parsed < 1) {
+        throw new Error(
+          `error: --max-tasks-per-cell expects positive integer, got "${raw}"`,
+        )
+      }
+      maxTasksPerCell = parsed
     }
   }
   if (!sweep) {
     throw new Error(
-      'usage: tsx scripts/eval.ts --sweep <path/to/sweep.yaml> [--dry-run [--n-per-cell=N]]',
+      'usage: tsx scripts/eval.ts --sweep <path/to/sweep.yaml> ' +
+        '[--dry-run [--n-per-cell=N]] [--concurrency=N] [--max-tasks-per-cell=N]',
     )
   }
-  return { sweep, dryRun, nPerCell }
+  return { sweep, dryRun, nPerCell, concurrency, maxTasksPerCell }
 }
 
 export const VALID_PROVIDERS = new Set(['openrouter', 'anthropic_direct'])
@@ -158,6 +183,10 @@ async function main(): Promise<void> {
               rootDir,
               gitSha: gitSha(),
               ...(args.dryRun ? { dryRun: { nTasksPerCell: args.nPerCell } } : {}),
+              concurrency: args.concurrency,
+              ...(args.maxTasksPerCell !== undefined
+                ? { maxTasksPerCell: args.maxTasksPerCell }
+                : {}),
             },
           )
           span.setAttribute('sweep.halted', result.halted)

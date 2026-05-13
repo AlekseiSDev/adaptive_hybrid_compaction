@@ -325,6 +325,90 @@ describe('runSweep — dry-run mode (E0)', () => {
   })
 })
 
+describe('runSweep — concurrency + maxTasksPerCell (E1)', () => {
+  test('concurrency=1 preserves sequential semantics: NDJSON ordering deterministic', async () => {
+    const result = await runSweep(smokePlan, defaultAdapterRegistry, defaultRunnerRegistry, {
+      rootDir: workspace,
+      concurrency: 1,
+    })
+    for (const cfg of result.configs) {
+      const ndjson = await readFile(join(cfg.runDir, 'records.ndjson'), 'utf8')
+      const lines = ndjson.trim().split('\n')
+      const ids = lines.map((l) => (JSON.parse(l) as { task_id: string }).task_id)
+      // Synthetic adapter yields stable task ordering; with conc=1 record
+      // appends mirror that order exactly.
+      expect(ids).toEqual(ids.slice().sort())
+    }
+  })
+
+  test('concurrency=2 runs chunks in parallel: wall-clock is shorter than sequential', async () => {
+    // Use a slow synthetic runner via custom registry to make parallelism
+    // observable. Each task sleeps 100ms; with conc=2 over 2 tasks the chunk
+    // takes ~100ms, vs ~200ms for conc=1.
+    const slowRunners: RunnerRegistry = {
+      resolve: () => ({
+        name: 'slow-stub',
+        execute: async (_conv, ctx) => {
+          await new Promise((r) => setTimeout(r, 100))
+          return {
+            text: ctx.task.expected as string,
+            turns: [],
+            errors: [],
+            totals: { input: 0, output: 0 },
+            cost_usd: 0.0001,
+          }
+        },
+      }),
+    }
+    const firstCfg = smokePlan.configs[0]
+    if (firstCfg === undefined) throw new Error('smokePlan.configs[0] missing')
+    const t0 = Date.now()
+    await runSweep(
+      { ...smokePlan, configs: [firstCfg] },
+      defaultAdapterRegistry,
+      slowRunners,
+      { rootDir: workspace, concurrency: 2 },
+    )
+    const dur = Date.now() - t0
+    // 2 tasks @ 100ms each in chunk → ~100ms wall-clock. Add slack for FS.
+    expect(dur).toBeLessThan(180)
+  })
+
+  test('maxTasksPerCell caps live runs and persists (unlike dryRun)', async () => {
+    const result = await runSweep(smokePlan, defaultAdapterRegistry, defaultRunnerRegistry, {
+      rootDir: workspace,
+      maxTasksPerCell: 1,
+    })
+    for (const cfg of result.configs) {
+      expect(cfg.n_completed).toBe(1)
+      // Live cap = persistence happens.
+      expect(existsSync(join(cfg.runDir, 'records.ndjson'))).toBe(true)
+      expect(existsSync(join(cfg.runDir, 'summary.json'))).toBe(true)
+      const ndjson = await readFile(join(cfg.runDir, 'records.ndjson'), 'utf8')
+      expect(ndjson.trim().split('\n')).toHaveLength(1)
+    }
+  })
+
+  test('maxTasksPerCell + auto-resume: rerunning without cap completes remaining tasks', async () => {
+    // First pass: mini-smoke caps at 1.
+    await runSweep(smokePlan, defaultAdapterRegistry, defaultRunnerRegistry, {
+      rootDir: workspace,
+      maxTasksPerCell: 1,
+    })
+    // Second pass: no cap. Auto-resume skips the 1 already done and runs the
+    // remaining 1 (synthetic has 2 tasks). End state: 2 total per cell.
+    const second = await runSweep(smokePlan, defaultAdapterRegistry, defaultRunnerRegistry, {
+      rootDir: workspace,
+    })
+    for (const cfg of second.configs) {
+      expect(cfg.n_completed).toBe(1)
+      expect(cfg.n_skipped).toBe(1)
+      const ndjson = await readFile(join(cfg.runDir, 'records.ndjson'), 'utf8')
+      expect(ndjson.trim().split('\n')).toHaveLength(2)
+    }
+  })
+})
+
 describe('default registries', () => {
   test('adapter registry resolves synthetic; throws on unknown bench', () => {
     const synth = defaultAdapterRegistry.resolve('synthetic')
