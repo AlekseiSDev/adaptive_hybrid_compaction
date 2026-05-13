@@ -1,0 +1,11 @@
+{
+  "_instructions": "Read each (task, response) pair and replace `score: null` with 0.0, 0.5, or 1.0 per the rubric (Rubric — <category>.md). rationale is free-form (≤2 sentences). After filling, run: pnpm tsx benchmarks/assistant_traj/judge.ts --calibrate",
+  "_tasks": {
+    "at_image_qa_005": "FSM diagram → Markdown Jira review. Read tasks/at_image_qa_005.json + attachments/at_image_qa_005/1.svg + responses/at_image_qa_005.txt. Rubric: image_qa.md.",
+    "at_code_iter_005": "PostgreSQL query iteration → pgTAP tests. Read tasks/at_code_iter_005.json + responses/at_code_iter_005.txt. Rubric: code_iter.md (composite — judge sub-rule checks pgTAP test structure).",
+    "at_research_write_005": "Node.js RFC → consolidated commit-ready doc. Read tasks/at_research_write_005.json + responses/at_research_write_005.txt. Rubric: research_write.md."
+  },
+  "at_image_qa_005": { "score": null, "rationale": "" },
+  "at_code_iter_005": { "score": null, "rationale": "" },
+  "at_research_write_005": { "score": null, "rationale": "" }
+}

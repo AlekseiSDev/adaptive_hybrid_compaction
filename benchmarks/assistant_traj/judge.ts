@@ -100,11 +100,24 @@ async function loadTaskById(taskId: string): Promise<AssistantTrajTask> {
   return result.data
 }
 
-function extractTopLevelJudgeSpec(task: AssistantTrajTask): LlmJudgeSpec | null {
-  if (task.evaluation.strategy === 'llm_judge') {
-    return {
-      rubric_id: task.evaluation.rubric_id,
-      expected_summary: task.evaluation.expected_summary,
+type EvaluationLike =
+  | { strategy: 'llm_judge'; rubric_id: string; expected_summary: string }
+  | { strategy: 'composite'; rules: EvaluationLike[] }
+  | { strategy: 'exact_match' | 'regex'; [k: string]: unknown }
+
+// Walks the evaluation tree to find the first llm_judge spec. Supports both
+// top-level llm_judge tasks and composite tasks with nested llm_judge rules
+// (typical pattern: regex pre-checks + one llm_judge for semantic scoring).
+function extractFirstJudgeSpec(evaluation: unknown): LlmJudgeSpec | null {
+  if (!evaluation || typeof evaluation !== 'object') return null
+  const ev = evaluation as EvaluationLike
+  if (ev.strategy === 'llm_judge') {
+    return { rubric_id: ev.rubric_id, expected_summary: ev.expected_summary }
+  }
+  if (ev.strategy === 'composite') {
+    for (const r of ev.rules) {
+      const found = extractFirstJudgeSpec(r)
+      if (found) return found
     }
   }
   return null
@@ -112,11 +125,11 @@ function extractTopLevelJudgeSpec(task: AssistantTrajTask): LlmJudgeSpec | null 
 
 async function runOne(taskId: string, responseFile: string): Promise<void> {
   const task = await loadTaskById(taskId)
-  const spec = extractTopLevelJudgeSpec(task)
+  const spec = extractFirstJudgeSpec(task.evaluation)
   if (!spec) {
     console.error(
-      `error: task ${taskId} has strategy=${task.evaluation.strategy} (not top-level llm_judge). ` +
-        `Use --calibrate for composite tasks once calibration human_scores.json is populated.`,
+      `error: task ${taskId} has strategy=${task.evaluation.strategy} with no llm_judge anywhere ` +
+        `in the evaluation tree. Only exact_match / regex strategies, nothing for the judge to score.`,
     )
     process.exit(1)
   }
@@ -143,9 +156,11 @@ async function runCalibrate(): Promise<void> {
     )
     process.exit(1)
   }
-  const taskIds = Object.keys(humanScores)
+  // Skip metadata keys (start with _) — used for instructions / task notes in
+  // the template file. Only task_id-shaped keys are graded.
+  const taskIds = Object.keys(humanScores).filter((k) => !k.startsWith('_'))
   if (taskIds.length === 0) {
-    console.error('error: human_scores.json is empty')
+    console.error('error: human_scores.json has no task entries (only metadata keys)')
     process.exit(1)
   }
 
@@ -167,7 +182,7 @@ async function runCalibrate(): Promise<void> {
       continue
     }
     const task = await loadTaskById(taskId)
-    const spec = extractTopLevelJudgeSpec(task)
+    const spec = extractFirstJudgeSpec(task.evaluation)
     if (!spec) {
       console.error(`  skipping ${taskId}: not a top-level llm_judge task`)
       continue

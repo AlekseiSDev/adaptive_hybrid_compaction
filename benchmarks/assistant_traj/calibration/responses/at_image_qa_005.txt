@@ -1,0 +1,52 @@
+Вот Markdown-отчет, подготовленный для вставки в Jira:
+
+# FSM Review: Order Lifecycle
+
+## States summary
+Согласно предоставленной диаграмме, в системе определено 8 состояний. Они распределены по типам в соответствии с легендой:
+
+| State | Type |
+|:---|:---|
+| **Draft**, **Confirmed**, **In Delivery**, **In Service** | ⚪ Normal |
+| **Delivered**, **Canceled** | 🟢 Terminal |
+| **Correction needed**, **Disputed** | 🔴 Error-recovery |
+
+## Transitions
+Ниже приведена полная матрица переходов в формате CSV:
+
+```csv
+from,to,event
+Draft,Confirmed,Confirm
+Draft,Canceled,Cancel
+Confirmed,In Delivery,Ship
+Confirmed,Correction needed,Invalid data
+Correction needed,Confirmed,Fix data
+In Delivery,Delivered,Complete delivery
+In Delivery,In Service,Accept & Start service
+In Delivery,Disputed,Report issue
+In Service,Delivered,Finish service
+In Service,Disputed,Report issue
+Disputed,In Delivery,Resolve & Redeliver
+Disputed,Canceled,Reject claim
+```
+
+---
+
+## Issues found
+В ходе анализа графа выявлены следующие критические и логические замечания:
+
+1.  **Потенциальное «застревание» в In Service:** Хотя из `In Service` можно перейти в `Delivered`, на диаграмме (в отличие от In Delivery) отсутствует переход в `Disputed`. Если в процессе оказания услуги возникнет конфликт, заказ нельзя перевести в статус разбора претензий.
+2.  **Бесконечные петли (Infinite Loops):**
+    *   **Data Fix Loop:** `Confirmed` ↔ `Correction needed`. Без счетчика попыток или перехода в `Canceled` заказ может бесконечно циркулировать между этими статусами.
+    *   **Redelivery Loop:** `In Delivery` ↔ `Disputed`. Существует риск бесконечных повторных доставок без возможности окончательного закрытия заказа по негативному сценарию (кроме ручной отмены после спора).
+3.  **Отсутствие возможности отмены на поздних этапах:** Не предусмотрен переход в `Canceled` из состояний `Confirmed`, `In Delivery` или `In Service`. Это означает, что после подтверждения заказа его невозможно отменить до момента возникновения спора (`Disputed`).
+
+---
+
+## Recommendations
+Для повышения надежности бизнес-логики рекомендуется:
+
+1.  **Добавить переход `In Service` ➔ `Disputed`:** Обеспечить консистентность логики — возможность заявить о проблеме должна быть на любом этапе исполнения обязательств (и доставка, и сервис).
+2.  **Ограничить количество итераций в циклах:** Внедрить бизнес-правило (Guard Condition) на переходах `Fix data` и `Resolve & Redeliver`, чтобы после N неудачных попыток заказ принудительно уходил в `Canceled` или требовал вмешательства оператора.
+3.  **Добавить прямые переходы в Canceled:** Предусмотреть возможность отмены заказа из состояний `Confirmed` и `In Delivery` (например, по инициативе клиента или из-за отсутствия товара), чтобы не "прогонять" заказ через фиктивный спор.
+4.  **Уточнить логику In Service:** Если `In Service` является финальным этапом перед `Delivered`, стоит проверить, может ли заказ быть отменен или возвращен на доработку в случае неудачи сервиса, минуя общий терминальный статус.

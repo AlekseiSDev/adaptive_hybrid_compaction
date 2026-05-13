@@ -1,0 +1,98 @@
+```markdown
+# RFC 0042: Structured Context Propagation via AsyncLocalStorage
+
+**Status:** Draft (RFC Author: N/A — see RFC owner)  
+**Date:** 2023-10-27  
+**Area:** Backend, Observability  
+
+---
+
+## Table of Contents
+1. [Motivation](#1-motivation)
+2. [Problem Statement](#2-problem-statement)
+3. [Proposed API](#3-proposed-api)
+4. [Implementation Details](#4-implementation-details)
+5. [Alternatives Considered](#5-alternatives-considered)
+6. [Performance Impact](#6-performance-impact)
+7. [Migration Plan](#7-migration-plan)
+8. [Risks & Mitigation](#8-risks--mitigation)
+9. [Open Questions](#9-open-questions)
+
+---
+
+## 1. Motivation
+In our microservices architecture, troubleshooting distributed requests is hindered by "fragmented logs." Currently, searching for related logs requires manual correlation. We need a transparent way to attach cross-cutting metadata (`request_id`, `user_id`, `tenant_id`) to every log entry without polluting the business logic with manual parameter passing.
+
+## 2. Problem Statement
+*   **Context Loss:** Asynchronous boundaries (Promises, callbacks, third-party drivers) make it difficult to maintain a reference to the initial request metadata.
+*   **Boilerplate:** Developers must manually inject metadata into every log statement: `logger.info('msg', { requestId })`.
+*   **Observability Gaps:** Lack of consistent `tenant_id` tagging prevents precise debugging of multi-tenant issues in ELK/Datadog.
+
+## 3. Proposed API
+
+### 3.1 Middleware Integration
+The library will provide Express-compatible middleware to initialize context from incoming headers:
+
+```typescript
+import { loggerContextMiddleware } from '@our-internal/logger';
+app.use(loggerContextMiddleware({
+  headerMapping: {
+    'x-request-id': 'requestId',
+    'x-tenant-id': 'tenantId'
+  }
+}));
+```
+
+### 3.2 Implicit Context Usage
+Standard log calls will automatically merge the active store data into the JSON payload:
+
+```typescript
+import { logger } from '@our-internal/logger';
+
+async function processOrder(orderId: string) {
+  // Metadata (requestId, etc.) is injected automatically from AsyncLocalStorage
+  logger.info('Processing order', { orderId }); 
+}
+```
+
+### 3.3 Sub-context (Nesting)
+For granular tracking within a request (e.g., inside a loop), the library supports inherited child contexts:
+
+```typescript
+await contextStore.runChild({ jobId: '123' }, async () => {
+  logger.info('Task started'); // Includes parent requestId + jobId
+});
+```
+
+## 4. Implementation Details
+The library will utilize the native Node.js `async_hooks.AsyncLocalStorage` (ALS). 
+1. **Store Initialization:** `contextStore.run()` creates a new asynchronous execution context.
+2. **Persistence:** The context persists across `await` points and into any microtasks or timers spawned within the scope.
+3. **Log Merging:** The `Logger.write` method calls `als.getStore()` and shallow-merges the result with the log event before serialization.
+
+## 5. Alternatives Considered
+*   **Explicit Context Passing:** Passing a `ctx` object to every function. *Rejected* due to massive refactoring cost (~30 services) and increased boilerplate.
+*   **OpenTelemetry Baggage:** *Rejected* as a primary logger mechanism due to API complexity, though the proposed ALS solution is designed to be OTEL-compatible in the future.
+*   **Domain Module:** *Rejected* as it is historically unstable and deprecated by Node.js core.
+
+## 6. Performance Impact
+*   **Latency:** Based on benchmarks (Node.js 18+), `AsyncLocalStorage` adds < 2ms overhead at p99 in typical I/O-bound Express apps.
+*   **CPU:** Throughput degradation is estimated at < 1.5% for non-compute-heavy services.
+*   **Optimization:** The library will include a global switch to bypass ALS logic if sub-millisecond overhead is required.
+
+## 7. Migration Plan
+1. **Canary Rollout:** Deploy to 2 pilot services with the feature disabled by default.
+2. **Opt-in Activation:** Enable via Environment Variable: `LOGGER_CONTEXT_ENABLED=true`.
+3. **Mass Adoption:** Standardize headers at the API Gateway level and update all services to the latest logger version via automated PRs.
+4. **Rollback:** Total feature isolation. Setting the ENV flag to `false` disables the ALS instantiation entirely.
+
+## 8. Risks & Mitigation
+*   **Memory Leaks:** Improper closure of async resources could retain context. *Mitigation:* Automated leak detection tests in CI and monitoring `active_handles`.
+*   **Context Loss:** Third-party libraries using legacy callback patterns may break the chain. *Mitigation:* Providing `contextStore.bind(fn)` to manually wrap sensitive callbacks.
+*   **Library Fragmentation:** Inconsistent key naming (e.g., `reqId` vs `request_id`). *Mitigation:* Strict internal schema enforcement in the middleware config.
+
+## 9. Open Questions
+1. **Typing Policy:** Should the store object be a strict interface or a flexible Record type?
+2. **Log Level Escalation:** Should we allow the context to force-elevate the log level (e.g., "Debug" only for a specific `user_id`)?
+3. **Storage Depth:** Is there a limit on how many nested `runChild` calls we should support to avoid stack overhead?
+```

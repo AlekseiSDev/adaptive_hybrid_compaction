@@ -1,0 +1,34 @@
+```sql
+-- 1. Проверка дефолтных параметров (наличие результатов)
+SELECT plan(1);
+SELECT has_rows(
+    'SELECT * FROM top_n_recent_orders()',
+    'Should return results with default parameters'
+);
+SELECT * FROM finish();
+
+-- 2. Проверка фильтрации по p_user_ids
+SELECT plan(1);
+SELECT is_empty(
+    'SELECT * FROM top_n_recent_orders(ARRAY[-1], 30, 3)',
+    'Should return no rows for non-existent user_id'
+);
+/* Либо тест на точное соответствие ID, если данные известны:
+SELECT results_eq(
+    'SELECT DISTINCT user_id FROM top_n_recent_orders(ARRAY[10, 20], 30, 3)',
+    'ARRAY[10, 20]::bigint[]',
+    'Should only return user_ids provided in the array'
+);
+*/
+SELECT * FROM finish();
+
+-- 3. Проверка метаданных функции (Volatility: STABLE)
+SELECT plan(1);
+SELECT function_is(
+    'top_n_recent_orders',
+    ARRAY['bigint[]', 'integer', 'integer'],
+    'stable',
+    'Function top_n_recent_orders should be marked as STABLE'
+);
+SELECT * FROM finish();
+```
