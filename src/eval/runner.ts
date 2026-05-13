@@ -9,7 +9,11 @@ import {
   writeMeta,
   writeSummary,
 } from './persist.js'
-import { assistantTrajAdapter, assistantTrajGrader } from './adapters/assistant-traj.js'
+import {
+  assistantTrajAdapter,
+  createAssistantTrajGrader,
+} from './adapters/assistant-traj.js'
+import { defaultLlmJudge } from './adapters/assistant-traj.judge.js'
 import { syntheticAdapter, syntheticGrader } from './adapters/synthetic.js'
 import { buildRunnerFromBaseline } from './baseline.js'
 import { anthropicCompactBaseline } from './baselines/anthropic_compact.js'
@@ -81,9 +85,14 @@ export const defaultAdapterRegistry: AdapterRegistry = {
       return { adapter: syntheticAdapter, grader: syntheticGrader }
     }
     if (bench === 'assistant-traj') {
-      // assistantTrajGrader uses a stub for `llm_judge` until D4 Step 3 wires
-      // the real vision-capable judge via createAssistantTrajGrader({llmJudge}).
-      return { adapter: assistantTrajAdapter, grader: assistantTrajGrader }
+      // Production path: bind real LLM-backed judge from OPENROUTER_API_KEY
+      // env. Module-level `assistantTrajGrader` (stub) stays exported for
+      // unit tests that don't want to wire an LLM. defaultLlmJudge throws
+      // on missing env — symmetric with makeFullContextRunner behavior.
+      return {
+        adapter: assistantTrajAdapter,
+        grader: createAssistantTrajGrader({ llmJudge: defaultLlmJudge() }),
+      }
     }
     throw new Error(`bench not registered: ${bench}`)
   },
@@ -282,7 +291,9 @@ export async function runSweep(
             throw err
           }
           taskSpan.end()
-          const score = grader.score(task, response)
+          // Grader.score is async (D4 Step 3) so llm_judge can call the
+          // real LLM. Sync graders (synthetic) wrap in Promise.resolve.
+          const score = await grader.score(task, response)
           const completed_at = Date.now()
           const enrichedTurns = enrichTurnsWithEvents(response.turns, events)
           // Roll judge cost (D4) into record.cost_usd so CostTracker.observe()

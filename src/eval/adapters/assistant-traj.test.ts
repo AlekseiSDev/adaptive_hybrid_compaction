@@ -92,30 +92,36 @@ describe('assistantTrajAdapter — prepare (replay-only)', () => {
 })
 
 describe('assistantTrajGrader — exact_match', () => {
-  it('1.0 on exact equal; 0.0 otherwise (case-sensitive default)', () => {
+  it('1.0 on exact equal; 0.0 otherwise (case-sensitive default)', async () => {
     const at = makeAtTask({ evaluation: { strategy: 'exact_match', expected: 'foo' } })
-    expect(assistantTrajGrader.score(harnessTask(at), fakeResponse('foo')).primary).toBe(1)
-    expect(assistantTrajGrader.score(harnessTask(at), fakeResponse('Foo')).primary).toBe(0)
+    expect((await assistantTrajGrader.score(harnessTask(at), fakeResponse('foo'))).primary).toBe(1)
+    expect((await assistantTrajGrader.score(harnessTask(at), fakeResponse('Foo'))).primary).toBe(0)
   })
 
-  it('case_sensitive=false lowercases both sides', () => {
+  it('case_sensitive=false lowercases both sides', async () => {
     const at = makeAtTask({
       evaluation: { strategy: 'exact_match', expected: 'FOO', case_sensitive: false },
     })
-    expect(assistantTrajGrader.score(harnessTask(at), fakeResponse('foo')).primary).toBe(1)
+    expect((await assistantTrajGrader.score(harnessTask(at), fakeResponse('foo'))).primary).toBe(1)
   })
 })
 
 describe('assistantTrajGrader — regex', () => {
-  it('1.0 on match; 0.0 on miss', () => {
+  it('1.0 on match; 0.0 on miss', async () => {
     const at = makeAtTask({ evaluation: { strategy: 'regex', pattern: '^hello' } })
-    expect(assistantTrajGrader.score(harnessTask(at), fakeResponse('hello world')).primary).toBe(1)
-    expect(assistantTrajGrader.score(harnessTask(at), fakeResponse('goodbye')).primary).toBe(0)
+    expect(
+      (await assistantTrajGrader.score(harnessTask(at), fakeResponse('hello world'))).primary,
+    ).toBe(1)
+    expect(
+      (await assistantTrajGrader.score(harnessTask(at), fakeResponse('goodbye'))).primary,
+    ).toBe(0)
   })
 
-  it('respects flags', () => {
+  it('respects flags', async () => {
     const at = makeAtTask({ evaluation: { strategy: 'regex', pattern: 'hello', flags: 'i' } })
-    expect(assistantTrajGrader.score(harnessTask(at), fakeResponse('HELLO')).primary).toBe(1)
+    expect(
+      (await assistantTrajGrader.score(harnessTask(at), fakeResponse('HELLO'))).primary,
+    ).toBe(1)
   })
 })
 
@@ -131,19 +137,27 @@ describe('assistantTrajGrader — composite', () => {
     }
   }
 
-  it('aggregate=all → 1.0 iff every sub-rule == 1.0', () => {
+  it('aggregate=all → 1.0 iff every sub-rule == 1.0', async () => {
     const at = makeAtTask({ evaluation: spec('all') })
-    expect(assistantTrajGrader.score(harnessTask(at), fakeResponse('foo bar')).primary).toBe(1)
-    expect(assistantTrajGrader.score(harnessTask(at), fakeResponse('foo')).primary).toBe(0)
+    expect(
+      (await assistantTrajGrader.score(harnessTask(at), fakeResponse('foo bar'))).primary,
+    ).toBe(1)
+    expect(
+      (await assistantTrajGrader.score(harnessTask(at), fakeResponse('foo'))).primary,
+    ).toBe(0)
   })
 
-  it('aggregate=any → 1.0 if any sub-rule == 1.0', () => {
+  it('aggregate=any → 1.0 if any sub-rule == 1.0', async () => {
     const at = makeAtTask({ evaluation: spec('any') })
-    expect(assistantTrajGrader.score(harnessTask(at), fakeResponse('foo')).primary).toBe(1)
-    expect(assistantTrajGrader.score(harnessTask(at), fakeResponse('baz')).primary).toBe(0)
+    expect(
+      (await assistantTrajGrader.score(harnessTask(at), fakeResponse('foo'))).primary,
+    ).toBe(1)
+    expect(
+      (await assistantTrajGrader.score(harnessTask(at), fakeResponse('baz'))).primary,
+    ).toBe(0)
   })
 
-  it('aggregate=mean → averages sub-primaries', () => {
+  it('aggregate=mean → averages sub-primaries', async () => {
     const at = makeAtTask({
       evaluation: {
         strategy: 'composite',
@@ -154,10 +168,12 @@ describe('assistantTrajGrader — composite', () => {
         ],
       },
     })
-    expect(assistantTrajGrader.score(harnessTask(at), fakeResponse('foo bar')).primary).toBe(0.5)
+    expect(
+      (await assistantTrajGrader.score(harnessTask(at), fakeResponse('foo bar'))).primary,
+    ).toBe(0.5)
   })
 
-  it('recurses through nested composites', () => {
+  it('recurses through nested composites', async () => {
     const at = makeAtTask({
       evaluation: {
         strategy: 'composite',
@@ -175,13 +191,17 @@ describe('assistantTrajGrader — composite', () => {
         ],
       },
     })
-    expect(assistantTrajGrader.score(harnessTask(at), fakeResponse('foo bar')).primary).toBe(1)
-    expect(assistantTrajGrader.score(harnessTask(at), fakeResponse('foo quux')).primary).toBe(0)
+    expect(
+      (await assistantTrajGrader.score(harnessTask(at), fakeResponse('foo bar'))).primary,
+    ).toBe(1)
+    expect(
+      (await assistantTrajGrader.score(harnessTask(at), fakeResponse('foo quux'))).primary,
+    ).toBe(0)
   })
 })
 
 describe('assistantTrajGrader — llm_judge', () => {
-  it('default stub → primary=0 + judge_explanation=judge-stub', () => {
+  it('default stub → primary=0 + judge_explanation=judge-stub', async () => {
     const at = makeAtTask({
       evaluation: {
         strategy: 'llm_judge',
@@ -189,13 +209,13 @@ describe('assistantTrajGrader — llm_judge', () => {
         expected_summary: 'whatever',
       },
     })
-    const s = assistantTrajGrader.score(harnessTask(at), fakeResponse('any'))
+    const s = await assistantTrajGrader.score(harnessTask(at), fakeResponse('any'))
     expect(s.primary).toBe(0)
     expect(s.judge_explanation).toBe('judge-stub')
     expect(s.judge_cost_usd).toBeUndefined()
   })
 
-  it('with injected llmJudge dep → score/justification/cost flow through', () => {
+  it('with injected llmJudge dep → score/justification/cost flow through', async () => {
     const at = makeAtTask({
       evaluation: {
         strategy: 'llm_judge',
@@ -204,15 +224,16 @@ describe('assistantTrajGrader — llm_judge', () => {
       },
     })
     const grader = createAssistantTrajGrader({
-      llmJudge: () => ({ score: 0.5, justification: 'ok-ish', cost_usd: 0.01 }),
+      llmJudge: (_task, _resp, _spec) =>
+        Promise.resolve({ score: 0.5, justification: 'ok-ish', cost_usd: 0.01 }),
     })
-    const s = grader.score(harnessTask(at), fakeResponse('whatever'))
+    const s = await grader.score(harnessTask(at), fakeResponse('whatever'))
     expect(s.primary).toBe(0.5)
     expect(s.judge_explanation).toBe('ok-ish')
     expect(s.judge_cost_usd).toBe(0.01)
   })
 
-  it('composite containing llm_judge propagates judge_cost_usd to top score', () => {
+  it('composite containing llm_judge propagates judge_cost_usd to top score', async () => {
     const at = makeAtTask({
       evaluation: {
         strategy: 'composite',
@@ -224,9 +245,10 @@ describe('assistantTrajGrader — llm_judge', () => {
       },
     })
     const grader = createAssistantTrajGrader({
-      llmJudge: () => ({ score: 1, justification: 'good', cost_usd: 0.02 }),
+      llmJudge: (_task, _resp, _spec) =>
+        Promise.resolve({ score: 1, justification: 'good', cost_usd: 0.02 }),
     })
-    const s = grader.score(harnessTask(at), fakeResponse('foo bar'))
+    const s = await grader.score(harnessTask(at), fakeResponse('foo bar'))
     expect(s.primary).toBe(1)
     expect(s.judge_cost_usd).toBe(0.02)
   })

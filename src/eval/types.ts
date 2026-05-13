@@ -123,7 +123,9 @@ export type BenchAdapter = {
 }
 
 export type Grader = {
-  score: (task: Task, response: RunnerResponse) => Score
+  // Async to support LLM-judge graders (D4). Sync graders (synthetic) wrap
+  // their result in Promise.resolve via `async` keyword. runSweep awaits.
+  score: (task: Task, response: RunnerResponse) => Promise<Score>
 }
 
 export type Runner = {
@@ -195,9 +197,17 @@ export type AnthropicUsage = {
 // LLMClient — provider-neutral interface used by baselines.
 // Concrete impl: createOpenRouterClient (src/eval/llm.ts).
 // Anthropic-direct client lands at E3 (cache subset) as a separate factory.
+//
+// `content` accepts a plain string (text-only callers — full_context,
+// mastra_om, anthropic_compact) or a ContentBlock[] (multimodal — D4 judge).
+// OpenRouter is OpenAI-compatible and accepts both shapes natively.
+export type ContentBlock =
+  | { type: 'text'; text: string }
+  | { type: 'image_url'; image_url: { url: string } }
+
 export type LLMMessage = {
   role: 'system' | 'user' | 'assistant'
-  content: string
+  content: string | ContentBlock[]
 }
 
 export type LLMRequest = {

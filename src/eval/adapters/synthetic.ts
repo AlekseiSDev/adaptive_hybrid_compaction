@@ -14,5 +14,6 @@ export const syntheticAdapter: BenchAdapter = {
 }
 
 export const syntheticGrader: Grader = {
-  score: (task, response) => ({ primary: response.text === task.expected ? 1 : 0 }),
+  score: (task, response) =>
+    Promise.resolve({ primary: response.text === task.expected ? 1 : 0 }),
 }

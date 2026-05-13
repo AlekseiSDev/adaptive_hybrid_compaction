@@ -5,7 +5,8 @@ import type { Bench, ConfigDef, RunMeta, RunRecord, RunSummary } from './types.j
 
 // Recursive sort-keys serializer so config_id is invariant under property-order
 // permutations (smoke YAMLs and code paths assemble configs in different orders).
-function canonicalJson(value: unknown): string {
+// Also reused by D4 judge cache key hashing (src/eval/adapters/assistant-traj.judge.ts).
+export function canonicalJson(value: unknown): string {
   if (value === null || typeof value !== 'object') {
     // JSON.stringify(undefined) returns undefined at runtime even though TS types it as string;
     // keep the defensive `?? 'null'`.

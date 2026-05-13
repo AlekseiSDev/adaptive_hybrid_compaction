@@ -19,6 +19,13 @@ export const OPENROUTER_PRICING: Record<string, ModelPricing> = Object.freeze({
     input_per_million_usd: 0.5,
     output_per_million_usd: 3.0,
   },
+  // D4 judge model. Sonnet 4-7 not yet on OpenRouter (2026-05-13 verified via
+  // /api/v1/models); fallback to 4.6 per plan. Note: OpenRouter uses dot
+  // notation (4.6), Anthropic SDK uses dash (4-6). Pricing verified live.
+  'anthropic/claude-sonnet-4.6': {
+    input_per_million_usd: 3.0,
+    output_per_million_usd: 15.0,
+  },
 })
 
 export function costFromUsage(model: string, usage: OpenRouterUsage): number {

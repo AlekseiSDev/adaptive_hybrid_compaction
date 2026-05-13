@@ -114,22 +114,31 @@ export const assistantTrajAdapter: BenchAdapter = {
 
 // Grader
 
+// `spec` carries the active llm_judge sub-spec so the judge can read
+// rubric_id / expected_summary even when the strategy is nested inside a
+// composite parent.
+export type LlmJudgeSpec = {
+  rubric_id: string
+  expected_summary: string
+}
+
 export type LlmJudgeFn = (
   task: AssistantTrajTask,
   responseText: string,
-) => { score: number; justification: string; cost_usd: number }
+  spec: LlmJudgeSpec,
+) => Promise<{ score: number; justification: string; cost_usd: number }>
 
 export type AssistantTrajGraderDeps = {
   // D4 Step 3 wires a real vision-capable judge here. Default = stub.
   llmJudge?: LlmJudgeFn
 }
 
-function evaluateSpec(
+async function evaluateSpec(
   spec: EvaluationSpec,
   responseText: string,
   task: AssistantTrajTask,
   deps: AssistantTrajGraderDeps,
-): Score {
+): Promise<Score> {
   if (spec.strategy === 'exact_match') {
     const lhs = spec.case_sensitive === false ? spec.expected.toLowerCase() : spec.expected
     const rhs = spec.case_sensitive === false ? responseText.toLowerCase() : responseText
@@ -143,13 +152,18 @@ function evaluateSpec(
     if (!deps.llmJudge) {
       return { primary: 0, judge_explanation: 'judge-stub' }
     }
-    const r = deps.llmJudge(task, responseText)
+    const r = await deps.llmJudge(task, responseText, {
+      rubric_id: spec.rubric_id,
+      expected_summary: spec.expected_summary,
+    })
     const score: Score = { primary: r.score, judge_explanation: r.justification }
     if (r.cost_usd > 0) score.judge_cost_usd = r.cost_usd
     return score
   }
   // composite
-  const sub = spec.rules.map((r) => evaluateSpec(r, responseText, task, deps))
+  const sub = await Promise.all(
+    spec.rules.map((r) => evaluateSpec(r, responseText, task, deps)),
+  )
   let primary: number
   if (spec.aggregate === 'all') {
     primary = sub.every((s) => s.primary === 1) ? 1 : 0
@@ -166,7 +180,7 @@ function evaluateSpec(
 
 export function createAssistantTrajGrader(deps: AssistantTrajGraderDeps = {}): Grader {
   return {
-    score: (task: Task, response: RunnerResponse): Score => {
+    score: async (task: Task, response: RunnerResponse): Promise<Score> => {
       const at = task.input as AssistantTrajTask
       const spec = task.expected as EvaluationSpec
       return evaluateSpec(spec, response.text, at, deps)

@@ -101,7 +101,7 @@ describe('runSweep — Instrumentation aggregation (B2)', () => {
             messages: [{ role: 'user', content: [{ type: 'text', text: String(task.input) }] }],
           }),
         },
-        grader: { score: () => ({ primary: 1 }) },
+        grader: { score: () => Promise.resolve({ primary: 1 }) },
       }),
     }
     const customRunner: RunnerRegistry = {
@@ -186,7 +186,7 @@ describe('runSweep — CostTracker halt (B2)', () => {
             messages: [{ role: 'user', content: [{ type: 'text', text: String(task.input) }] }],
           }),
         },
-        grader: { score: () => ({ primary: 1 }) },
+        grader: { score: () => Promise.resolve({ primary: 1 }) },
       }),
     }
     // Each task costs $5; budget=$1; total_tasks=30; mean=$5; projected=$150 > 1.5×1=1.5 → halt at 20.

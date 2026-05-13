@@ -94,7 +94,7 @@ describe('Eval harness types — compile-time witness', () => {
     expect(record.turns[0]?.compaction_events[0]?.type).toBe('offload')
   })
 
-  test('harness-side interfaces (Task / BenchAdapter / Grader / Runner) wire together', () => {
+  test('harness-side interfaces (Task / BenchAdapter / Grader / Runner) wire together', async () => {
     const task: Task = { id: 't_1', input: 'hello', expected: 'world' }
 
     const conv: Conversation = {
@@ -120,7 +120,7 @@ describe('Eval harness types — compile-time witness', () => {
     }
 
     const grader: Grader = {
-      score: (t, r) => ({ primary: r.text === t.expected ? 1 : 0 }),
+      score: (t, r) => Promise.resolve({ primary: r.text === t.expected ? 1 : 0 }),
     }
 
     const runner: Runner = {
@@ -129,7 +129,7 @@ describe('Eval harness types — compile-time witness', () => {
     }
 
     expect(adapter.name).toBe('synthetic')
-    expect(grader.score(task, response).primary).toBe(1)
+    expect((await grader.score(task, response)).primary).toBe(1)
     expect(runner.name).toBe('noop_baseline')
     expect(ctx.seed).toBe(42)
   })
