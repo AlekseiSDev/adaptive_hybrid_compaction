@@ -1,0 +1,18 @@
+{
+  "question_id": "lme_smoke_003",
+  "question_type": "knowledge-update",
+  "haystack_sessions": [
+    [
+      { "role": "user", "content": "I work as a backend engineer at Acme Corp." },
+      { "role": "assistant", "content": "Cool! What stack do you use?" }
+    ],
+    [
+      { "role": "user", "content": "Update: I switched jobs last month — now I'm at Globex as a staff engineer." },
+      { "role": "assistant", "content": "Congrats on the move!" }
+    ]
+  ],
+  "haystack_session_ids": ["session_1", "session_2"],
+  "haystack_dates": ["2024-01-15", "2024-04-20"],
+  "question": "Where does the user currently work and in what role?",
+  "answer": "Globex, staff engineer"
+}

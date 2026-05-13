@@ -14,6 +14,11 @@ import {
   createAssistantTrajGrader,
 } from './adapters/assistant-traj.js'
 import { defaultLlmJudge } from './adapters/assistant-traj.judge.js'
+import {
+  createLongMemEvalGrader,
+  longmemevalAdapter,
+} from './adapters/longmemeval-med.js'
+import { defaultLmeJudge } from './adapters/longmemeval-med.judge.js'
 import { syntheticAdapter, syntheticGrader } from './adapters/synthetic.js'
 import { buildRunnerFromBaseline } from './baseline.js'
 import { anthropicCompactBaseline } from './baselines/anthropic_compact.js'
@@ -93,6 +98,12 @@ export const defaultAdapterRegistry: AdapterRegistry = {
       return {
         adapter: assistantTrajAdapter,
         grader: createAssistantTrajGrader({ llmJudge: defaultLlmJudge() }),
+      }
+    }
+    if (bench === 'longmemeval-med') {
+      return {
+        adapter: longmemevalAdapter,
+        grader: createLongMemEvalGrader({ llmJudge: defaultLmeJudge() }),
       }
     }
     throw new Error(`bench not registered: ${bench}`)

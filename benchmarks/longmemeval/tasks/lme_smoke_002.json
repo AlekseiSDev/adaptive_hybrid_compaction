@@ -1,0 +1,18 @@
+{
+  "question_id": "lme_smoke_002",
+  "question_type": "temporal-reasoning",
+  "haystack_sessions": [
+    [
+      { "role": "user", "content": "Started my new diet on March 1st." },
+      { "role": "assistant", "content": "Good luck! How's it going so far?" }
+    ],
+    [
+      { "role": "user", "content": "Today (March 15th) I weighed in 3 kg lighter." },
+      { "role": "assistant", "content": "Nice progress!" }
+    ]
+  ],
+  "haystack_session_ids": ["session_1", "session_2"],
+  "haystack_dates": ["2024-03-01", "2024-03-15"],
+  "question": "How many days into the diet did the user report a 3 kg weight loss?",
+  "answer": "14 days"
+}
