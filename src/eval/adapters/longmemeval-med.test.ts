@@ -91,7 +91,14 @@ describe('longmemevalAdapter.prepare', () => {
   })
 
   it('handles missing haystack_session_ids / haystack_dates gracefully', () => {
-    const task = makeTask({ haystack_session_ids: undefined, haystack_dates: undefined })
+    // Drop optional fields entirely via destructuring rest (strict optional
+    // types reject `field: undefined`).
+    const {
+      haystack_session_ids: _ids,
+      haystack_dates: _dates,
+      ...rest
+    } = makeTask()
+    const task = rest as LongMemEvalTask
     const conv = longmemevalAdapter.prepare({ id: task.question_id, input: task, expected: task.answer })
     const historyText = (conv.messages[0]?.content[0] as { type: string; text: string }).text
     // Default session label is `[session_N]`

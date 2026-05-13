@@ -53,19 +53,22 @@ liveDescribe(
           state,
           makeUser('What was the magic word?'),
         )
-        state = r2.state
         const text2 = r2.response.content.find((p) => p.type === 'text')?.text ?? ''
         expect(text2.toLowerCase()).toContain('azure')
 
-        // Wiring assertion: cache_read_input_tokens FIELD is present in
-        // TurnRecord (either as a number or undefined — undefined means
-        // Anthropic returned null, which we map to absent). Value > 0
-        // requires AHC middleware to emit cache_control on stable prefix —
-        // that's a follow-up feature, not E0 scope. Either way, this
-        // smoke confirms the field flows end-to-end.
+        // Wiring assertion: cache_read_input_tokens FIELD is reachable on
+        // TurnRecord (either as a number or omitted — Anthropic returned
+        // null, which we map to absent). Value > 0 requires AHC middleware
+        // to emit cache_control on stable prefix — that's a follow-up
+        // feature, not E0 scope. Either way, this smoke confirms the field
+        // flows end-to-end without TS / runtime error.
         const turn1 = r2.telemetry
-        const cacheReadField = turn1.cache_read_input_tokens
-        expect(typeof cacheReadField === 'number' || cacheReadField === undefined).toBe(true)
+        const cacheReadField: number | undefined = turn1.cache_read_input_tokens
+        // `number | undefined` — type-system already guarantees this; the
+        // runtime check is just documentation of the contract.
+        if (cacheReadField !== undefined) {
+          expect(typeof cacheReadField).toBe('number')
+        }
 
         // Sanity: total cost recorded and non-negative.
         expect(r1.cost_usd).toBeGreaterThanOrEqual(0)

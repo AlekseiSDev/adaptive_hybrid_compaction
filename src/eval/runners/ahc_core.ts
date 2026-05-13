@@ -17,7 +17,7 @@ import {
   OPENROUTER_PRICING,
   type ModelPricing,
 } from '../llm.js'
-import { composeTurnRecord, mapAiSdkUsage, type AiSdkUsageShape } from '../telemetry.js'
+import { composeTurnRecord, mapAiSdkUsage } from '../telemetry.js'
 import type {
   Baseline,
   BaselineState,
@@ -107,7 +107,7 @@ export function ahcCoreBaseline(deps: AhcCoreBaselineDeps): Baseline {
         registry: new SessionScratchpadRegistry(),
         hysteresis: new Map<string, HysteresisState>(),
         internalCostUsdSinceLastStep: 0,
-      } satisfies AhcScratch as unknown as Record<string, unknown>,
+      } satisfies AhcScratch,
     }),
     step: async (state, userMsg, opts): Promise<BaselineStepResult> => {
       if (!state.scratch) {
@@ -168,13 +168,13 @@ export function ahcCoreBaseline(deps: AhcCoreBaselineDeps): Baseline {
       // aggregates them into TurnRecord.compaction_events / class_signal).
       for (const e of events) opts?.instrumentation?.(e)
 
-      const usagePart = mapAiSdkUsage(result.usage as AiSdkUsageShape, {
+      const usagePart = mapAiSdkUsage(result.usage, {
         wall_clock_ms,
         turn_index,
       })
       const mainCost =
-        ((usagePart.input_tokens ?? 0) * pricing.input_per_million_usd +
-          (usagePart.output_tokens ?? 0) * pricing.output_per_million_usd) /
+        (usagePart.input_tokens * pricing.input_per_million_usd +
+          usagePart.output_tokens * pricing.output_per_million_usd) /
         1_000_000
 
       const compaction_events = events
@@ -196,7 +196,7 @@ export function ahcCoreBaseline(deps: AhcCoreBaselineDeps): Baseline {
         state: {
           ...state,
           history: [...state.history, userMsg, responseMsg],
-          scratch: scratch as unknown as Record<string, unknown>,
+          scratch: scratch,
         },
         telemetry: composeTurnRecord(usagePart, {
           compaction_events,

@@ -253,16 +253,18 @@ export function createAnthropicClient(opts: AnthropicClientOptions): LLMClient {
         .filter((b): b is Anthropic.TextBlock => b.type === 'text')
         .map((b) => b.text)
         .join('')
+      // Anthropic SDK types these cache fields as `number | null`; project
+      // schema (AnthropicUsage) only accepts `number | undefined`. Map null
+      // → absent so existing telemetry consumers don't see null-vs-undefined
+      // ambiguity (TurnUsagePart's `cache_read_input_tokens?: number`).
+      const cacheRead = resp.usage.cache_read_input_tokens
+      const cacheCreation = resp.usage.cache_creation_input_tokens
       const raw_usage: AnthropicUsage = {
         input_tokens: resp.usage.input_tokens,
         output_tokens: resp.usage.output_tokens,
-        ...(resp.usage.cache_read_input_tokens !== null &&
-        resp.usage.cache_read_input_tokens !== undefined
-          ? { cache_read_input_tokens: resp.usage.cache_read_input_tokens }
-          : {}),
-        ...(resp.usage.cache_creation_input_tokens !== null &&
-        resp.usage.cache_creation_input_tokens !== undefined
-          ? { cache_creation_input_tokens: resp.usage.cache_creation_input_tokens }
+        ...(cacheRead != null ? { cache_read_input_tokens: cacheRead } : {}),
+        ...(cacheCreation != null
+          ? { cache_creation_input_tokens: cacheCreation }
           : {}),
       }
       return {
@@ -272,6 +274,13 @@ export function createAnthropicClient(opts: AnthropicClientOptions): LLMClient {
         latency_ms: Date.now() - start,
       }
     } catch (err) {
+      // APIError.status is typed loosely by Anthropic SDK — pull through a
+      // typed local so the `status` field assigned to LLMResponseError stays
+      // strictly `number`.
+      const status: number | undefined =
+        err instanceof Anthropic.APIError && typeof err.status === 'number'
+          ? err.status
+          : undefined
       return {
         text: '',
         raw_usage: null,
@@ -280,9 +289,7 @@ export function createAnthropicClient(opts: AnthropicClientOptions): LLMClient {
         error: {
           kind: classifyAnthropicError(err),
           message: err instanceof Error ? err.message : String(err),
-          ...(err instanceof Anthropic.APIError && err.status !== undefined
-            ? { status: err.status }
-            : {}),
+          ...(status !== undefined ? { status } : {}),
         },
       }
     }

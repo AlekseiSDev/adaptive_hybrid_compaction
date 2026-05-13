@@ -3,7 +3,7 @@ import type { LanguageModelV3 } from '@ai-sdk/provider'
 import { createAnthropic } from '@ai-sdk/anthropic'
 import { createOpenAI } from '@ai-sdk/openai'
 import { createAhcMiddleware, type AhcMiddlewareDeps } from './ai-sdk-v6.js'
-import { SessionScratchpadRegistry, type SessionId } from './sessionScratchpad.js'
+import { type SessionScratchpadRegistry, type SessionId } from './sessionScratchpad.js'
 import type {
   CompactResult,
   CoreEvent,
@@ -68,6 +68,10 @@ export type AhcRuntime = {
 const OPENROUTER_DEFAULT_BASE_URL = 'https://openrouter.ai/api/v1'
 
 function buildBaseModel(opts: AhcRuntimeOptions): LanguageModelV3 {
+  // Runtime guard against type-system escapes (cast / JSON-sourced provider
+  // string). TS narrows opts.provider to the literal union, but we accept
+  // runtime values from sweep YAML — validator throws first, but defense in
+  // depth here for direct API callers (G/UI, tests).
   if (opts.provider === 'openrouter') {
     const openai = createOpenAI({
       apiKey: opts.apiKey,
@@ -78,14 +82,12 @@ function buildBaseModel(opts: AhcRuntimeOptions): LanguageModelV3 {
     // tool calls. See decisions.md 2026-05-13 OpenRouter + @ai-sdk/openai.
     return openai.chat(opts.model)
   }
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
   if (opts.provider === 'anthropic_direct') {
     const anthropic = createAnthropic({ apiKey: opts.apiKey })
     return anthropic(opts.model)
   }
-  // Exhaustive guard — narrowed union; if a new provider literal is added
-  // without updating this function, TS surfaces the residual type here.
-  const exhaustive: never = opts.provider
-  throw new Error(`createAhcRuntime: unsupported provider: ${String(exhaustive)}`)
+  throw new Error(`createAhcRuntime: unsupported provider: ${String(opts.provider)}`)
 }
 
 export function createAhcRuntime(opts: AhcRuntimeOptions): AhcRuntime {

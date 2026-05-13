@@ -128,10 +128,13 @@ export const defaultAdapterRegistry: AdapterRegistry = {
         grader: createLoCoMoGrader({ llmJudge: defaultLocomoJudge() }),
       }
     }
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
     if (bench === 'tau-bench-retail-med') {
       return { adapter: taubenchAdapter, grader: taubenchGrader }
     }
-    throw new Error(`bench not registered: ${bench}`)
+    // Defensive: unreachable under TS narrowing, but runtime catches type
+    // casts (eg. test's `'fake-bench' as Bench` push-through).
+    throw new Error(`bench not registered: ${String(bench)}`)
   },
 }
 
@@ -188,7 +191,7 @@ function makeAhcCoreRunner(config: ConfigDef): Runner {
       `ahc_core runner with provider=${provider} requires ${envName} env var.`,
     )
   }
-  const flagsFromConfig = (config.ahc_flags ?? {}) as Record<string, unknown>
+  const flagsFromConfig = (config.ahc_flags ?? {})
   const modelOverride = flagsFromConfig['model']
   // Strip ahc_core-runner-specific keys (`model`) from FeatureFlags pass-through.
   const { model: _omitModel, ...featureFlagsRaw } = flagsFromConfig
@@ -200,9 +203,7 @@ function makeAhcCoreRunner(config: ConfigDef): Runner {
     ...(typeof modelOverride === 'string' ? { model: modelOverride } : {}),
     // Other ahc_flags keys (TRAJECTORY_CLASSIFIER, REFLECTION, etc.) map to
     // FeatureFlags — pass through directly; createAhcMiddleware merges with defaults.
-    ahcFlags: featureFlagsRaw as Partial<
-      NonNullable<Parameters<typeof ahcCoreBaseline>[0]['ahcFlags']>
-    >,
+    ahcFlags: featureFlagsRaw,
   })
   return buildRunnerFromBaseline(baseline)
 }
@@ -255,7 +256,7 @@ function makeTauBenchAgentRunner(config: ConfigDef): Runner {
     apiKey,
     baseURL: 'https://openrouter.ai/api/v1',
     ...(config.baseline === 'tau_bench_agent_ahc'
-      ? { ahcFlags: ahcFlagsRaw as Partial<NonNullable<Parameters<typeof makeTauBenchRunner>[0]['ahcFlags']>> }
+      ? { ahcFlags: ahcFlagsRaw }
       : {}),
   })
 }
