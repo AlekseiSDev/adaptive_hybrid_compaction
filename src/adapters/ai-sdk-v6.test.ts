@@ -186,7 +186,7 @@ describe('createAhcMiddleware — A6 LanguageModelV3Middleware', () => {
     expect(seen).toHaveLength(0)
   })
 
-  test('cacheControlEnabled=false (default) → no providerOptions.anthropic.cacheControl on system message', async () => {
+  test('cacheControlEnabled=false (default) → no anthropic.cacheControl on any part', async () => {
     const mw = createAhcMiddleware({})
     const result = await mw.transformParams?.({
       type: 'generate',
@@ -195,17 +195,21 @@ describe('createAhcMiddleware — A6 LanguageModelV3Middleware', () => {
     })
     expect(result).toBeDefined()
     if (result === undefined) return
-    const sysMsg = result.prompt.find((m) => m.role === 'system')
-    expect(sysMsg).toBeDefined()
-    // No providerOptions at all on the system message (or, if present, no
-    // anthropic.cacheControl marker).
-    const opts = sysMsg?.providerOptions as
-      | { anthropic?: { cacheControl?: unknown } }
-      | undefined
-    expect(opts?.anthropic?.cacheControl).toBeUndefined()
+    // Walk all message-level + part-level providerOptions; none should have
+    // anthropic.cacheControl set.
+    for (const m of result.prompt) {
+      const mOpts = m.providerOptions as { anthropic?: { cacheControl?: unknown } } | undefined
+      expect(mOpts?.anthropic?.cacheControl).toBeUndefined()
+      if (typeof m.content !== 'string') {
+        for (const part of m.content) {
+          const pOpts = part.providerOptions as { anthropic?: { cacheControl?: unknown } } | undefined
+          expect(pOpts?.anthropic?.cacheControl).toBeUndefined()
+        }
+      }
+    }
   })
 
-  test('cacheControlEnabled=true → providerOptions.anthropic.cacheControl=ephemeral on system message', async () => {
+  test('cacheControlEnabled=true → cacheControl=ephemeral on last part of first user message', async () => {
     const mw = createAhcMiddleware({ cacheControlEnabled: true })
     const result = await mw.transformParams?.({
       type: 'generate',
@@ -214,15 +218,26 @@ describe('createAhcMiddleware — A6 LanguageModelV3Middleware', () => {
     })
     expect(result).toBeDefined()
     if (result === undefined) return
-    const sysMsg = result.prompt.find((m) => m.role === 'system')
-    expect(sysMsg).toBeDefined()
-    const opts = sysMsg?.providerOptions as
+    // Cache breakpoint lands on the first user message (caches system + first
+    // user; ≥1024 tokens needed for Anthropic to honor the marker).
+    const userMsg = result.prompt.find((m) => m.role === 'user')
+    expect(userMsg).toBeDefined()
+    if (userMsg?.role !== 'user') return
+    const lastPart = userMsg.content[userMsg.content.length - 1]
+    const opts = lastPart?.providerOptions as
       | { anthropic?: { cacheControl?: { type: string } } }
       | undefined
     expect(opts?.anthropic?.cacheControl).toEqual({ type: 'ephemeral' })
+    // System message should NOT have the marker (cache breakpoint placement
+    // moved to first user for token-threshold reasons).
+    const sysMsg = result.prompt.find((m) => m.role === 'system')
+    const sysOpts = sysMsg?.providerOptions as
+      | { anthropic?: { cacheControl?: unknown } }
+      | undefined
+    expect(sysOpts?.anthropic?.cacheControl).toBeUndefined()
   })
 
-  test('cacheControlEnabled=true but no system message in passthrough → prompt unchanged', async () => {
+  test('cacheControlEnabled=true but no user message → prompt unchanged', async () => {
     const mw = createAhcMiddleware({ cacheControlEnabled: true })
     // No system message → compact() returns passthrough (params as-is, no
     // assembledMessages serialization), so cacheControl injection skipped.

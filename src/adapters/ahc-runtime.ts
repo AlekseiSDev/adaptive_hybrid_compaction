@@ -67,6 +67,15 @@ export type AhcRuntime = {
 
 const OPENROUTER_DEFAULT_BASE_URL = 'https://openrouter.ai/api/v1'
 
+// Ensures the baseURL ends with `/v1` (Anthropic API version segment) so the
+// AI SDK's request path resolution (`<baseURL>/messages`) lands on the
+// proxy's `/v1/messages` endpoint. Idempotent — does nothing if already
+// suffixed. Strips trailing slashes first to avoid `//v1`.
+function withV1Suffix(url: string): string {
+  const stripped = url.replace(/\/+$/, '')
+  return stripped.endsWith('/v1') ? stripped : `${stripped}/v1`
+}
+
 function buildBaseModel(opts: AhcRuntimeOptions): LanguageModelV3 {
   // Runtime guard against type-system escapes (cast / JSON-sourced provider
   // string). TS narrows opts.provider to the literal union, but we accept
@@ -84,9 +93,16 @@ function buildBaseModel(opts: AhcRuntimeOptions): LanguageModelV3 {
   }
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
   if (opts.provider === 'anthropic_direct') {
+    // @ai-sdk/anthropic expects baseURL to include the API version segment
+    // (default: 'https://api.anthropic.com/v1'); it appends '/messages' for
+    // the request path. Raw @anthropic-ai/sdk (used elsewhere for AHC's
+    // internal LLMCaller) appends '/v1/messages' itself. To accept the
+    // same env-supplied LITELLM_BASE_URL (typically `http://host:port`
+    // with no `/v1`), we normalize here by ensuring trailing `/v1`.
+    const baseURL = opts.baseURL !== undefined ? withV1Suffix(opts.baseURL) : undefined
     const anthropic = createAnthropic({
       apiKey: opts.apiKey,
-      ...(opts.baseURL !== undefined ? { baseURL: opts.baseURL } : {}),
+      ...(baseURL !== undefined ? { baseURL } : {}),
     })
     return anthropic(opts.model)
   }

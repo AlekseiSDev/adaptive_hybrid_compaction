@@ -107,28 +107,53 @@ function buildRecallFunctionTool(): LanguageModelV3FunctionTool {
 
 const RECALL_FN_TOOL: LanguageModelV3FunctionTool = buildRecallFunctionTool()
 
-// Marks the first system message in the assembled prompt with Anthropic's
+// Marks the stable cacheable prefix in the assembled prompt with Anthropic's
 // `cacheControl: ephemeral` hint so api.anthropic.com caches the prompt
 // prefix up through that message. @ai-sdk/anthropic forwards providerOptions
 // untouched; OpenRouter / OpenAI provider ignore it (no-op overhead).
 //
-// Returns a NEW prompt — never mutates the input. If no system message is
-// present (compact() passthrough path returns params unchanged anyway, but
-// belt-and-suspenders), returns the prompt as-is.
+// Placement: cache_control sits on the LAST content part of the FIRST user
+// message after the initial system message. Rationale:
+// - System prompt alone is usually too small (~10-100 tokens). Anthropic's
+//   ephemeral cache requires the cached prefix to be ≥1024 tokens — below
+//   that threshold the marker is silently ignored.
+// - The first user message in AHC's assembled output corresponds to the
+//   earliest tier1.firstUserMessages entry, which is stable across turns
+//   (only purged on offloader fire). Caching `system + first user` gives
+//   a stable prefix that's typically ≥1024 tokens on multi-turn benches
+//   (LongMemEval-med queries are ~16k input tokens).
+// - For shorter trajectories (synthetic / smoke) the prefix may still be
+//   below threshold and cache won't fire — that's correct behavior; F
+//   report logs honest cache rates.
+//
+// Returns a NEW prompt — never mutates the input. If no user message is
+// present (passthrough), returns as-is.
 function withAnthropicCacheControlOnSystem(
   prompt: LanguageModelV3Prompt,
 ): LanguageModelV3Prompt {
-  const idx = prompt.findIndex((m) => m.role === 'system')
-  if (idx < 0) return prompt
-  const cacheHint = {
-    providerOptions: { anthropic: { cacheControl: { type: 'ephemeral' as const } } },
-  }
-  const target = prompt[idx]
-  if (target === undefined) return prompt
+  const userIdx = prompt.findIndex((m) => m.role === 'user')
+  if (userIdx < 0) return prompt
+  const userMsg = prompt[userIdx]
+  if (userMsg?.role !== 'user') return prompt
+  const content = userMsg.content
+  if (content.length === 0) return prompt
+  // Place cache_control on the LAST content part of the first user message.
+  // Anthropic API attaches the breakpoint to the marker's position, so the
+  // final part is what closes the cacheable prefix.
+  const lastIdx = content.length - 1
+  const newContent = content.map((part, i) =>
+    i === lastIdx
+      ? {
+          ...part,
+          providerOptions: {
+            ...part.providerOptions,
+            anthropic: { cacheControl: { type: 'ephemeral' as const } },
+          },
+        }
+      : part,
+  )
   return prompt.map((m, i) =>
-    i === idx
-      ? { ...m, ...cacheHint, providerOptions: { ...m.providerOptions, ...cacheHint.providerOptions } }
-      : m,
+    i === userIdx ? ({ ...m, content: newContent } as LanguageModelV3Prompt[number]) : m,
   )
 }
 
