@@ -15,6 +15,10 @@ export default tseslint.config(
       // Next.js generated artifacts (build output + route type stubs).
       '**/.next/**',
       'src/ui/next-env.d.ts',
+      // Python venv created for tau-bench D5 prep — contains bundled JS
+      // artifacts (litellm UI, urllib3 emscripten worker, etc.) that ESLint
+      // would otherwise scan.
+      '.venv-taubench/**',
     ],
   },
   js.configs.recommended,

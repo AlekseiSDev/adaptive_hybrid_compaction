@@ -24,6 +24,9 @@ benchmarks/runs/synthetic/
 observability/data/
 observability/.langfuse/
 
+# Python venv for tau-bench D5 prep (local-only)
+.venv-taubench/
+
 # Playwright MCP scratch — page snapshots, console logs, screenshots
 .playwright-mcp/
 *.screenshot.png
