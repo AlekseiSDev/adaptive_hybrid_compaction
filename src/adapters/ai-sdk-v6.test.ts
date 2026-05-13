@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'vitest'
 import type { LanguageModelV3, LanguageModelV3Message } from '@ai-sdk/provider'
+import type { CompactResult } from '../core/index.js'
 import { createAhcMiddleware } from './ai-sdk-v6.js'
+import type { SessionId } from './sessionScratchpad.js'
 
 const stubModel = (): LanguageModelV3 =>
   ({
@@ -151,5 +153,36 @@ describe('createAhcMiddleware — A6 LanguageModelV3Middleware', () => {
     const mw = createAhcMiddleware({})
     expect(mw.wrapStream).toBeUndefined()
     expect(mw.wrapGenerate).toBeUndefined()
+  })
+
+  test('onCompactResult fires after each transformParams call with sessionId + CompactResult', async () => {
+    const seen: { sessionId: SessionId; result: CompactResult }[] = []
+    const mw = createAhcMiddleware({
+      sessionId: () => 'sess-A',
+      onCompactResult: (sid, r) => seen.push({ sessionId: sid, result: r }),
+    })
+    await mw.transformParams?.({
+      type: 'generate',
+      params: baseParams([sys, user('hello')]),
+      model: stubModel(),
+    })
+    expect(seen).toHaveLength(1)
+    expect(seen[0]?.sessionId).toBe('sess-A')
+    expect(seen[0]?.result.assembledMessages.length).toBeGreaterThan(0)
+    expect(seen[0]?.result.newTier2).toBeDefined()
+  })
+
+  test('onCompactResult NOT called when prompt is passthrough (no system message)', async () => {
+    const seen: { sessionId: SessionId; result: CompactResult }[] = []
+    const mw = createAhcMiddleware({
+      sessionId: () => 'sess-B',
+      onCompactResult: (sid, r) => seen.push({ sessionId: sid, result: r }),
+    })
+    await mw.transformParams?.({
+      type: 'generate',
+      params: baseParams([user('hello, no system')]),
+      model: stubModel(),
+    })
+    expect(seen).toHaveLength(0)
   })
 })

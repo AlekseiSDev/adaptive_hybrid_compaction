@@ -1,6 +1,6 @@
 import type { FeatureFlags } from '../../core/featureFlags';
 
-const FLAG_KEYS = [
+export const FLAG_KEYS = [
   'TASK_AWARE_EXTRACTION',
   'TYPE_AWARE_OFFLOAD',
   'TRAJECTORY_CLASSIFIER',
@@ -11,7 +11,9 @@ const FLAG_KEYS = [
   'CALIBRATION_AUTO',
 ] as const satisfies readonly (keyof FeatureFlags)[];
 
-const DEMO_DEFAULTS: FeatureFlags = {
+export type FeatureFlagKey = (typeof FLAG_KEYS)[number];
+
+export const DEMO_DEFAULTS: FeatureFlags = {
   TASK_AWARE_EXTRACTION: true,
   TYPE_AWARE_OFFLOAD: true,
   TRAJECTORY_CLASSIFIER: true,
@@ -31,4 +33,8 @@ export function parseFlagsFromUrl(url: URL): FeatureFlags {
     else if (raw === '1' || raw === 'true') merged[key] = true;
   }
   return merged;
+}
+
+export function activeFlagNames(flags: FeatureFlags): readonly FeatureFlagKey[] {
+  return FLAG_KEYS.filter((k) => flags[k]);
 }

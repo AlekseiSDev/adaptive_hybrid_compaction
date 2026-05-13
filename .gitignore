@@ -23,3 +23,7 @@ benchmarks/runs/synthetic/
 *.pid
 observability/data/
 observability/.langfuse/
+
+# Playwright MCP scratch — page snapshots, console logs, screenshots
+.playwright-mcp/
+*.screenshot.png

@@ -1,8 +1,10 @@
 'use client';
 
 import { useChat } from '@ai-sdk/react';
-import { DefaultChatTransport, type FileUIPart, type UIMessage } from 'ai';
-import { useEffect, useRef, useState } from 'react';
+import { DefaultChatTransport, type FileUIPart } from 'ai';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { activeFlagNames, parseFlagsFromUrl, type FeatureFlagKey } from '../lib/featureFlags';
+import { TelemetrySidebar, type AhcUIMessage } from './TelemetrySidebar';
 
 const SESSION_ID_KEY = 'ahc-demo-session-id';
 const HISTORY_KEY = 'ahc-demo-chat-history';
@@ -16,17 +18,23 @@ function readSessionId(): string {
   return fresh;
 }
 
-function readInitialMessages(): UIMessage[] {
+function readInitialMessages(): AhcUIMessage[] {
   if (typeof window === 'undefined') return [];
   const raw = window.localStorage.getItem(HISTORY_KEY);
   if (!raw) return [];
   try {
     const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed)) return parsed as UIMessage[];
+    if (Array.isArray(parsed)) return parsed as AhcUIMessage[];
   } catch {
     // ignore corrupted history
   }
   return [];
+}
+
+function readActiveFlags(): readonly FeatureFlagKey[] {
+  if (typeof window === 'undefined') return [];
+  const url = new URL(window.location.href);
+  return activeFlagNames(parseFlagsFromUrl(url));
 }
 
 function guessMediaTypeFromUrl(url: string): string {
@@ -41,11 +49,13 @@ function guessMediaTypeFromUrl(url: string): string {
 export function Chat() {
   const sessionIdRef = useRef<string>('');
   const [hydrated, setHydrated] = useState(false);
-  const [initialMessages, setInitialMessages] = useState<UIMessage[]>([]);
+  const [initialMessages, setInitialMessages] = useState<AhcUIMessage[]>([]);
+  const [activeFlags, setActiveFlags] = useState<readonly FeatureFlagKey[]>([]);
 
   useEffect(() => {
     sessionIdRef.current = readSessionId();
     setInitialMessages(readInitialMessages());
+    setActiveFlags(readActiveFlags());
     setHydrated(true);
   }, []);
 
@@ -53,25 +63,35 @@ export function Chat() {
     return <div className="m-auto text-sm text-gray-500">Loading…</div>;
   }
 
-  return <ChatBody sessionIdRef={sessionIdRef} initialMessages={initialMessages} />;
+  return (
+    <ChatBody
+      sessionIdRef={sessionIdRef}
+      initialMessages={initialMessages}
+      activeFlags={activeFlags}
+    />
+  );
 }
 
 function ChatBody({
   sessionIdRef,
   initialMessages,
+  activeFlags,
 }: {
   sessionIdRef: React.MutableRefObject<string>;
-  initialMessages: UIMessage[];
+  initialMessages: AhcUIMessage[];
+  activeFlags: readonly FeatureFlagKey[];
 }) {
-  const transport = useRef(
-    new DefaultChatTransport({
-      api: '/api/chat',
-      headers: () => ({ 'X-Session-Id': sessionIdRef.current }),
-    }),
+  const transport = useMemo(
+    () =>
+      new DefaultChatTransport<AhcUIMessage>({
+        api: '/api/chat',
+        headers: () => ({ 'X-Session-Id': sessionIdRef.current }),
+      }),
+    [sessionIdRef],
   );
 
-  const chat = useChat({
-    transport: transport.current,
+  const chat = useChat<AhcUIMessage>({
+    transport,
     messages: initialMessages,
   });
 
@@ -110,12 +130,16 @@ function ChatBody({
           <button
             type="button"
             onClick={onClear}
+            data-testid="chat-clear"
             className="rounded border border-gray-200 px-2 py-1 text-xs text-gray-600 hover:bg-gray-100"
           >
             Clear
           </button>
         </header>
-        <div className="flex-1 overflow-y-auto px-4 py-3">
+        <div
+          className="flex-1 overflow-y-auto px-4 py-3"
+          data-testid="chat-messages"
+        >
           {chat.messages.length === 0 ? (
             <p className="text-sm text-gray-400">No messages yet — say hi.</p>
           ) : (
@@ -126,7 +150,10 @@ function ChatBody({
             </ul>
           )}
           {chat.error ? (
-            <p className="mt-3 rounded border border-red-200 bg-red-50 px-2 py-1 text-xs text-red-700">
+            <p
+              className="mt-3 rounded border border-red-200 bg-red-50 px-2 py-1 text-xs text-red-700"
+              data-testid="chat-error"
+            >
               {chat.error.message}
             </p>
           ) : null}
@@ -138,6 +165,7 @@ function ChatBody({
               value={imageUrl}
               onChange={(e) => setImageUrl(e.target.value)}
               placeholder="Image URL (optional)"
+              data-testid="chat-image-url"
               className="rounded border border-gray-200 px-2 py-1 text-sm"
             />
             <div className="flex gap-2">
@@ -146,11 +174,13 @@ function ChatBody({
                 value={text}
                 onChange={(e) => setText(e.target.value)}
                 placeholder="Message…"
+                data-testid="chat-input"
                 className="flex-1 rounded border border-gray-200 px-2 py-1 text-sm"
               />
               <button
                 type="submit"
                 disabled={chat.status !== 'ready' && chat.status !== 'error'}
+                data-testid="chat-send"
                 className="rounded bg-gray-900 px-3 py-1 text-sm text-white disabled:opacity-50"
               >
                 {chat.status === 'streaming' || chat.status === 'submitted' ? '…' : 'Send'}
@@ -159,15 +189,12 @@ function ChatBody({
           </div>
         </form>
       </section>
-      <aside className="hidden h-full w-72 flex-col bg-gray-50 px-4 py-3 text-xs text-gray-600 md:flex">
-        <h2 className="mb-2 text-sm font-semibold text-gray-700">AHC Telemetry</h2>
-        <p className="text-gray-400">Sidebar wires up in G3 — class/observations/scratchpad/tokens.</p>
-      </aside>
+      <TelemetrySidebar messages={chat.messages} activeFlags={activeFlags} />
     </div>
   );
 }
 
-function MessageBubble({ msg }: { msg: UIMessage }) {
+function MessageBubble({ msg }: { msg: AhcUIMessage }) {
   const isUser = msg.role === 'user';
   return (
     <li className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
@@ -185,7 +212,7 @@ function MessageBubble({ msg }: { msg: UIMessage }) {
   );
 }
 
-function renderPart(part: UIMessage['parts'][number], key: string) {
+function renderPart(part: AhcUIMessage['parts'][number], key: string) {
   if (part.type === 'text') {
     return <span key={key}>{part.text}</span>;
   }
@@ -201,6 +228,10 @@ function renderPart(part: UIMessage['parts'][number], key: string) {
         reasoning: {part.text}
       </pre>
     );
+  }
+  if (part.type === 'data-ahc_stats') {
+    // Telemetry envelope — rendered in sidebar, not inline.
+    return null;
   }
   if (part.type.startsWith('tool-')) {
     return (

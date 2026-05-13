@@ -10,6 +10,7 @@ import {
   defaultThresholds,
   recallToolDefinition,
   tierize,
+  type CompactResult,
   type CoreEvent,
   type EventEmitter,
   type FeatureFlags,
@@ -35,6 +36,9 @@ export type AhcMiddlewareDeps = {
   scratchpadRegistry?: SessionScratchpadRegistry
   // Suppresses use of classifyWithHysteresis — tests / explicit class control.
   hysteresisStateOverride?: Map<SessionId, HysteresisState>
+  // Fires after compact() completes; consumer reads newTier2 / events from result.
+  // Not called on passthrough paths (no system message / tierize failure).
+  onCompactResult?: (sessionId: SessionId, result: CompactResult) => void
 }
 
 // Synthesize light metadata so classifierFeatures.computeFeatures has turn_index hooks.
@@ -139,6 +143,8 @@ export function createAhcMiddleware(deps: AhcMiddlewareDeps): LanguageModelV3Mid
       if (result.newHysteresisState !== undefined) {
         hysteresisStates.set(sessionId, result.newHysteresisState)
       }
+
+      deps.onCompactResult?.(sessionId, result)
 
       const newPrompt = convertCoreMessagesToSdk(result.assembledMessages)
       const baseTools = (params.tools ?? []) as LanguageModelV3CallOptions['tools']
