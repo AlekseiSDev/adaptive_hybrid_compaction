@@ -151,7 +151,11 @@ export const defaultAdapterRegistry: AdapterRegistry = {
   },
 }
 
-const FULL_CONTEXT_DEFAULT_MODEL = 'google/gemini-3-flash-preview'
+// Per decisions.md 2026-05-13 pivot — supersedes gemini-3-flash-preview.
+// OpenAI prompt cache fires automatically on OpenRouter (no cache_control
+// plumbing) — required for the cache-hit-rate metric AHC's value prop
+// hinges on.
+const FULL_CONTEXT_DEFAULT_MODEL = 'openai/gpt-5.4-mini'
 
 function makeFullContextRunner(): Runner {
   const apiKey = process.env['OPENROUTER_API_KEY']

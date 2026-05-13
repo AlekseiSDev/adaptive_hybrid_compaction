@@ -49,7 +49,9 @@ export type MastraOMDeps = {
 }
 
 const DEFAULT_PROVIDER_ID = 'openrouter'
-const DEFAULT_MODEL_ID = 'google/gemini-3-flash-preview'
+// Per decisions.md 2026-05-13 pivot — supersedes gemini-3-flash-preview.
+// gpt-5.4-mini fires OpenRouter auto-cache on stable system prompt prefix.
+const DEFAULT_MODEL_ID = 'openai/gpt-5.4-mini'
 const DEFAULT_URL = 'https://openrouter.ai/api/v1'
 const DEFAULT_STORAGE_ROOT = './.mastra'
 

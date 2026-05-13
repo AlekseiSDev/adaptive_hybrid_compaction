@@ -49,7 +49,7 @@ function renderToolsBlock(tools: ToolHint[]): string {
   const lines = [
     '# Available tools',
     '',
-    `You have ${tools.length} tool${tools.length === 1 ? '' : 's'}. Schemas (parameters, types) are provided to you separately by the runtime — the list below is behavioral guidance for when to reach for each one.`,
+    `You have ${String(tools.length)} tool${tools.length === 1 ? '' : 's'}. Schemas (parameters, types) are provided to you separately by the runtime — the list below is behavioral guidance for when to reach for each one.`,
     '',
     ...tools.map((t) => `- **${t.name}** — ${t.oneLiner}`),
   ]

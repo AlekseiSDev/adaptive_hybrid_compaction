@@ -94,7 +94,7 @@ describe('E1/E2/E3 sweep YAML scaffolds (E0)', () => {
     expect(plan.name).toBe('main_e1_text')
     expect(plan.benches).toEqual(['assistant-traj', 'longmemeval-med', 'locomo-med'])
     expect(plan.configs).toHaveLength(4)
-    expect(plan.seeds).toEqual([42, 43])
+    expect(plan.seeds).toEqual([42]) // Phase D fast-track: seed=43 deferred (see docs/runs/e_phase_d_todos.md)
     expect(plan.budget_usd).toBe(90)
     const ids = plan.configs.map((c) => c.id).sort()
     expect(ids).toEqual(['ahc_full', 'anthropic_compact', 'full_context', 'mastra_om'])

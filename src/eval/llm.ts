@@ -29,6 +29,14 @@ export const OPENROUTER_PRICING: Record<string, ModelPricing> = Object.freeze({
     input_per_million_usd: 0.25,
     output_per_million_usd: 1.5,
   },
+  // Primary actor (per decisions.md 2026-05-13 pivot). OpenAI prompt cache
+  // fires automatically on OpenRouter on ≥1024-token stable prefix — no
+  // cache_control plumbing required. Probe verified ~80% cached_tokens
+  // ratio on 3rd identical-prefix call. Pricing live 2026-05-13 OpenRouter.
+  'openai/gpt-5.4-mini': {
+    input_per_million_usd: 0.75,
+    output_per_million_usd: 4.5,
+  },
   // D4 judge model. Sonnet 4-7 not yet on OpenRouter (2026-05-13 verified via
   // /api/v1/models); fallback to 4.6 per plan. Note: OpenRouter uses dot
   // notation (4.6), Anthropic SDK uses dash (4-6). Pricing verified live.

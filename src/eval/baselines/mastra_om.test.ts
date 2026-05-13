@@ -32,12 +32,12 @@ describe('buildMemoryOptions — OM model override (S13)', () => {
     const opts = buildMemoryOptions({
       apiKey: 'sk-test',
       providerId: 'openrouter',
-      modelId: 'google/gemini-3-flash-preview',
+      modelId: 'openai/gpt-5.4-mini',
       url: 'https://openrouter.ai/api/v1',
     })
     const model = opts.observationalMemory.model
     expect(model.providerId).toBe('openrouter')
-    expect(model.modelId).toBe('google/gemini-3-flash-preview')
+    expect(model.modelId).toBe('openai/gpt-5.4-mini')
     expect(model.url).toBe('https://openrouter.ai/api/v1')
     expect(model.apiKey).toBe('sk-test')
   })
@@ -46,7 +46,7 @@ describe('buildMemoryOptions — OM model override (S13)', () => {
     const opts = buildMemoryOptions({ apiKey: 'sk-test' })
     const model = opts.observationalMemory.model
     expect(model.providerId).toBe('openrouter')
-    expect(model.modelId).toBe('google/gemini-3-flash-preview')
+    expect(model.modelId).toBe('openai/gpt-5.4-mini')
     expect(model.url).toBe('https://openrouter.ai/api/v1')
     expect(model.apiKey).toBe('sk-test')
   })
@@ -83,7 +83,7 @@ describe('mastraOmBaseline.name + prepare', () => {
     const scratch = state.scratch
     const config = scratch?.['mastra_config'] as Record<string, unknown> | undefined
     expect(config).toBeDefined()
-    expect(config?.['model']).toBe('openrouter/google/gemini-3-flash-preview')
+    expect(config?.['model']).toBe('openrouter/openai/gpt-5.4-mini')
     expect(config?.['provider_id']).toBe('openrouter')
     expect(config?.['storage_kind']).toBe('libsql')
     expect(config?.['mastra_version']).toBe('1.32.1')

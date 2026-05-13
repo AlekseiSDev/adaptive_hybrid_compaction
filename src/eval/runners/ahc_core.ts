@@ -40,7 +40,10 @@ import type {
 // cache-hit subset) plumbed through deps; baseURL only meaningful on
 // 'openrouter' (Anthropic uses SDK default).
 
-const DEFAULT_OPENROUTER_MODEL = 'google/gemini-3-flash-preview'
+// Per decisions.md 2026-05-13 pivot — supersedes gemini-3-flash-preview.
+// gpt-5.4-mini has automatic prompt cache on OpenRouter for ≥1024-token
+// stable prefix; AHC's stable Tier-1 prefix benefits.
+const DEFAULT_OPENROUTER_MODEL = 'openai/gpt-5.4-mini'
 const DEFAULT_ANTHROPIC_MODEL = 'claude-sonnet-4-6'
 
 // E1: AHC_ACTOR_MODEL env var, if set, overrides the default actor model.

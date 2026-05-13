@@ -36,7 +36,8 @@ import { userSimStep } from './user-sim.js'
 // cross-phase budget hedge (swap to flash-lite if OpenRouter credit runs low).
 // User-sim model NOT subject to override — customer behavior should stay
 // consistent across sweeps for comparable success rates.
-const TAU_ACTOR_FLASH_DEFAULT = 'google/gemini-3-flash-preview'
+// Per decisions.md 2026-05-13 pivot — supersedes gemini-3-flash-preview.
+const TAU_ACTOR_FLASH_DEFAULT = 'openai/gpt-5.4-mini'
 function resolveTauActorDefault(): string {
   const env = process.env['AHC_ACTOR_MODEL']
   return env && env.length > 0 ? env : TAU_ACTOR_FLASH_DEFAULT
