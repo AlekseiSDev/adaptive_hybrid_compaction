@@ -516,6 +516,27 @@ the per-seed cell means; cost is the per-cell total for 30 tasks, mean across se
 | `mastra_om`          | 0.258           | 0.260                          | 0.0086   |
 | **`ahc_full`**       | **0.292**       | **0.470**                      | **0.0157** |
 
+![Figure 2: AssistantTraj — accuracy versus cost-per-task for the four E1 baselines.
+The trio (`anthropic_compact`, `mastra_om`, `ahc_full`) forms a Pareto frontier;
+`full_context` is dominated by `anthropic_compact` (equal accuracy at one-third the
+cost). AHC reaches the highest accuracy but is not the cost leader. Regenerate with
+`python3 scripts/plots/at_pareto.py` — md5-stable.](figures/fig2_at_pareto.png)
+
+**Figures intentionally omitted at this scope:**
+
+- *Per-trajectory-class breakdown (planned fig 3).* The classifier returned `mixed` on
+  every turn (cold-start; §6.3, §7.3); a per-class bar chart would consist of a single
+  bar and add no information.
+- *Ablation grid (planned fig 4).* Most ablation cells have `n = 1` (§6.4, §7.7); a bar
+  chart at that scale would be misleading.
+- *Cache-hit rate (planned fig 5).* All cells report `cache_read_input_tokens = 0`
+  (§6.5); a chart of zeros is omitted.
+- *Block diagram (planned fig 1).* Architecture is described in §3 and is not
+  rendered as a separate figure in this version of the report.
+
+These figures become meaningful only when the full-scale sweeps in §8 future-work are
+executed; the plotting scripts can be added to `scripts/plots/` at that point.
+
 AHC reaches the highest accuracy among the four configurations on AssistantTraj
 (Δ = +0.067 vs `full_context`, Δ = +0.034 vs `mastra_om`). At `n = 60` per side and a
 binomial-style standard error of approximately `±0.054`, the AHC vs `full_context`
