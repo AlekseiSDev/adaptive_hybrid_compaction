@@ -119,8 +119,8 @@ describe('judgeCacheKey', () => {
       model: 'm',
       judgeSpec: SPEC,
     })
-    const k1 = judgeCacheKey(task, req)
-    const k2 = judgeCacheKey(task, req)
+    const k1 = judgeCacheKey(task.task_id, req)
+    const k2 = judgeCacheKey(task.task_id, req)
     expect(k1).toBe(k2)
     expect(k1).toMatch(/^[a-f0-9]{64}$/)
   })
@@ -129,7 +129,7 @@ describe('judgeCacheKey', () => {
     const a = makeTask({ task_id: 'at_mixed_001' })
     const b = makeTask({ task_id: 'at_mixed_002' })
     const req = buildJudgeRequest(a, 'r', { rubric: 'r', model: 'm', judgeSpec: SPEC })
-    expect(judgeCacheKey(a, req)).not.toBe(judgeCacheKey(b, req))
+    expect(judgeCacheKey(a.task_id, req)).not.toBe(judgeCacheKey(b.task_id, req))
   })
 })
 

@@ -5,37 +5,40 @@
 // (fallback from 4-7 — not yet on OpenRouter, see decisions.md). For image_qa
 // tasks the judge sees attachments as base64 data URLs alongside the rubric +
 // expected_summary + assistant response.
+//
+// D5 Step 1 refactor: cache + parse + cost machinery moved to `_judge-core.ts`
+// (shared across D5 benches). This file owns AT-specific request building
+// (rubric loading + image attachment loading) and delegates execution to
+// `runJudgeRequest`.
 
-import { createHash } from 'node:crypto'
-import { readFile, writeFile } from 'node:fs/promises'
+import { readFile } from 'node:fs/promises'
 import { dirname, extname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import {
-  costFromUsage,
-  createOpenRouterClient,
-  OPENROUTER_PRICING,
-} from '../llm.js'
-import { canonicalJson } from '../persist.js'
+import { createOpenRouterClient } from '../llm.js'
 import type {
   ContentBlock,
   LLMClient,
   LLMMessage,
   LLMRequest,
 } from '../types.js'
+import {
+  parseThreeLevelJson,
+  runJudgeRequest,
+  type JudgeCache,
+} from './_judge-core.js'
 import type { LlmJudgeFn, LlmJudgeSpec } from './assistant-traj.js'
 import type { AssistantTrajTask } from './assistant-traj.schema.js'
 
+export {
+  judgeCacheKey,
+  loadCache,
+  saveCache,
+  parseThreeLevelJson as parseJudgeOutput,
+  type JudgeCache,
+  type JudgeCacheEntry,
+} from './_judge-core.js'
+
 export const JUDGE_DEFAULT_MODEL = 'anthropic/claude-sonnet-4.6'
-
-export type JudgeCacheEntry = {
-  score: number
-  justification: string
-  cost_usd: number
-  model: string
-  ts: string
-}
-
-export type JudgeCache = Record<string, JudgeCacheEntry>
 
 function repoRoot(): string {
   return resolve(dirname(fileURLToPath(import.meta.url)), '../../..')
@@ -144,64 +147,10 @@ export function buildJudgeRequest(
   return { model: opts.model, messages, temperature: 0 }
 }
 
-const VALID_SCORES = new Set([0, 0.5, 1])
-
-export function parseJudgeOutput(
-  text: string,
-): { score: number; justification: string } | null {
-  const match = /\{[\s\S]*\}/.exec(text)
-  if (!match) return null
-  let obj: { score?: unknown; justification?: unknown }
-  try {
-    obj = JSON.parse(match[0]) as { score?: unknown; justification?: unknown }
-  } catch {
-    return null
-  }
-  if (typeof obj.score !== 'number') return null
-  if (!VALID_SCORES.has(obj.score)) return null
-  const justification =
-    typeof obj.justification === 'string' ? obj.justification : ''
-  return { score: obj.score, justification }
-}
-
-export async function loadCache(): Promise<JudgeCache> {
-  try {
-    const raw = await readFile(judgeCachePath(), 'utf8')
-    const parsed = JSON.parse(raw) as unknown
-    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-      return parsed as JudgeCache
-    }
-    return {}
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return {}
-    console.warn(
-      `[judge] cache corrupt, starting fresh: ${err instanceof Error ? err.message : String(err)}`,
-    )
-    return {}
-  }
-}
-
-export async function saveCache(cache: JudgeCache): Promise<void> {
-  await writeFile(
-    judgeCachePath(),
-    JSON.stringify(cache, null, 2) + '\n',
-    'utf8',
-  )
-}
-
-export function judgeCacheKey(task: AssistantTrajTask, request: LLMRequest): string {
-  return createHash('sha256')
-    .update(task.task_id + canonicalJson(request))
-    .digest('hex')
-}
-
 export type JudgeDeps = {
   llmClient: LLMClient
   model?: string
-  // Optional pre-loaded cache (for tests / batch scenarios that load once).
   cache?: JudgeCache
-  // If false, do not write cache to disk after a fresh judgement. Useful for
-  // tests that pre-load and re-check cache state without touching FS.
   persist?: boolean
 }
 
@@ -231,55 +180,13 @@ export async function judge(
     imageDataUrls,
   })
 
-  const cache = deps.cache ?? (await loadCache())
-  const key = judgeCacheKey(task, request)
-  const hit = cache[key]
-  if (hit) {
-    return {
-      score: hit.score,
-      justification: hit.justification,
-      cost_usd: 0,
-    }
-  }
-
-  const llmResponse = await deps.llmClient(request)
-  if (llmResponse.error) {
-    return {
-      score: 0,
-      justification: `judge LLM error: ${llmResponse.error.kind} ${llmResponse.error.message}`,
-      cost_usd: 0,
-    }
-  }
-  const parsed = parseJudgeOutput(llmResponse.text)
-  if (!parsed) {
-    return {
-      score: 0,
-      justification: `judge JSON parse failed: ${llmResponse.text.slice(0, 200)}`,
-      cost_usd: 0,
-    }
-  }
-
-  let cost_usd = 0
-  if (
-    llmResponse.raw_usage &&
-    'prompt_tokens' in llmResponse.raw_usage &&
-    Object.hasOwn(OPENROUTER_PRICING, model)
-  ) {
-    cost_usd = costFromUsage(model, llmResponse.raw_usage)
-  }
-
-  const entry: JudgeCacheEntry = {
-    score: parsed.score,
-    justification: parsed.justification,
-    cost_usd,
-    model,
-    ts: new Date().toISOString(),
-  }
-  cache[key] = entry
-  if (deps.persist !== false) {
-    await saveCache(cache)
-  }
-  return { score: parsed.score, justification: parsed.justification, cost_usd }
+  return runJudgeRequest(task.task_id, request, {
+    llmClient: deps.llmClient,
+    cachePath: judgeCachePath(),
+    ...(deps.cache !== undefined ? { cache: deps.cache } : {}),
+    ...(deps.persist !== undefined ? { persist: deps.persist } : {}),
+    parseFn: parseThreeLevelJson,
+  })
 }
 
 export type DefaultLlmJudgeOptions = {
