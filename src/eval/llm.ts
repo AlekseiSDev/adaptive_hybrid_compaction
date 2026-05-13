@@ -176,3 +176,125 @@ export function createOpenRouterClient(opts: OpenRouterClientOptions): LLMClient
     }
   }
 }
+
+// Anthropic-direct LLMClient — E0 enabler for E3 cache-hit subset.
+// Surfaces cache_read_input_tokens / cache_creation_input_tokens through
+// raw_usage so the rest of the pipeline (telemetry, summary aggregation)
+// can observe cache hits per turn without a separate code path.
+//
+// Internal AHC calls (digest / observer / reflection) go through this client
+// on the anthropic_direct provider path; they don't set cache_control —
+// caching happens on the main actor call inside `createAhcRuntime`, which
+// uses @ai-sdk/anthropic provider with its own cache header handling.
+export type AnthropicClientOptions = {
+  apiKey: string
+  baseURL?: string
+}
+
+type AnthropicMessageParam = {
+  role: 'user' | 'assistant'
+  content: string
+}
+
+function classifyAnthropicError(err: unknown): LLMResponseError['kind'] {
+  if (err instanceof Anthropic.APIError) {
+    if (err.status === 401 || err.status === 403) return 'auth'
+    if (err.status === 429) return 'rate_limit'
+    if (err.status !== undefined && err.status >= 500) return 'server_error'
+  }
+  if (err instanceof Anthropic.APIConnectionError) return 'network'
+  return 'unknown'
+}
+
+function llmMessagesToAnthropic(
+  messages: LLMRequest['messages'],
+): { system: string | undefined; messages: AnthropicMessageParam[] } {
+  const systemParts: string[] = []
+  const out: AnthropicMessageParam[] = []
+  for (const m of messages) {
+    const text =
+      typeof m.content === 'string'
+        ? m.content
+        : m.content
+            .filter((b): b is { type: 'text'; text: string } => b.type === 'text')
+            .map((b) => b.text)
+            .join('\n')
+    if (m.role === 'system') {
+      systemParts.push(text)
+      continue
+    }
+    out.push({ role: m.role, content: text })
+  }
+  return {
+    system: systemParts.length > 0 ? systemParts.join('\n\n') : undefined,
+    messages: out,
+  }
+}
+
+const DEFAULT_ANTHROPIC_MAX_TOKENS = 4096
+
+export function createAnthropicClient(opts: AnthropicClientOptions): LLMClient {
+  const client = new Anthropic({
+    apiKey: opts.apiKey,
+    ...(opts.baseURL !== undefined ? { baseURL: opts.baseURL } : {}),
+  })
+  return async (req: LLMRequest): Promise<LLMResponse> => {
+    const start = Date.now()
+    const { system, messages } = llmMessagesToAnthropic(req.messages)
+    try {
+      const resp = await client.messages.create({
+        model: req.model,
+        max_tokens: req.max_tokens ?? DEFAULT_ANTHROPIC_MAX_TOKENS,
+        messages,
+        ...(system !== undefined ? { system } : {}),
+        ...(req.temperature !== undefined ? { temperature: req.temperature } : {}),
+      })
+      const text = resp.content
+        .filter((b): b is Anthropic.TextBlock => b.type === 'text')
+        .map((b) => b.text)
+        .join('')
+      const raw_usage: AnthropicUsage = {
+        input_tokens: resp.usage.input_tokens,
+        output_tokens: resp.usage.output_tokens,
+        ...(resp.usage.cache_read_input_tokens !== null &&
+        resp.usage.cache_read_input_tokens !== undefined
+          ? { cache_read_input_tokens: resp.usage.cache_read_input_tokens }
+          : {}),
+        ...(resp.usage.cache_creation_input_tokens !== null &&
+        resp.usage.cache_creation_input_tokens !== undefined
+          ? { cache_creation_input_tokens: resp.usage.cache_creation_input_tokens }
+          : {}),
+      }
+      return {
+        text,
+        raw_usage,
+        finish_reason: resp.stop_reason ?? 'unknown',
+        latency_ms: Date.now() - start,
+      }
+    } catch (err) {
+      return {
+        text: '',
+        raw_usage: null,
+        finish_reason: 'error',
+        latency_ms: Date.now() - start,
+        error: {
+          kind: classifyAnthropicError(err),
+          message: err instanceof Error ? err.message : String(err),
+          ...(err instanceof Anthropic.APIError && err.status !== undefined
+            ? { status: err.status }
+            : {}),
+        },
+      }
+    }
+  }
+}
+
+export function anthropicCostFromUsage(model: string, usage: AnthropicUsage): number {
+  const pricing = ANTHROPIC_DIRECT_PRICING[model]
+  if (!pricing) return 0
+  return (
+    (usage.input_tokens * pricing.input_per_million_usd +
+      usage.output_tokens * pricing.output_per_million_usd) /
+    1_000_000
+  )
+}

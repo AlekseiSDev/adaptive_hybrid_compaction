@@ -1,10 +1,13 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import {
+  ANTHROPIC_DIRECT_PRICING,
+  anthropicCostFromUsage,
   costFromUsage,
+  createAnthropicClient,
   createOpenRouterClient,
   OPENROUTER_PRICING,
 } from './llm.js'
-import type { OpenRouterUsage } from './types.js'
+import type { AnthropicUsage, OpenRouterUsage } from './types.js'
 
 const fetchMock = vi.fn<typeof fetch>()
 
@@ -188,5 +191,49 @@ describe('costFromUsage', () => {
     const usage: OpenRouterUsage = { prompt_tokens: 100, completion_tokens: 50 }
     const cost = costFromUsage('unknown/model', usage)
     expect(cost).toBe(0)
+  })
+})
+
+describe('ANTHROPIC_DIRECT_PRICING + anthropicCostFromUsage', () => {
+  test('claude-sonnet-4-6 has $3/$15 per million pricing (dash-form id, not dot)', () => {
+    const pricing = ANTHROPIC_DIRECT_PRICING['claude-sonnet-4-6']
+    expect(pricing).toBeDefined()
+    expect(pricing).toEqual({
+      input_per_million_usd: 3.0,
+      output_per_million_usd: 15.0,
+    })
+  })
+
+  test('anthropicCostFromUsage uses input + output tokens; ignores cache fields', () => {
+    const usage: AnthropicUsage = {
+      input_tokens: 1000,
+      output_tokens: 500,
+      cache_read_input_tokens: 800,
+      cache_creation_input_tokens: 200,
+    }
+    const cost = anthropicCostFromUsage('claude-sonnet-4-6', usage)
+    // Cache rates intentionally not modeled in pricing — F report uses cache_read
+    // ratio as the metric, not a per-token cost line. So cost = 1000*$3/M + 500*$15/M.
+    expect(cost).toBeCloseTo((1000 * 3 + 500 * 15) / 1_000_000, 9)
+  })
+
+  test('anthropicCostFromUsage unknown model → 0 silent', () => {
+    const usage: AnthropicUsage = { input_tokens: 100, output_tokens: 50 }
+    expect(anthropicCostFromUsage('claude-future-99', usage)).toBe(0)
+  })
+})
+
+describe('createAnthropicClient — shape sanity', () => {
+  test('returns a function (LLMClient shape)', () => {
+    const client = createAnthropicClient({ apiKey: 'sk-fake' })
+    expect(typeof client).toBe('function')
+  })
+
+  test('honours baseURL override (smoke — constructor accepts it)', () => {
+    const client = createAnthropicClient({
+      apiKey: 'sk-fake',
+      baseURL: 'https://proxy.example.com',
+    })
+    expect(typeof client).toBe('function')
   })
 })
