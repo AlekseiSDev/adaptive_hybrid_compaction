@@ -170,6 +170,7 @@ describe('Eval harness types — compile-time witness', () => {
       n_completed: 2,
       mean_primary_score: 1,
       total_cost_usd: 0,
+      status: 'complete',
     }
 
     expect(plan.budget_usd).toBe(1)

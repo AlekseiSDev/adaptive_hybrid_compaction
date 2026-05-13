@@ -135,6 +135,7 @@ describe('writeMeta + writeSummary', () => {
       runDir,
       { bench: 'synthetic', config_id: '0123456789abcdef', seed: 42 },
       records,
+      { status: 'complete' },
     )
 
     const summary = JSON.parse(await readFile(join(runDir, 'summary.json'), 'utf8')) as {
@@ -145,6 +146,8 @@ describe('writeMeta + writeSummary', () => {
       n_completed: number
       mean_primary_score: number
       total_cost_usd: number
+      status: string
+      halt_reason?: string
     }
     expect(summary.bench).toBe('synthetic')
     expect(summary.config_id).toBe('0123456789abcdef')
@@ -153,5 +156,42 @@ describe('writeMeta + writeSummary', () => {
     expect(summary.n_completed).toBe(2)
     expect(summary.mean_primary_score).toBe(0.5)
     expect(summary.total_cost_usd).toBeCloseTo(0.03, 5)
+    expect(summary.status).toBe('complete')
+    expect(summary.halt_reason).toBeUndefined()
+  })
+
+  test('writeSummary persists status:"partial" + halt_reason on halted close', async () => {
+    const runDir = runDirFor(workspace, 'synthetic', '0123456789abcdef', 42)
+    const records: RunRecord[] = [
+      sampleRecord({ task_id: 'a', score: { primary: 0 }, cost_usd: 5 }),
+    ]
+    await writeSummary(
+      runDir,
+      { bench: 'synthetic', config_id: '0123456789abcdef', seed: 42 },
+      records,
+      { status: 'partial', halt_reason: 'projected $123.00 > 1.5× budget $50.00 after 1 tasks' },
+    )
+
+    const summary = JSON.parse(await readFile(join(runDir, 'summary.json'), 'utf8')) as {
+      status: string
+      halt_reason: string
+      n_completed: number
+    }
+    expect(summary.status).toBe('partial')
+    expect(summary.halt_reason).toContain('1.5× budget')
+    expect(summary.n_completed).toBe(1)
+  })
+
+  test('writeSummary status:"complete" with no halt_reason omits halt_reason key', async () => {
+    const runDir = runDirFor(workspace, 'synthetic', '0123456789abcdef', 42)
+    await writeSummary(
+      runDir,
+      { bench: 'synthetic', config_id: '0123456789abcdef', seed: 42 },
+      [],
+      { status: 'complete' },
+    )
+
+    const raw = await readFile(join(runDir, 'summary.json'), 'utf8')
+    expect(raw).not.toContain('halt_reason')
   })
 })

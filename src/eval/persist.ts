@@ -91,6 +91,7 @@ export async function writeSummary(
   runDir: string,
   identity: { bench: Bench; config_id: string; seed: number },
   records: RunRecord[],
+  closeInfo: { status: 'complete' | 'partial'; halt_reason?: string },
 ): Promise<void> {
   await mkdir(runDir, { recursive: true })
   const n_total = records.length
@@ -109,6 +110,8 @@ export async function writeSummary(
     n_completed,
     mean_primary_score,
     total_cost_usd,
+    status: closeInfo.status,
+    ...(closeInfo.halt_reason !== undefined ? { halt_reason: closeInfo.halt_reason } : {}),
   }
   await writeFile(join(runDir, SUMMARY_FILE), JSON.stringify(summary, null, 2) + '\n')
 }

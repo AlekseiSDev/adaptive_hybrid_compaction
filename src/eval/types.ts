@@ -268,4 +268,11 @@ export type RunSummary = {
   n_completed: number
   mean_primary_score: number
   total_cost_usd: number
+  // E0: completion status — 'partial' iff CostTracker halt'нул sweep mid-run.
+  // halt_reason populated only when status === 'partial'. Per
+  // `docs/design/E_main-runs.md §9` post-run audit; readers (audit scripts /
+  // F-report aggregation) must check status === 'complete' before consuming
+  // mean_primary_score etc. on aggregated cells.
+  status: 'complete' | 'partial'
+  halt_reason?: string
 }

@@ -387,7 +387,12 @@ export async function runSweep(
               timestamp: new Date().toISOString(),
             })
             const allRecords = await readAllRecords(runDir)
-            await writeSummary(runDir, { bench, config_id, seed }, allRecords)
+            await writeSummary(
+              runDir,
+              { bench, config_id, seed },
+              allRecords,
+              { status: 'partial', halt_reason: decision.reason },
+            )
             configResults.push({
               bench,
               config_id,
@@ -408,7 +413,12 @@ export async function runSweep(
           timestamp: new Date().toISOString(),
         })
         const allRecords = await readAllRecords(runDir)
-        await writeSummary(runDir, { bench, config_id, seed }, allRecords)
+        await writeSummary(
+          runDir,
+          { bench, config_id, seed },
+          allRecords,
+          { status: 'complete' },
+        )
 
         configResults.push({
           bench,
