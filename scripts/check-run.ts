@@ -146,19 +146,29 @@ export async function checkRun(runDir: string): Promise<CheckResult> {
       const r = records[i]
       if (!r) continue
       const recPath = `${cell.cellRel}#${String(i)} (task=${r.task_id})`
-      if (!isFiniteNumber(r.cost_usd) || r.cost_usd <= 0) {
-        issues.push({
-          severity: 'error',
-          path: recPath,
-          message: `cost_usd not positive (${String(r.cost_usd)})`,
-        })
-      }
       const tokens = (r.totals?.input ?? 0) + (r.totals?.output ?? 0)
       if (tokens <= 0) {
         issues.push({
           severity: 'error',
           path: recPath,
           message: 'totals.input + totals.output is 0 — no LLM call observed',
+        })
+      }
+      // cost_usd = 0 with tokens > 0 is legitimate for baselines that don't
+      // self-track cost (e.g., mastra_om — Mastra owns the provider call).
+      // Surface as warn so we know to back-fill from tokens × pricing on the
+      // F-side; not a hard error.
+      if (!isFiniteNumber(r.cost_usd) || r.cost_usd < 0) {
+        issues.push({
+          severity: 'error',
+          path: recPath,
+          message: `cost_usd not finite/negative (${String(r.cost_usd)})`,
+        })
+      } else if (r.cost_usd === 0 && tokens > 0) {
+        issues.push({
+          severity: 'warn',
+          path: recPath,
+          message: `cost_usd=0 with tokens=${String(tokens)} — baseline likely does not self-track cost (e.g., mastra_om); back-fill from tokens × pricing on the F-side`,
         })
       }
       if (!isFiniteNumber(r.score?.primary)) {
@@ -170,19 +180,18 @@ export async function checkRun(runDir: string): Promise<CheckResult> {
       }
       if (hasJudge) {
         const jc = r.score?.judge_cost_usd
-        if (!isFiniteNumber(jc) || jc <= 0) {
-          issues.push({
-            severity: 'warn',
-            path: recPath,
-            message: `bench=${bench} expects LLM judge but judge_cost_usd not positive (${String(jc)}); possible stub-grader fallback`,
-          })
-        }
+        // judge_cost_usd = 0 with non-empty judge_explanation is a legitimate
+        // cache HIT (see _judge-core.ts:109). Stub-grader fallback returns
+        // primary=0 with judge_explanation='judge-stub' (assistant-traj.ts:153)
+        // or no judge_explanation field (lme/locomo stub returns {primary:0}).
+        // So flag only when judge_explanation is also empty.
         const je = r.score?.judge_explanation
-        if (typeof je !== 'string' || je.length === 0) {
+        const hasExplanation = typeof je === 'string' && je.length > 0 && je !== 'judge-stub'
+        if ((!isFiniteNumber(jc) || jc < 0) && !hasExplanation) {
           issues.push({
             severity: 'warn',
             path: recPath,
-            message: `bench=${bench} expects judge_explanation but field empty/absent`,
+            message: `bench=${bench} expects LLM judge but judge_cost_usd=${String(jc)} AND judge_explanation absent/empty — possible stub-grader fallback`,
           })
         }
       }

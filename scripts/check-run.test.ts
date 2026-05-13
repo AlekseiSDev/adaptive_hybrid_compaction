@@ -101,13 +101,27 @@ describe('checkRun — empty / missing inputs', () => {
 })
 
 describe('checkRun — per-record validity', () => {
-  test('cost_usd <= 0 → error', async () => {
+  test('cost_usd=0 with tokens>0 → warn (mastra_om doesn\'t self-track cost)', async () => {
     await writeCell(
       workspace,
       'synthetic',
       'cfg-aaaa',
       42,
-      [baseRecord({ cost_usd: 0 })],
+      [baseRecord({ cost_usd: 0, totals: { input: 100, output: 50 } })],
+      baseSummary({ n_total: 1, n_completed: 1 }),
+    )
+    const result = await checkRun(workspace)
+    expect(result.issues.some((i) => i.severity === 'warn' && i.message.includes('cost_usd=0 with tokens'))).toBe(true)
+    expect(result.issues.some((i) => i.severity === 'error' && i.message.includes('cost_usd'))).toBe(false)
+  })
+
+  test('cost_usd negative or NaN → error', async () => {
+    await writeCell(
+      workspace,
+      'synthetic',
+      'cfg-aaaa',
+      42,
+      [baseRecord({ cost_usd: NaN })],
       baseSummary({ n_total: 1, n_completed: 1 }),
     )
     const result = await checkRun(workspace)
@@ -142,7 +156,7 @@ describe('checkRun — per-record validity', () => {
 })
 
 describe('checkRun — judged benches', () => {
-  test('assistant-traj missing judge_cost_usd → warn (stub-grader hint)', async () => {
+  test('assistant-traj missing judge_cost_usd AND judge_explanation → warn (stub hint)', async () => {
     await writeCell(
       workspace,
       'assistant-traj',
@@ -152,7 +166,28 @@ describe('checkRun — judged benches', () => {
       baseSummary({ bench: 'assistant-traj', n_total: 1, n_completed: 1 }),
     )
     const result = await checkRun(workspace)
-    expect(result.issues.some((i) => i.severity === 'warn' && i.message.includes('judge_cost_usd'))).toBe(true)
+    expect(result.issues.some((i) => i.severity === 'warn' && i.message.includes('stub-grader'))).toBe(true)
+  })
+
+  test('judge cache hit (judge_cost=0 but explanation present) → NO warn', async () => {
+    // _judge-core.ts:109 returns {score, justification, cost_usd: 0} on cache
+    // hit. Both LME and LoCoMo do this. Should NOT trigger stub warning.
+    await writeCell(
+      workspace,
+      'longmemeval-med',
+      'cfg-aaaa',
+      42,
+      [
+        baseRecord({
+          bench: 'longmemeval-med',
+          score: { primary: 1, judge_explanation: 'yes', judge_cost_usd: 0 },
+        }),
+      ],
+      baseSummary({ bench: 'longmemeval-med', n_total: 1, n_completed: 1 }),
+    )
+    const result = await checkRun(workspace)
+    const stubIssues = result.issues.filter((i) => i.message.includes('stub-grader'))
+    expect(stubIssues).toHaveLength(0)
   })
 
   test('assistant-traj with valid judge cost + explanation → no judge warnings', async () => {
