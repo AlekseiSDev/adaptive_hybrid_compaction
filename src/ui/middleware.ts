@@ -1,5 +1,4 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { createHash, timingSafeEqual } from 'node:crypto';
 
 export const config = {
   matcher: ['/((?!_next/static|_next/image|favicon|healthz).*)'],
@@ -9,15 +8,36 @@ const COOKIE_NAME = 'ahc-demo-auth';
 const COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 7;
 const BASIC_REALM = 'AHC Demo';
 
-function tokenFor(password: string): string {
-  return createHash('sha256').update(password).digest('hex');
+async function sha256Hex(text: string): Promise<string> {
+  const data = new TextEncoder().encode(text);
+  const buf = await crypto.subtle.digest('SHA-256', data);
+  const bytes = new Uint8Array(buf);
+  let hex = '';
+  for (const b of bytes) hex += b.toString(16).padStart(2, '0');
+  return hex;
 }
 
-function safeEqual(a: string, b: string): boolean {
-  const ab = Buffer.from(a);
-  const bb = Buffer.from(b);
-  if (ab.length !== bb.length) return false;
-  return timingSafeEqual(ab, bb);
+function timingSafeEqualString(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) {
+    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return diff === 0;
+}
+
+function decodeBasic(header: string | null): string | null {
+  if (!header) return null;
+  const [scheme, encoded] = header.split(' ', 2);
+  if (scheme?.toLowerCase() !== 'basic' || !encoded) return null;
+  try {
+    const decoded = atob(encoded);
+    const idx = decoded.indexOf(':');
+    if (idx < 0) return null;
+    return decoded.slice(idx + 1);
+  } catch {
+    return null;
+  }
 }
 
 function unauthorized(): NextResponse {
@@ -27,21 +47,7 @@ function unauthorized(): NextResponse {
   });
 }
 
-function decodeBasic(header: string | null): string | null {
-  if (!header) return null;
-  const [scheme, encoded] = header.split(' ', 2);
-  if (scheme?.toLowerCase() !== 'basic' || !encoded) return null;
-  try {
-    const decoded = Buffer.from(encoded, 'base64').toString('utf-8');
-    const idx = decoded.indexOf(':');
-    if (idx < 0) return null;
-    return decoded.slice(idx + 1);
-  } catch {
-    return null;
-  }
-}
-
-export function middleware(request: NextRequest): NextResponse {
+export async function middleware(request: NextRequest): Promise<NextResponse> {
   const password = process.env.DEMO_PASSWORD;
   if (!password) {
     return new NextResponse('Demo auth not configured (DEMO_PASSWORD unset)', {
@@ -49,15 +55,15 @@ export function middleware(request: NextRequest): NextResponse {
     });
   }
 
-  const expectedToken = tokenFor(password);
+  const expectedToken = await sha256Hex(password);
 
   const cookieValue = request.cookies.get(COOKIE_NAME)?.value;
-  if (cookieValue && safeEqual(cookieValue, expectedToken)) {
+  if (cookieValue && timingSafeEqualString(cookieValue, expectedToken)) {
     return NextResponse.next();
   }
 
   const submitted = decodeBasic(request.headers.get('authorization'));
-  if (submitted !== null && safeEqual(submitted, password)) {
+  if (submitted !== null && timingSafeEqualString(submitted, password)) {
     const response = NextResponse.next();
     response.cookies.set({
       name: COOKIE_NAME,
