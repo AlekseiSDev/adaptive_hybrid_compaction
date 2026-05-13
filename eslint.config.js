@@ -3,7 +3,16 @@ import tseslint from 'typescript-eslint'
 
 export default tseslint.config(
   {
-    ignores: ['dist/**', 'node_modules/**', 'coverage/**'],
+    ignores: [
+      'dist/**',
+      'node_modules/**',
+      'coverage/**',
+      // Docker bind-mounts (langfuse stack) — live data dirs with transient
+      // files that come and go during scans; gitignored.
+      'observability/data/**',
+      'observability/.langfuse/**',
+      'benchmarks/runs/**',
+    ],
   },
   js.configs.recommended,
   {

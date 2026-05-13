@@ -3,6 +3,7 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import type { Attributes, Span, SpanOptions, Tracer } from '@opentelemetry/api'
 import {
   defaultAdapterRegistry,
   defaultRunnerRegistry,
@@ -221,6 +222,66 @@ describe('runSweep — CostTracker halt (B2)', () => {
     // So executions == 20 (the 20th task triggers the halt; no 21st).
     expect(executions).toBe(20)
     expect(result.total_cost_usd).toBe(100)
+  })
+})
+
+describe('runSweep — per-task OTel spans (B5)', () => {
+  test('emits eval.task span per task with langfuse input/output attrs', async () => {
+    type RecordedSpan = {
+      name: string
+      attributes: Attributes
+      ended: boolean
+    }
+    const spans: RecordedSpan[] = []
+    const fakeTracer = {
+      startSpan: (name: string, options?: SpanOptions) => {
+        const recorded: RecordedSpan = {
+          name,
+          attributes: { ...(options?.attributes ?? {}) },
+          ended: false,
+        }
+        spans.push(recorded)
+        const fakeSpan: Partial<Span> = {
+          setAttribute: (key, value) => {
+            recorded.attributes[key] = value
+            return fakeSpan as Span
+          },
+          setAttributes: (attrs) => {
+            Object.assign(recorded.attributes, attrs)
+            return fakeSpan as Span
+          },
+          setStatus: () => fakeSpan as Span,
+          recordException: () => undefined,
+          end: () => {
+            recorded.ended = true
+          },
+        }
+        return fakeSpan as Span
+      },
+      // Not used by runSweep, but Tracer interface requires it.
+      startActiveSpan: () => {
+        throw new Error('startActiveSpan not used in runSweep')
+      },
+    } as unknown as Tracer
+    const result = await runSweep(
+      smokePlan,
+      defaultAdapterRegistry,
+      defaultRunnerRegistry,
+      { rootDir: workspace, gitSha: 't', tracer: fakeTracer },
+    )
+    expect(result.configs).toHaveLength(2)
+    // smokePlan has 2 configs × 2 synthetic tasks = 4 eval.task spans
+    expect(spans).toHaveLength(4)
+    for (const s of spans) {
+      expect(s.name).toBe('eval.task')
+      expect(s.ended).toBe(true)
+      expect(s.attributes['task.id']).toMatch(/^syn-\d{3}$/)
+      expect(s.attributes['bench']).toBe('synthetic')
+      expect(typeof s.attributes['config_id']).toBe('string')
+      expect(s.attributes['langfuse.observation.input']).toBeTypeOf('string')
+      // Stub baseline echoes task.expected → output is the assistant text
+      expect(s.attributes['langfuse.observation.output']).toBeTypeOf('string')
+    }
   })
 })
 

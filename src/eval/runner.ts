@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { context, SpanStatusCode, trace, type Tracer } from '@opentelemetry/api'
 import {
   appendRecord,
   computeConfigId,
@@ -41,7 +42,14 @@ export type RunnerRegistry = {
 export type RunSweepOptions = {
   rootDir: string
   gitSha?: string
+  // Optional tracer override (for tests). Defaults to globally-registered
+  // OTel tracer (set up in src/eval/observability/langfuse.ts); becomes a
+  // noop tracer when observability is disabled.
+  tracer?: Tracer
 }
+
+const TASK_INPUT_ATTR = 'langfuse.observation.input'
+const TASK_OUTPUT_ATTR = 'langfuse.observation.output'
 
 export type RunSweepConfigResult = {
   bench: Bench
@@ -215,6 +223,10 @@ export async function runSweep(
   const configResults: RunSweepConfigResult[] = []
   const costTracker = new CostTracker()
   const totalTasks = await computeTotalTasks(plan, adapters)
+  // Noop-safe: when LANGFUSE_ENABLED unset, this is a noop tracer and the
+  // span calls below are zero-cost. When enabled, eval.task spans appear as
+  // children of the outer eval.sweep span set up in scripts/eval.ts.
+  const tracer = options.tracer ?? trace.getTracer('ahc-eval')
 
   let halted = false
   let halt_reason: string | undefined
@@ -240,13 +252,36 @@ export async function runSweep(
           const events: InstrumentationEvent[] = []
           const conv = adapter.prepare(task)
           const started_at = Date.now()
-          const response = await runner.execute(conv, {
-            bench,
-            config,
-            seed,
-            task,
-            instrumentation: (e) => events.push(e),
+          const taskSpan = tracer.startSpan('eval.task', {
+            attributes: {
+              'task.id': task.id,
+              bench,
+              config_id,
+              seed: String(seed),
+              [TASK_INPUT_ATTR]: JSON.stringify(conv.messages),
+            },
           })
+          let response
+          try {
+            response = await context.with(
+              trace.setSpan(context.active(), taskSpan),
+              () =>
+                runner.execute(conv, {
+                  bench,
+                  config,
+                  seed,
+                  task,
+                  instrumentation: (e) => events.push(e),
+                }),
+            )
+            taskSpan.setAttribute(TASK_OUTPUT_ATTR, response.text)
+          } catch (err) {
+            taskSpan.recordException(err as Error)
+            taskSpan.setStatus({ code: SpanStatusCode.ERROR })
+            taskSpan.end()
+            throw err
+          }
+          taskSpan.end()
           const score = grader.score(task, response)
           const completed_at = Date.now()
           const enrichedTurns = enrichTurnsWithEvents(response.turns, events)

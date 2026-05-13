@@ -3,5 +3,5 @@ benches: [synthetic]
 configs:
   - id: anthropic_compact
     baseline: anthropic_compact
-seeds: [42]
+seeds: [44]
 budget_usd: 0.5

@@ -78,30 +78,56 @@ async function main(): Promise<void> {
   const rootDir = resolve(process.cwd(), 'benchmarks/runs')
   const obs = setupObservability()
   try {
-    // Wrap runSweep in single eval.sweep span — minimum trace для B4 verifier.
-    // Per-config / per-task / per-turn spans — следующий iteration (отдельная фаза
-    // или часть AHC integration после A6 wiring).
-    const span = obs.tracer.startSpan('eval.sweep', {
-      attributes: {
-        'sweep.name': plan.name,
-        'sweep.benches': plan.benches.join(','),
-        'sweep.configs_count': plan.configs.length,
-        'sweep.seeds': plan.seeds.join(','),
-        'sweep.budget_usd': plan.budget_usd,
+    // startActiveSpan (vs startSpan) registers eval.sweep as the active span
+    // in OTel context — eval.task spans created inside runSweep become its
+    // children automatically. Plus eval.task wraps in turn any AI SDK
+    // experimental_telemetry spans (ai.generateText.*) → full trace tree
+    // in Langfuse UI.
+    await obs.tracer.startActiveSpan(
+      'eval.sweep',
+      {
+        attributes: {
+          'sweep.name': plan.name,
+          'sweep.benches': plan.benches.join(','),
+          'sweep.configs_count': plan.configs.length,
+          'sweep.seeds': plan.seeds.join(','),
+          'sweep.budget_usd': plan.budget_usd,
+          'langfuse.observation.input': JSON.stringify({
+            name: plan.name,
+            benches: plan.benches,
+            configs: plan.configs.map((c) => c.id),
+            seeds: plan.seeds,
+          }),
+        },
       },
-    })
-    try {
-      const result = await runSweep(plan, defaultAdapterRegistry, defaultRunnerRegistry, {
-        rootDir,
-        gitSha: gitSha(),
-      })
-      span.setAttribute('sweep.halted', result.halted)
-      span.setAttribute('sweep.total_cost_usd', result.total_cost_usd)
-      span.setAttribute('sweep.configs_completed', result.configs.length)
-      printSummary(plan, result, obs.enabled)
-    } finally {
-      span.end()
-    }
+      async (span) => {
+        try {
+          const result = await runSweep(
+            plan,
+            defaultAdapterRegistry,
+            defaultRunnerRegistry,
+            { rootDir, gitSha: gitSha() },
+          )
+          span.setAttribute('sweep.halted', result.halted)
+          span.setAttribute('sweep.total_cost_usd', result.total_cost_usd)
+          span.setAttribute('sweep.configs_completed', result.configs.length)
+          span.setAttribute(
+            'langfuse.observation.output',
+            JSON.stringify({
+              halted: result.halted,
+              ...(result.halt_reason !== undefined
+                ? { halt_reason: result.halt_reason }
+                : {}),
+              total_cost_usd: result.total_cost_usd,
+              configs_completed: result.configs.length,
+            }),
+          )
+          printSummary(plan, result, obs.enabled)
+        } finally {
+          span.end()
+        }
+      },
+    )
   } finally {
     await obs.dispose()
   }
