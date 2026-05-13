@@ -1,0 +1,297 @@
+[
+  {
+    "sample_id": "conv-43",
+    "qa_idx": 48,
+    "category": 1,
+    "category_name": "single-hop",
+    "question": "When did John get an ankle injury in 2023?",
+    "answer": "around November 16, 2023",
+    "evidence": [
+      "D18:2"
+    ]
+  },
+  {
+    "sample_id": "conv-41",
+    "qa_idx": 34,
+    "category": 2,
+    "category_name": "multi-hop",
+    "question": "When did Maria join a gym?",
+    "answer": "The week before 16 June 2023",
+    "evidence": [
+      "D19:1"
+    ]
+  },
+  {
+    "sample_id": "conv-42",
+    "qa_idx": 52,
+    "category": 1,
+    "category_name": "single-hop",
+    "question": "How many of Joanna's writing have made it to the big screen?",
+    "answer": "two",
+    "evidence": [
+      "D15:1",
+      "D25:2"
+    ]
+  },
+  {
+    "sample_id": "conv-26",
+    "qa_idx": 77,
+    "category": 3,
+    "category_name": "temporal",
+    "question": "Would Melanie go on another roadtrip soon?",
+    "answer": "Likely no; since this one went badly",
+    "evidence": [
+      "D18:3",
+      "D18:1"
+    ]
+  },
+  {
+    "sample_id": "conv-44",
+    "qa_idx": 103,
+    "category": 4,
+    "category_name": "open-domain",
+    "question": "What organization does Audrey donate a portion of his profits to?",
+    "answer": "Animal shelter",
+    "evidence": [
+      "D22:7"
+    ]
+  },
+  {
+    "sample_id": "conv-47",
+    "qa_idx": 55,
+    "category": 2,
+    "category_name": "multi-hop",
+    "question": "When did John and his programming friends host an online programming competition?",
+    "answer": "Last week before 13 October 2022.",
+    "evidence": [
+      "D27:1"
+    ]
+  },
+  {
+    "sample_id": "conv-44",
+    "qa_idx": 20,
+    "category": 3,
+    "category_name": "temporal",
+    "question": "Which meat does Audrey prefer eating more than others?",
+    "answer": "chicken",
+    "evidence": [
+      "D10:13",
+      "D10:23"
+    ]
+  },
+  {
+    "sample_id": "conv-49",
+    "qa_idx": 75,
+    "category": 2,
+    "category_name": "multi-hop",
+    "question": "When did Evan announce his marriage to his extended family?",
+    "answer": "January 5, 2024",
+    "evidence": [
+      "D23:1"
+    ]
+  },
+  {
+    "sample_id": "conv-43",
+    "qa_idx": 122,
+    "category": 4,
+    "category_name": "open-domain",
+    "question": "What has John been able to help the younger players achieve?",
+    "answer": "reach their goals",
+    "evidence": [
+      "D14:5"
+    ]
+  },
+  {
+    "sample_id": "conv-42",
+    "qa_idx": 37,
+    "category": 2,
+    "category_name": "multi-hop",
+    "question": "When did Nate win an international tournament?",
+    "answer": "21 August, 2022",
+    "evidence": [
+      "D19:1"
+    ]
+  },
+  {
+    "sample_id": "conv-48",
+    "qa_idx": 18,
+    "category": 3,
+    "category_name": "temporal",
+    "question": "In what country did Jolene buy snake Seraphim?",
+    "answer": "In France",
+    "evidence": [
+      "D2:24"
+    ]
+  },
+  {
+    "sample_id": "conv-48",
+    "qa_idx": 109,
+    "category": 4,
+    "category_name": "open-domain",
+    "question": "What cool stuff did Jolene accomplish at the retreat on 9 February, 2023?",
+    "answer": "Came up with neat solutions for her engineering project",
+    "evidence": [
+      "D5:5"
+    ]
+  },
+  {
+    "sample_id": "conv-43",
+    "qa_idx": 63,
+    "category": 2,
+    "category_name": "multi-hop",
+    "question": "When did John organize a basketball camp for kids?",
+    "answer": "summer 2023",
+    "evidence": [
+      "D26:23"
+    ]
+  },
+  {
+    "sample_id": "conv-50",
+    "qa_idx": 21,
+    "category": 3,
+    "category_name": "temporal",
+    "question": "Does Calvin wish to become more popular?",
+    "answer": "Yes; he want's to grow his fanbase",
+    "evidence": [
+      "D12:11",
+      "D27:1"
+    ]
+  },
+  {
+    "sample_id": "conv-47",
+    "qa_idx": 44,
+    "category": 3,
+    "category_name": "temporal",
+    "question": "Why didn't John want to go to Starbucks?",
+    "answer": "Possibly because he likes to drink beer on his days off.",
+    "evidence": [
+      "D21:12",
+      "D21:14"
+    ]
+  },
+  {
+    "sample_id": "conv-47",
+    "qa_idx": 51,
+    "category": 1,
+    "category_name": "single-hop",
+    "question": "Which new games did John start play during the course of the conversation with James?",
+    "answer": "AC Valhalla, Witcher 3, FIFA 23, Dungeons of the Dragons, futuristic dystopian game",
+    "evidence": [
+      "D5:4",
+      "D19:7",
+      "D30:14",
+      "D24:1",
+      "D24:3",
+      "D8:20"
+    ]
+  },
+  {
+    "sample_id": "conv-49",
+    "qa_idx": 91,
+    "category": 4,
+    "category_name": "open-domain",
+    "question": "What did Sam agree to try instead of soda and candy?",
+    "answer": "flavored seltzer water and dark chocolate with high cocoa content",
+    "evidence": [
+      "D3:6"
+    ]
+  },
+  {
+    "sample_id": "conv-44",
+    "qa_idx": 90,
+    "category": 4,
+    "category_name": "open-domain",
+    "question": "What did Audrey organize with the neighbors' dogs?",
+    "answer": "a doggy playdate",
+    "evidence": [
+      "D18:6"
+    ]
+  },
+  {
+    "sample_id": "conv-48",
+    "qa_idx": 158,
+    "category": 4,
+    "category_name": "open-domain",
+    "question": "What did Jolene participate in recently that provided her with a rewarding experience?",
+    "answer": "presenting at a virtual conference",
+    "evidence": [
+      "D21:6"
+    ]
+  },
+  {
+    "sample_id": "conv-50",
+    "qa_idx": 63,
+    "category": 1,
+    "category_name": "single-hop",
+    "question": "What style of guitars does Calvin own?",
+    "answer": "custom-made yellow guitar with an octopus on it, shiny purple guitar",
+    "evidence": [
+      "D16:13",
+      "D16:4",
+      "D16:18",
+      "D16:19"
+    ]
+  },
+  {
+    "sample_id": "conv-50",
+    "qa_idx": 27,
+    "category": 2,
+    "category_name": "multi-hop",
+    "question": "Which city was Calvin visiting in August 2023?",
+    "answer": "Miami",
+    "evidence": [
+      "D16:6"
+    ]
+  },
+  {
+    "sample_id": "conv-49",
+    "qa_idx": 38,
+    "category": 3,
+    "category_name": "temporal",
+    "question": "What role does nature and the outdoors play in Evan and Sam's mental well-being?",
+    "answer": "Nature and outdoor activities seem to be significant stress relievers and sources of joy for both Evan and Sam. These activities likely contribute positively to their mental well-being.",
+    "evidence": [
+      "D22:1 D22:2 D9:10 D9:11"
+    ]
+  },
+  {
+    "sample_id": "conv-44",
+    "qa_idx": 29,
+    "category": 1,
+    "category_name": "single-hop",
+    "question": "What are the names of Audrey's dogs?",
+    "answer": "Pepper, Precious, Panda, and Pixie",
+    "evidence": [
+      "D1:7",
+      "D2:1",
+      "D19:12"
+    ]
+  },
+  {
+    "sample_id": "conv-26",
+    "qa_idx": 15,
+    "category": 1,
+    "category_name": "single-hop",
+    "question": "What activities does Melanie partake in?",
+    "answer": "pottery, camping, painting, swimming",
+    "evidence": [
+      "D5:4",
+      "D9:1",
+      "D1:12",
+      "D1:18"
+    ]
+  },
+  {
+    "sample_id": "conv-41",
+    "qa_idx": 33,
+    "category": 1,
+    "category_name": "single-hop",
+    "question": "What types of yoga has Maria practiced?",
+    "answer": "Aerial, kundalini",
+    "evidence": [
+      "D1:3",
+      "D18:15",
+      "D19:3"
+    ]
+  }
+]
