@@ -372,6 +372,63 @@ score на known-good response. Green = full per-bench round-trip.
 
 ---
 
+## 9. Bench role in AHC eval — compaction-axis framing
+
+Все 4 бенча Track D — **compaction benchmarks** разных eval axes. AHC оценивается
+не как «agent loop framework», а как **policy под compaction quality** — и каждый
+бенч изолирует разный compaction failure mode:
+
+| Bench | Eval axis | Shape | Failure mode tested |
+|---|---|---|---|
+| **AssistantTraj** | trajectory coherence | multi-turn replay assistant trace | trajectory drift через compaction |
+| **LongMemEval-med** | passive recall | 1-turn QA над ~16k history | fact loss из compaction |
+| **LoCoMo-med** | passive recall (dialog) | 1-turn QA над multi-session dialog | long-range reference / temporal anchor loss |
+| **τ-bench-retail-med** | agentic state | live tool loop + user-sim + env state | env-state knowledge loss + tool coherence через compaction |
+
+**Upstream Python harness precedent.** `references/mle-harness/code/run_main.py:99-153`
+(LME) и `run_locomo.py` гонят те же бенчи именно как compaction quality eval:
+
+```
+history (long, ~16k tokens) →
+  STRATEGIES[strategy](history, question, budget) →
+  driver_answer(compacted_segments, question) →
+  judge(response, ground_truth_answer)
+```
+
+`STRATEGIES` = full_context / naive_truncation / rolling_summary / type_aware /
+task_aware. Accuracy под compaction — это и есть метрика. Single-turn QA shape
+бенча тут абсолютно валиден потому что *long input* — сам по себе compaction
+stress-test (recall-axis). AHC adaptive classifier добавит per-trajectory routing
+поверх этой pipeline'ы.
+
+Per `system_design §1.3` предварительные гипотезы (см. также §6.2):
+- **Task-aware** дома на passive-recall axis (LME / LoCoMo).
+- **Type-aware** дома на agentic-state axis (τ-bench).
+- **AHC adaptive classifier** маршрутизирует per-trajectory — это и есть value
+  proposition vs single-policy baselines.
+
+Без LME / LoCoMo не имеем сигнала на recall-axis (passive history compaction);
+без τ-bench не имеем сигнала на live tool loop под compaction. Все 4 — не
+дублируются.
+
+**Adapter contract implication.** `BenchAdapter.prepare(task)` возвращает
+**FULL long history** в `Conversation.messages` — без compaction. Compaction
+живёт на baseline layer:
+
+- `full_context` baseline (existing) — passthrough; служит pessimistic upper-bound
+  baseline; на длинных историях рискует hit'нуть LLM context limit.
+- `ahc_core` baseline (existing в B5, AHC integration в E1+) — wraps actor через
+  `wrapLanguageModel({middleware: createAhcMiddleware(...)})` для adaptive
+  compaction перед каждым `generateText` call. Same shape для всех 4 бенчей —
+  adapter не знает что baseline сделает с input.
+
+Тауau-bench специфика: compaction живёт *внутри* agentic loop (между actor steps),
+не как pre-process одного call'a — AHC middleware применяется per-step через
+`wrapLanguageModel`, agentic loop AI SDK orchestrates the rest. См. D §8 для
+detail'ов tau-bench engine'a.
+
+---
+
 ## Open questions
 
 1. VisualWebArena как open-source source — fit'ит ли по domain (browser tasks vs general
