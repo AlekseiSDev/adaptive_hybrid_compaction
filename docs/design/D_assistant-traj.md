@@ -362,9 +362,13 @@ optimization of per-bench prompt-cache patterns (deferred — E3 covers cache
 rate subset).
 
 **Minimum viable выход (per `system_design §9`):** AssistantTraj + 2 ported
-benches = 3-bench floor для beta. Полные 4 — stretch goal. Если tau-bench
+benches = 3-bench floor для beta. Полные 4 — stretch goal. ~~Если tau-bench
 порт оказывается дороже 1 дня (agentic complexity), его допустимо отложить и
-закрыть D5 на 3 бенчах.
+закрыть D5 на 3 бенчах.~~ **Status (2026-05-13): closed на full 4-bench
+corpus.** Tau-bench shipped через AI SDK v6 native engine (см.
+`docs/decisions.md` D5 entries) — не custom ReACT loop, что съело меньше
+wall-clock чем планировалось. AHC integration в tau-bench Runner также
+wired в D5 (не deferred к E1) per user pushback.
 
 **TDD entry (D5 start):** для каждого из 3 бенчей — failing test, который
 импортирует 1 upstream task → проектирует в `Task` shape → grader выдаёт

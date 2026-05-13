@@ -1,0 +1,22 @@
+name: smoke-4bench-text
+# D5 close-out smoke: text benches (AT / LME / LoCoMo) через full_context
+# baseline. Tau-bench runs separately via `smoke-4bench-tau.yaml` because
+# its Runner has different Conversation shape (live agent loop, не replay).
+#
+# Smoke fixtures committed в benchmarks/<bench>/tasks/ (lme_smoke_*,
+# lo_smoke_*, AT first-available). Real bake from upstream datasets:
+# see per-bench README.md.
+#
+# Expected runs: 3 benches × 1 config × ~3 fixtures each ≈ 9 RunRecords.
+# Cost: AT (с image_qa может быть multimodal judge call) ~$0.05; LME / LoCoMo
+# ~$0.02 incl. judge. Total <$0.50.
+
+benches:
+  - assistant-traj
+  - longmemeval-med
+  - locomo-med
+configs:
+  - id: full_context
+    baseline: full_context
+seeds: [42]
+budget_usd: 1.0

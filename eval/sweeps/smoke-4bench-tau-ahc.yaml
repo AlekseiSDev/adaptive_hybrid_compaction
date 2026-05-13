@@ -1,0 +1,15 @@
+name: smoke-4bench-tau-ahc
+# D5 close-out smoke: tau-bench-retail-med with AHC middleware (per plan
+# decision — tau-bench AHC integration ships в D5, не E1).
+# Actor wrapped через wrapLanguageModel({middleware: createAhcMiddleware(...)}).
+# Same episodes as smoke-4bench-tau.yaml — direct A/B comparison.
+
+benches:
+  - tau-bench-retail-med
+configs:
+  - id: tau_bench_agent_ahc
+    baseline: tau_bench_agent_ahc
+    ahc_flags: {}  # defaults — full AHC pipeline (classifier + offloader +
+                   # observer + reflection)
+seeds: [42]
+budget_usd: 2.0

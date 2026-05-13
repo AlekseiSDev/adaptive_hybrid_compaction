@@ -1,0 +1,18 @@
+name: smoke-4bench-tau
+# D5 close-out smoke: tau-bench-retail-med through tau_bench_agent runner.
+# Agentic loop с retail tools + GPT-4o-mini user-sim. Smoke fixtures
+# `tau_smoke_00{1,2}.json` — cancel pending order + return delivered.
+#
+# AHC integration verified via сibling `smoke-4bench-tau-ahc.yaml` (Step 6
+# follow-up). This yaml — vanilla pessimistic baseline.
+#
+# Cost: tau-bench episode wells ~$0.30-0.80 incl. user-sim + actor tool
+# iterations. 2 fixtures = ~$1-1.5 worst case.
+
+benches:
+  - tau-bench-retail-med
+configs:
+  - id: tau_bench_agent
+    baseline: tau_bench_agent
+seeds: [42]
+budget_usd: 2.0
