@@ -167,8 +167,25 @@ Halt poll'ится каждые 20 tasks. Если halt:
 - Bench-level seed handling — bench adapter знает что делать с seed (some benches
   fixed, others sample-based; `eval/adapters/<bench>.ts`).
 
+### Seed effect on baked subsets (E0 era)
+
+D5 bakes LongMemEval/LoCoMo/tau-bench subsets с фиксированным seed=42 (LME через
+`stratifiedSample`, LoCoMo/tau-bench mirror upstream `subset_ids.json`); AssistantTraj
+task list committed целиком. Это значит:
+
+- **Task selection identical** между seed=42 и seed=43 — seed не пересэмплирует
+  baked subset.
+- **Actor decode at `temperature=0`** — deterministic greedy → variance только от
+  provider-side non-determinism (rare).
+- **Statsig power minimal** — `mean ± stderr across [42, 43]` будет почти-zero stderr;
+  paired permutation на baked subset'ах работает по `task_id` pivot (не по seed).
+
+**F-report конвенция:** single-seed (42) mean — primary number; seed=43 — sanity
+replication check (не главный source of variance). Resolves
+`decisions.md [2026-05-13] E0 — Replication semantics on baked subsets`.
+
 Final results — mean ± stderr across seeds. Statsig — paired permutation p < 0.05
-на главных дельтах (см. `system_design §2.3`).
+на главных дельтах (см. `system_design §2.3`); pivot — `task_id`.
 
 ---
 
@@ -224,9 +241,14 @@ Idempotency: task identity = `(bench, task_id, config_id, seed)`. Если retry
 - [ ] sweep definition committed в `eval/sweeps/main_e1.yaml`
 - [ ] CostTracker `budget_usd: 120` зафиксирован
 - [ ] OpenRouter API key прав/баланс проверен через auth endpoint
-- [ ] Dry-run на 2 tasks из каждого бенча PASS (4 × 2 = 8 tasks, ~$2 spend)
+- [ ] Dry-run на 2 tasks из каждого бенча PASS:
+      `pnpm tsx scripts/eval.ts --plan eval/sweeps/main_e1.yaml --dry-run --n-per-cell=2`
+      (4 bench × 4 baseline × 2 tasks ≈ $2 spend; exit 0; no NDJSON written)
 - [ ] Git tag `pre-e1` для clean restart point
-- [ ] Cost circuit-breaker tested на dry-run (artificially low budget — должен halt'ить)
+- [ ] Cost circuit-breaker tested на dry-run:
+      `pnpm tsx scripts/eval.ts --plan eval/sweeps/smoke_ahc_core.yaml --dry-run --n-per-cell=1`
+      с `budget_usd: 0.001` overlay — должен halt'ить в первой task, `summary` returned
+      in-memory с `status: 'partial'` + `halt_reason`.
 
 Аналогичный checklist (упрощённый) для E2 и E3.
 
@@ -235,7 +257,9 @@ Idempotency: task identity = `(bench, task_id, config_id, seed)`. Если retry
 ## 9. Post-run audit (after E1/E2)
 
 Перед началом F (report):
-- [ ] `summary.json` для каждого `(bench, config, seed)` существует и `status: 'complete'`
+- [ ] `summary.json` для каждого `(bench, config, seed)` существует и
+      `status === 'complete'` (E0 ввёл `RunSummary.status: 'complete' | 'partial'`;
+      `'partial'` означает CostTracker halt mid-sweep — investigate `halt_reason`).
 - [ ] No `ErrorRecord` rate > 10% на любом (bench, config) — иначе investigate
 - [ ] Per-class breakdown скрипт (B3) PASS на AHC runs
 - [ ] Statistical pipeline (paired permutation, bootstrap) пробрасывает все main deltas

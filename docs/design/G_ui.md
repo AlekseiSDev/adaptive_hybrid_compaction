@@ -329,3 +329,74 @@ UI запускается локально с собственным OpenRouter 
 6. `tokens.offloaded` precision — payload-string-length delta или re-tokenize
    через provider tokenizer? Default — string-length / 4 (rough estimate) для G3,
    точный counter через `ProviderUsageMapper` (B2) если будет cheap.
+
+---
+
+## Migration target (post-E0): adopt shared `createAhcRuntime`
+
+Текущий `src/ui/app/api/chat/route.ts` (G2 deliverable) собирает AHC-over-AI-SDK
+wiring inline:
+
+```ts
+// route.ts:58-78 — нынешний паттерн
+const openrouter = createOpenAI({ apiKey, baseURL: OPENROUTER_BASE_URL });
+const baseModel = openrouter.chat(MODEL_ID);
+const middleware = createAhcMiddleware({ flags, sessionId, scratchpadRegistry, emit, onCompactResult });
+const model = wrapLanguageModel({ model: baseModel, middleware });
+// ...streamText({ model, ... })
+```
+
+Параллельная eval-side wiring в `src/eval/runners/ahc_core.ts` точно такого же шейпа
+дублировала эту обвязку. **Track E (E0 step) extract'нул shared factory
+`createAhcRuntime` в `src/adapters/ahc-runtime.ts`** и мигрировал eval-side. UI-side
+миграция — отдельный handoff, описан здесь. Сам `createAhcRuntime` + unit-тесты на
+оба провайдера (openrouter / anthropic_direct) уже на месте; миграция route.ts —
+**pure refactor без поведенческих изменений**.
+
+### Target shape (after migration)
+
+```ts
+import { createAhcRuntime } from '../../../adapters/ahc-runtime';
+
+// inside POST(req)
+const { model } = createAhcRuntime({
+  provider: 'openrouter',
+  apiKey,
+  model: MODEL_ID,
+  flags,
+  sessionId: () => sessionId,
+  scratchpadRegistry: SESSION_REGISTRY,
+  emit: (event) => events.push(event),
+  onCompactResult: (_sid, result) => {
+    lastObservationsCount = result.newTier2.observations.length;
+    lastScratchpadSize = SESSION_REGISTRY.get(sessionId).size();
+  },
+});
+// ...streamText({ model, system: SYSTEM_PROMPT, messages, ... }) — без изменений
+```
+
+### Checklist для агента, который будет делать миграцию
+
+- [ ] Прочитать `src/adapters/ahc-runtime.ts` + `ahc-runtime.test.ts` — API уже стабилен.
+- [ ] Заменить inline wiring в `src/ui/app/api/chat/route.ts:58-78` на `createAhcRuntime({...})`.
+- [ ] Убедиться, что `SESSION_REGISTRY` совместим с `scratchpadRegistry` параметром
+      (это `SessionScratchpadRegistry` из `src/adapters/sessionScratchpad.ts` — должно быть
+      structural match).
+- [ ] `MODEL_ID` (`google/gemini-3-flash-preview`) + `OPENROUTER_BASE_URL` остаются на UI-side
+      как константы; `createAhcRuntime` берёт их через `model` + дефолтный baseURL для
+      `provider:'openrouter'`.
+- [ ] `pnpm vitest run src/adapters/ahc-runtime.test.ts` зелёный.
+- [ ] Manual smoke: `pnpm run dev:ui`, открыть localhost, 2-turn chat с `fetch_url`,
+      убедиться что `ahc_stats` envelope приходит как раньше (compaction_events,
+      class_signal, observations count).
+- [ ] `./scripts/verify.sh` зелёный.
+
+### Что НЕ менять в этой миграции
+
+- `createAhcMiddleware` (живёт в `src/adapters/ai-sdk-v6.ts`) — не дублируется и не
+  расширяется; `createAhcRuntime` его использует внутри.
+- `streamText({...})` call (line 88-105 route.ts) — поведенчески не меняется; только
+  `model:` параметр приходит из `createAhcRuntime` вместо inline `wrapLanguageModel`.
+- `createUIMessageStream` + `buildAhcStats` + telemetry sidebar plumbing — не трогается.
+
+Tracker: см. `docs/decisions.md [2026-05-13] E0 — Single shared AHC-over-AI-SDK runtime`.
