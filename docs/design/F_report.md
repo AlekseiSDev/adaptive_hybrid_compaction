@@ -172,7 +172,7 @@ A. Reproducibility
   - Ablations: `eval/sweeps/ablation_e2.yaml`, ~$30
   - Cache hit: `eval/sweeps/cache_hit_e3.yaml`, ~$20 на Anthropic direct
 - Models pinned:
-  - Actor: google/gemini-3.1-flash (snapshot YYYY-MM-DD)
+  - Actor: google/gemini-3-flash-preview (snapshot YYYY-MM-DD)
   - Judge: openai/gpt-5.4
   - Cache hit: anthropic/claude-sonnet-4-6
 - Seeds: 42, 43

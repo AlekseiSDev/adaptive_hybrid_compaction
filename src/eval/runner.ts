@@ -75,7 +75,7 @@ export const defaultAdapterRegistry: AdapterRegistry = {
   },
 }
 
-const FULL_CONTEXT_DEFAULT_MODEL = 'google/gemini-3.1-flash-lite'
+const FULL_CONTEXT_DEFAULT_MODEL = 'google/gemini-3-flash-preview'
 
 function makeFullContextRunner(): Runner {
   const apiKey = process.env['OPENROUTER_API_KEY']
@@ -108,13 +108,26 @@ function makeMastraOmRunner(): Runner {
 }
 
 function makeAnthropicCompactRunner(): Runner {
+  // Auth priority: OAuth (subscription billing) over API key (console credits).
+  // ANTHROPIC_AUTH_TOKEN is the SDK-native name; CLAUDE_CODE_OAUTH_TOKEN is
+  // the long-lived OAuth produced by `claude setup-token` — reused here so a
+  // single token works across this project and Claude Code CLI itself.
+  // See docs/investigations/anthropic-pro-max-oauth.md.
+  const oauthToken =
+    process.env['ANTHROPIC_AUTH_TOKEN'] ?? process.env['CLAUDE_CODE_OAUTH_TOKEN']
   const apiKey = process.env['ANTHROPIC_API_KEY']
-  if (!apiKey) {
+  if (
+    (oauthToken === undefined || oauthToken.length === 0) &&
+    (apiKey === undefined || apiKey.length === 0)
+  ) {
     throw new Error(
-      'ANTHROPIC_API_KEY env var is required for baseline=anthropic_compact (vendor exception — server-side compact_20260112 lives only on Anthropic; see decisions.md 2026-05-13)',
+      'baseline=anthropic_compact requires one of: ANTHROPIC_AUTH_TOKEN or CLAUDE_CODE_OAUTH_TOKEN (Pro/Max subscription billing), or ANTHROPIC_API_KEY (console credits). Vendor exception per decisions.md 2026-05-13.',
     )
   }
-  const baseline = anthropicCompactBaseline({ apiKey })
+  const baseline =
+    oauthToken !== undefined && oauthToken.length > 0
+      ? anthropicCompactBaseline({ authToken: oauthToken })
+      : anthropicCompactBaseline({ apiKey: apiKey ?? '' })
   return buildRunnerFromBaseline(baseline)
 }
 

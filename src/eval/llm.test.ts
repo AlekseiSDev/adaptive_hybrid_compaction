@@ -49,7 +49,7 @@ describe('createOpenRouterClient — request shape + headers', () => {
     fetchMock.mockResolvedValueOnce(okResponse(okBody('hi')))
     const client = createOpenRouterClient({ apiKey: 'sk-test' })
     await client({
-      model: 'google/gemini-3.1-flash-lite',
+      model: 'google/gemini-3-flash-preview',
       messages: [{ role: 'user', content: 'q' }],
     })
     expect(fetchMock).toHaveBeenCalledOnce()
@@ -70,7 +70,7 @@ describe('createOpenRouterClient — request shape + headers', () => {
       httpReferer: 'https://example.com',
       appName: 'AHC',
     })
-    await client({ model: 'google/gemini-3.1-flash-lite', messages: [] })
+    await client({ model: 'google/gemini-3-flash-preview', messages: [] })
     const [, init] = fetchMock.mock.calls[0] ?? []
     const headers = init?.headers as Record<string, string>
     expect(headers['HTTP-Referer']).toBe('https://example.com')
@@ -81,7 +81,7 @@ describe('createOpenRouterClient — request shape + headers', () => {
     fetchMock.mockResolvedValueOnce(okResponse(okBody('hi')))
     const client = createOpenRouterClient({ apiKey: 'sk-test' })
     await client({
-      model: 'google/gemini-3.1-flash-lite',
+      model: 'google/gemini-3-flash-preview',
       messages: [{ role: 'user', content: 'q' }],
       temperature: 0,
       max_tokens: 100,
@@ -90,7 +90,7 @@ describe('createOpenRouterClient — request shape + headers', () => {
     const rawBody = init?.body
     if (typeof rawBody !== 'string') throw new Error('expected string body in fetch call')
     const body = JSON.parse(rawBody) as Record<string, unknown>
-    expect(body['model']).toBe('google/gemini-3.1-flash-lite')
+    expect(body['model']).toBe('google/gemini-3-flash-preview')
     expect(body['temperature']).toBe(0)
     expect(body['max_tokens']).toBe(100)
   })
@@ -105,7 +105,7 @@ describe('createOpenRouterClient — response parsing', () => {
     )
     const client = createOpenRouterClient({ apiKey: 'sk-test' })
     const resp = await client({
-      model: 'google/gemini-3.1-flash-lite',
+      model: 'google/gemini-3-flash-preview',
       messages: [{ role: 'user', content: 'q' }],
     })
     expect(resp.text).toBe('hello world')
@@ -119,7 +119,7 @@ describe('createOpenRouterClient — response parsing', () => {
     fetchMock.mockResolvedValueOnce(errResponse(429, 'too many requests'))
     const client = createOpenRouterClient({ apiKey: 'sk-test' })
     const resp = await client({
-      model: 'google/gemini-3.1-flash-lite',
+      model: 'google/gemini-3-flash-preview',
       messages: [{ role: 'user', content: 'q' }],
     })
     expect(resp.error?.kind).toBe('rate_limit')
@@ -131,7 +131,7 @@ describe('createOpenRouterClient — response parsing', () => {
     fetchMock.mockResolvedValueOnce(errResponse(503, 'unavailable'))
     const client = createOpenRouterClient({ apiKey: 'sk-test' })
     const resp = await client({
-      model: 'google/gemini-3.1-flash-lite',
+      model: 'google/gemini-3-flash-preview',
       messages: [{ role: 'user', content: 'q' }],
     })
     expect(resp.error?.kind).toBe('server_error')
@@ -141,7 +141,7 @@ describe('createOpenRouterClient — response parsing', () => {
     fetchMock.mockResolvedValueOnce(errResponse(401, 'invalid api key'))
     const client = createOpenRouterClient({ apiKey: 'sk-bad' })
     const resp = await client({
-      model: 'google/gemini-3.1-flash-lite',
+      model: 'google/gemini-3-flash-preview',
       messages: [{ role: 'user', content: 'q' }],
     })
     expect(resp.error?.kind).toBe('auth')
@@ -151,7 +151,7 @@ describe('createOpenRouterClient — response parsing', () => {
     fetchMock.mockRejectedValueOnce(new Error('ECONNREFUSED'))
     const client = createOpenRouterClient({ apiKey: 'sk-test' })
     const resp = await client({
-      model: 'google/gemini-3.1-flash-lite',
+      model: 'google/gemini-3-flash-preview',
       messages: [{ role: 'user', content: 'q' }],
     })
     expect(resp.error?.kind).toBe('network')
@@ -164,7 +164,7 @@ describe('createOpenRouterClient — response parsing', () => {
     )
     const client = createOpenRouterClient({ apiKey: 'sk-test' })
     const resp = await client({
-      model: 'google/gemini-3.1-flash-lite',
+      model: 'google/gemini-3-flash-preview',
       messages: [{ role: 'user', content: 'q' }],
     })
     expect(resp.error?.kind).toBe('parse')
@@ -173,11 +173,11 @@ describe('createOpenRouterClient — response parsing', () => {
 
 describe('costFromUsage', () => {
   test('Gemini-3.1-Flash usage produces non-zero cost matching pricing snapshot', () => {
-    const pricing = OPENROUTER_PRICING['google/gemini-3.1-flash-lite']
+    const pricing = OPENROUTER_PRICING['google/gemini-3-flash-preview']
     expect(pricing).toBeDefined()
     if (!pricing) return
     const usage: OpenRouterUsage = { prompt_tokens: 1000, completion_tokens: 500 }
-    const cost = costFromUsage('google/gemini-3.1-flash-lite', usage)
+    const cost = costFromUsage('google/gemini-3-flash-preview', usage)
     const expected =
       (1000 * pricing.input_per_million_usd + 500 * pricing.output_per_million_usd) /
       1_000_000

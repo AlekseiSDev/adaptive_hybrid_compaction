@@ -25,8 +25,14 @@ import type {
 // Vendor exception per system_design.md §6.1: this is the only non-Gemini
 // baseline because the compact_20260112 feature exists only on Anthropic.
 
+// Exactly one of `apiKey` / `authToken` must be supplied (runtime-checked in
+// the factory). `apiKey` bills against console.anthropic.com credits;
+// `authToken` (long-lived OAuth via `claude setup-token`) bills against the
+// Pro/Max subscription — same SDK, same compact_20260112 semantics.
+// See docs/investigations/anthropic-pro-max-oauth.md.
 export type AnthropicCompactDeps = {
-  apiKey: string
+  apiKey?: string
+  authToken?: string
   model?: AnthropicModel
   /**
    * Trigger threshold (input tokens) for compaction. Default 4000 (low —
@@ -94,7 +100,26 @@ function extractAssistantText(content: BetaContentBlock[]): string {
 }
 
 export function anthropicCompactBaseline(deps: AnthropicCompactDeps): Baseline {
-  const client = new Anthropic({ apiKey: deps.apiKey })
+  // Runtime validation: exactly one credential must be supplied. Type system
+  // can't enforce mutual exclusion without making the deps inconvenient for
+  // env-derived call sites (see runner.ts § makeAnthropicCompactRunner).
+  const apiKey = deps.apiKey
+  const authToken = deps.authToken
+  const hasApiKey = apiKey !== undefined && apiKey.length > 0
+  const hasAuthToken = authToken !== undefined && authToken.length > 0
+  if (!hasApiKey && !hasAuthToken) {
+    throw new Error(
+      'anthropicCompactBaseline: must supply apiKey or authToken (see docs/investigations/anthropic-pro-max-oauth.md)',
+    )
+  }
+  if (hasApiKey && hasAuthToken) {
+    throw new Error(
+      'anthropicCompactBaseline: pass only one of apiKey or authToken — both would create ambiguous billing',
+    )
+  }
+  const client = hasAuthToken
+    ? new Anthropic({ authToken })
+    : new Anthropic({ apiKey })
   const model: AnthropicModel = deps.model ?? DEFAULT_MODEL
   const trigger = deps.triggerInputTokens ?? DEFAULT_TRIGGER_INPUT_TOKENS
   const maxTokens = deps.maxTokens ?? DEFAULT_MAX_TOKENS

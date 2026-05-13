@@ -227,7 +227,7 @@ AssistantTraj):
 ### 6.1 LLM provider и модели
 
 - **Provider**: OpenRouter для всех experiments (единый ключ, единый billing).
-- **Primary actor model**: `google/gemini-3.1-flash` — main experiments, cheap, fast.
+- **Primary actor model**: `google/gemini-3-flash-preview` — main experiments, cheap, fast.
 - **Secondary actor model**: `openai/gpt-5.4-mini` — если budget и время позволят
   (cross-vendor sanity на small subset).
 - **Judge model для LLM-judge eval**: `openai/gpt-5.4` (более capable, но используется

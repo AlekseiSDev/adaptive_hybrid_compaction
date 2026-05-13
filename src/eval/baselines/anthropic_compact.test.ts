@@ -107,6 +107,31 @@ describe('anthropicCompactBaseline.name + prepare', () => {
   })
 })
 
+describe('anthropicCompactBaseline auth modes', () => {
+  test('factory accepts authToken instead of apiKey (Pro/Max OAuth path)', () => {
+    mockCreate = vi.fn().mockResolvedValue(fakeMessage('x'))
+    const baseline = anthropicCompactBaseline({ authToken: 'sk-ant-oat-fake' })
+    expect(baseline.name).toBe('anthropic_compact')
+    const state = baseline.prepare(makeTask())
+    expect(state.scratch?.['model']).toBe('claude-sonnet-4-6')
+  })
+
+  test('factory throws when neither apiKey nor authToken supplied', () => {
+    mockCreate = vi.fn().mockResolvedValue(fakeMessage('x'))
+    expect(() => anthropicCompactBaseline({})).toThrow(/apiKey or authToken/)
+  })
+
+  test('factory throws when both apiKey AND authToken supplied (ambiguous billing)', () => {
+    mockCreate = vi.fn().mockResolvedValue(fakeMessage('x'))
+    expect(() =>
+      anthropicCompactBaseline({
+        apiKey: 'sk-fake',
+        authToken: 'sk-ant-oat-fake',
+      }),
+    ).toThrow(/only one of/i)
+  })
+})
+
 describe('anthropicCompactBaseline.step — no compaction triggered', () => {
   test('single step: assistant text in response.content + tokens in TurnRecord', async () => {
     mockCreate = vi.fn().mockResolvedValue(

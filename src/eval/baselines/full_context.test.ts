@@ -1,5 +1,6 @@
 import { describe, expect, test, vi } from 'vitest'
 import { fullContextBaseline } from './full_context.js'
+import { createOpenRouterClient } from '../llm.js'
 import type {
   LLMClient,
   Message,
@@ -25,19 +26,19 @@ describe('fullContextBaseline', () => {
   test('prepare → state with task_id, empty history, scratch.model', () => {
     const baseline = fullContextBaseline({
       llmClient: okLlm('hi'),
-      model: 'google/gemini-3.1-flash-lite',
+      model: 'google/gemini-3-flash-preview',
     })
     const state = baseline.prepare(makeTask())
     expect(state.task_id).toBe('t1')
     expect(state.history).toEqual([])
-    expect(state.scratch?.['model']).toBe('google/gemini-3.1-flash-lite')
+    expect(state.scratch?.['model']).toBe('google/gemini-3-flash-preview')
   })
 
   test('step adds user + assistant to history; TurnRecord populated with tokens', async () => {
     const llm = okLlm('answer', 100, 50)
     const baseline = fullContextBaseline({
       llmClient: llm,
-      model: 'google/gemini-3.1-flash-lite',
+      model: 'google/gemini-3-flash-preview',
     })
     const state0 = baseline.prepare(makeTask())
     const result = await baseline.step(state0, makeUser('q1'))
@@ -57,7 +58,7 @@ describe('fullContextBaseline', () => {
   test('multiple steps grow history (length == 2*N after N turns)', async () => {
     const baseline = fullContextBaseline({
       llmClient: okLlm('reply', 50, 25),
-      model: 'google/gemini-3.1-flash-lite',
+      model: 'google/gemini-3-flash-preview',
     })
     let state = baseline.prepare(makeTask())
     state = (await baseline.step(state, makeUser('q1'))).state
@@ -76,7 +77,7 @@ describe('fullContextBaseline', () => {
     })
     const baseline = fullContextBaseline({
       llmClient: errLlm,
-      model: 'google/gemini-3.1-flash-lite',
+      model: 'google/gemini-3-flash-preview',
     })
     const state = baseline.prepare(makeTask())
     await expect(baseline.step(state, makeUser('q'))).rejects.toThrow(/rate_limit/)
@@ -86,7 +87,7 @@ describe('fullContextBaseline', () => {
     const llm = okLlm('a', 10, 5)
     const baseline = fullContextBaseline({
       llmClient: llm,
-      model: 'google/gemini-3.1-flash-lite',
+      model: 'google/gemini-3-flash-preview',
     })
     let state = baseline.prepare(makeTask())
     state = (await baseline.step(state, makeUser('q1'))).state
@@ -105,4 +106,56 @@ describe('fullContextBaseline', () => {
     expect(secondCall?.messages[1]?.role).toBe('assistant')
     expect(secondCall?.messages[2]?.content).toBe('q2')
   })
+})
+
+// Real-LLM integration test (skip-marked: needs OPENROUTER_API_KEY in env).
+// Per memory feedback "real-LLM-early": pin-recall trajectory validates the
+// full_context property end-to-end — recall must succeed because history
+// is passed verbatim, no compaction. Input tokens grow turn-over-turn.
+const LIVE = Boolean(process.env['OPENROUTER_API_KEY'])
+const liveDescribe = LIVE ? describe : describe.skip
+
+liveDescribe('fullContextBaseline.step — real OpenRouter integration', () => {
+  test(
+    'three-turn pin-recall trajectory: seed fact → distractor → recall',
+    async () => {
+      const llmClient = createOpenRouterClient({
+        apiKey: process.env['OPENROUTER_API_KEY'] ?? '',
+        appName: 'AHC-test',
+      })
+      const baseline = fullContextBaseline({
+        llmClient,
+        model: 'google/gemini-3-flash-preview',
+      })
+      let state = baseline.prepare({
+        id: 'live-fc-pin',
+        input: 'x',
+        expected: 'y',
+      })
+
+      const r1 = await baseline.step(
+        state,
+        makeUser('Remember: my pin code is 4271. Just acknowledge it.'),
+      )
+      state = r1.state
+      const r2 = await baseline.step(
+        state,
+        makeUser('Unrelated: what is 2 plus 2?'),
+      )
+      state = r2.state
+      const r3 = await baseline.step(
+        state,
+        makeUser('What pin code did I tell you earlier? Reply with just the digits.'),
+      )
+      state = r3.state
+
+      const text3 =
+        r3.response.content.find((p) => p.type === 'text')?.text ?? ''
+      expect(text3).toContain('4271')
+      expect(state.history).toHaveLength(6)
+      // Full-context invariant: input grows turn-over-turn (no compaction).
+      expect(r3.telemetry.input_tokens).toBeGreaterThan(r1.telemetry.input_tokens)
+    },
+    60_000,
+  )
 })

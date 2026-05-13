@@ -43,12 +43,13 @@ export type MastraOMDeps = {
 }
 
 const DEFAULT_PROVIDER_ID = 'openrouter'
-const DEFAULT_MODEL_ID = 'google/gemini-3.1-flash'
+const DEFAULT_MODEL_ID = 'google/gemini-3-flash-preview'
 const DEFAULT_URL = 'https://openrouter.ai/api/v1'
 const DEFAULT_STORAGE_ROOT = './.mastra'
 
 type MastraScratch = {
   thread_id: string
+  resource_id: string
   storage_path: string
   mastra_config: {
     model: string
@@ -119,8 +120,12 @@ export function mastraOmBaseline(deps: MastraOMDeps): Baseline {
       const safeTaskId = task.id.replace(/[^a-zA-Z0-9_-]/g, '_')
       const storagePath = resolve(storageRoot, `c1_${safeTaskId}.db`)
       const thread_id = `mastra_${safeTaskId}`
+      // Mastra Memory requires both threadId (conversation) and resourceId
+      // (user/session). Per-task isolation → resource derived from same id.
+      const resource_id = `ahc_resource_${safeTaskId}`
       const scratch: MastraScratch = {
         thread_id,
+        resource_id,
         storage_path: storagePath,
         mastra_config: {
           model: `${deps.providerId ?? DEFAULT_PROVIDER_ID}/${deps.modelId ?? DEFAULT_MODEL_ID}`,
@@ -160,7 +165,10 @@ export function mastraOmBaseline(deps: MastraOMDeps): Baseline {
       const result = await agent.generate(
         [{ role: 'user', content: userText }],
         {
-          memory: { thread: scratch.thread_id },
+          memory: {
+            thread: scratch.thread_id,
+            resource: scratch.resource_id,
+          },
           modelSettings: { temperature: 0 },
         },
       )

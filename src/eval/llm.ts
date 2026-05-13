@@ -15,9 +15,9 @@ export type ModelPricing = {
 }
 
 export const OPENROUTER_PRICING: Record<string, ModelPricing> = Object.freeze({
-  'google/gemini-3.1-flash-lite': {
-    input_per_million_usd: 0.25,
-    output_per_million_usd: 1.5,
+  'google/gemini-3-flash-preview': {
+    input_per_million_usd: 0.5,
+    output_per_million_usd: 3.0,
   },
 })
 

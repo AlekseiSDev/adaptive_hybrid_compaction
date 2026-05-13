@@ -293,9 +293,9 @@ Harness sees все три через `Baseline` interface. AHC оборачив
 живёт в `src/adapters/ai-sdk-v6.ts` и подключается через ту же contract pattern.
 
 `config_id` (см. `design/B_eval-harness.md §4`) для baselines:
-- `full_context__gemini-3.1-flash`
+- `full_context__gemini-3-flash-preview`
 - `anthropic_compact__sonnet-4-6`
-- `mastra_om__gemini-3.1-flash__pg__v6.x.y`
+- `mastra_om__gemini-3-flash-preview__libsql__1.32.1`
 
 ---
 

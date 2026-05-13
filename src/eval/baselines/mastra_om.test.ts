@@ -58,7 +58,7 @@ describe('mastraOmBaseline.name + prepare', () => {
     const scratch = state.scratch
     const config = scratch?.['mastra_config'] as Record<string, unknown> | undefined
     expect(config).toBeDefined()
-    expect(config?.['model']).toBe('openrouter/google/gemini-3.1-flash')
+    expect(config?.['model']).toBe('openrouter/google/gemini-3-flash-preview')
     expect(config?.['provider_id']).toBe('openrouter')
     expect(config?.['storage_kind']).toBe('libsql')
     expect(config?.['mastra_version']).toBe('1.32.1')
@@ -164,5 +164,46 @@ liveDescribe('mastraOmBaseline.step — real Mastra+OpenRouter integration', () 
       }
     },
     60_000,
+  )
+
+  test(
+    'three-turn pin-recall through Mastra OM (distractor in middle)',
+    async () => {
+      const baseline = mastraOmBaseline({
+        apiKey: process.env['OPENROUTER_API_KEY'] ?? '',
+        storageRootDir: workspace,
+      })
+      let state = baseline.prepare(makeTask('live-3'))
+      try {
+        const r1 = await baseline.step(
+          state,
+          makeUser('Remember: my pin code is 4271. Just acknowledge it.'),
+        )
+        state = r1.state
+        const r2 = await baseline.step(
+          state,
+          makeUser('Unrelated: what is 2 plus 2?'),
+        )
+        state = r2.state
+        const r3 = await baseline.step(
+          state,
+          makeUser(
+            'What pin code did I tell you earlier? Reply with just the digits.',
+          ),
+        )
+        state = r3.state
+
+        const text3 =
+          r3.response.content.find((p) => p.type === 'text')?.text ?? ''
+        expect(text3).toContain('4271')
+        expect(state.history).toHaveLength(6)
+        expect(state.scratch).toBeDefined()
+        if (!state.scratch) return
+        expect(state.scratch['thread_id']).toBe('mastra_live-3')
+      } finally {
+        await baseline.finalize?.(state)
+      }
+    },
+    90_000,
   )
 })
