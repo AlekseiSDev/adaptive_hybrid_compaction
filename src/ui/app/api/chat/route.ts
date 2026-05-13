@@ -1,14 +1,12 @@
-import { createOpenAI } from '@ai-sdk/openai';
 import {
   convertToModelMessages,
   createUIMessageStream,
   createUIMessageStreamResponse,
   stepCountIs,
   streamText,
-  wrapLanguageModel,
   type UIMessage,
 } from 'ai';
-import { createAhcMiddleware } from '../../../../adapters';
+import { createAhcRuntime } from '../../../../adapters';
 import type { CoreEvent } from '../../../../core';
 import { activeFlagNames, parseFlagsFromUrl } from '../../../lib/featureFlags';
 import { createSessionLimitedFetchUrl } from '../../../lib/fetchUrl';
@@ -21,7 +19,6 @@ export const runtime = 'nodejs';
 
 const DEFAULT_MAX_STEPS = 8;
 const MAX_STEPS_HARD_CAP = 16;
-const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
 const MODEL_ID = 'google/gemini-3-flash-preview';
 
 type AhcUIMessage = UIMessage<unknown, { ahc_stats: AhcStatsEnvelope }>;
@@ -55,17 +52,14 @@ export async function POST(req: Request) {
   const { messages } = (await req.json()) as { messages: UIMessage[] };
   const modelMessages = await convertToModelMessages(messages);
 
-  const openrouter = createOpenAI({ apiKey, baseURL: OPENROUTER_BASE_URL });
-  // .chat() routes through OpenAI Chat Completions API; openrouter(MODEL_ID) would
-  // call the newer Responses API, which OpenRouter doesn't accept (returns
-  // "Invalid Responses API request" mid-stream after tool calls).
-  const baseModel = openrouter.chat(MODEL_ID);
-
   const events: CoreEvent[] = [];
   let lastObservationsCount = 0;
   let lastScratchpadSize = 0;
 
-  const middleware = createAhcMiddleware({
+  const { model } = createAhcRuntime({
+    provider: 'openrouter',
+    apiKey,
+    model: MODEL_ID,
     flags,
     sessionId: () => sessionId,
     scratchpadRegistry: SESSION_REGISTRY,
@@ -75,7 +69,6 @@ export async function POST(req: Request) {
       lastScratchpadSize = SESSION_REGISTRY.get(sessionId).size();
     },
   });
-  const model = wrapLanguageModel({ model: baseModel, middleware });
 
   const fetchUrl = createSessionLimitedFetchUrl(sessionId, (id) =>
     FETCH_RATE_LIMITER.tryConsume(id),
