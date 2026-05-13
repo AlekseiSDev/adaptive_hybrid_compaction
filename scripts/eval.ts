@@ -3,6 +3,7 @@ import { execSync } from 'node:child_process'
 import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { parse as parseYaml } from 'yaml'
+import { pingLiteLLM, pingOpenRouter } from '../src/eval/auth.js'
 import { setupObservability } from '../src/eval/observability/langfuse.js'
 import {
   defaultAdapterRegistry,
@@ -20,6 +21,7 @@ type CliArgs = {
   nPerCell: number
   concurrency: number
   maxTasksPerCell: number | undefined
+  skipAuthCheck: boolean
 }
 
 const DRY_RUN_DEFAULT_N_PER_CELL = 2
@@ -32,6 +34,7 @@ export function parseArgs(argv: string[]): CliArgs {
   let nPerCell = DRY_RUN_DEFAULT_N_PER_CELL
   let concurrency = CONCURRENCY_DEFAULT
   let maxTasksPerCell: number | undefined
+  let skipAuthCheck = false
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i]
     if (a === '--sweep') {
@@ -68,15 +71,72 @@ export function parseArgs(argv: string[]): CliArgs {
         )
       }
       maxTasksPerCell = parsed
+    } else if (a === '--skip-auth-check') {
+      skipAuthCheck = true
     }
   }
   if (!sweep) {
     throw new Error(
       'usage: tsx scripts/eval.ts --sweep <path/to/sweep.yaml> ' +
-        '[--dry-run [--n-per-cell=N]] [--concurrency=N] [--max-tasks-per-cell=N]',
+        '[--dry-run [--n-per-cell=N]] [--concurrency=N] [--max-tasks-per-cell=N] ' +
+        '[--skip-auth-check]',
     )
   }
-  return { sweep, dryRun, nPerCell, concurrency, maxTasksPerCell }
+  return { sweep, dryRun, nPerCell, concurrency, maxTasksPerCell, skipAuthCheck }
+}
+
+// Inspects sweep configs to determine which auth paths the run will exercise,
+// then pings each one. Returns failure list (empty if all OK or skipped paths).
+// Exported for tests; runs in scripts/eval.ts main() before runSweep.
+export async function preflightAuthCheck(
+  plan: SweepPlan,
+): Promise<{ failures: string[]; report: string[] }> {
+  const failures: string[] = []
+  const report: string[] = []
+
+  const wantsOpenRouter = plan.configs.some(
+    (c) =>
+      c.baseline === 'full_context' ||
+      c.baseline === 'mastra_om' ||
+      c.baseline === 'tau_bench_agent' ||
+      c.baseline === 'tau_bench_agent_ahc' ||
+      (c.provider ?? 'openrouter') === 'openrouter',
+  )
+  const wantsLitellm = plan.configs.some(
+    (c) =>
+      c.baseline === 'anthropic_compact' ||
+      (c.provider === 'anthropic_direct' &&
+        !!process.env['LITELLM_MASTER_KEY'] &&
+        !!process.env['LITELLM_BASE_URL']),
+  )
+
+  if (wantsOpenRouter) {
+    const apiKey = process.env['OPENROUTER_API_KEY']
+    if (!apiKey || apiKey.length === 0) {
+      failures.push('OPENROUTER_API_KEY is required but not set')
+    } else {
+      const res = await pingOpenRouter(apiKey)
+      if (res.ok) report.push(`✓ ${res.detail ?? 'OpenRouter ok'}`)
+      else failures.push(res.error ?? 'OpenRouter ping failed')
+    }
+  }
+
+  if (wantsLitellm) {
+    const masterKey = process.env['LITELLM_MASTER_KEY']
+    const baseUrl = process.env['LITELLM_BASE_URL']
+    if (!masterKey || !baseUrl) {
+      // LiteLLM is an optional auth path for anthropic_compact (it has OAuth /
+      // ANTHROPIC_API_KEY fallbacks); skip the ping if the proxy isn't
+      // configured. Runner factory will fall back at instantiation time.
+      report.push('· LiteLLM forwarder not configured (LITELLM_* unset) — skipping ping')
+    } else {
+      const res = await pingLiteLLM(baseUrl, masterKey)
+      if (res.ok) report.push(`✓ ${res.detail ?? 'LiteLLM ok'}`)
+      else failures.push(res.error ?? 'LiteLLM ping failed')
+    }
+  }
+
+  return { failures, report }
 }
 
 export const VALID_PROVIDERS = new Set(['openrouter', 'anthropic_direct'])
@@ -149,6 +209,19 @@ async function main(): Promise<void> {
       `[eval] DRY-RUN mode: ${String(args.nPerCell)} tasks/cell, no persistence`,
     )
   }
+
+  if (!args.skipAuthCheck) {
+    const { failures, report } = await preflightAuthCheck(plan)
+    for (const line of report) console.log(`[preflight] ${line}`)
+    if (failures.length > 0) {
+      for (const f of failures) console.error(`[preflight] ✗ ${f}`)
+      console.error(
+        '[preflight] auth check failed; use --skip-auth-check to bypass',
+      )
+      process.exit(1)
+    }
+  }
+
   const obs = setupObservability()
   try {
     // startActiveSpan (vs startSpan) registers eval.sweep as the active span

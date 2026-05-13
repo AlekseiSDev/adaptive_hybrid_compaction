@@ -238,4 +238,14 @@ describe('parseArgs — --concurrency + --max-tasks-per-cell (E1)', () => {
     expect(args.concurrency).toBe(4)
     expect(args.maxTasksPerCell).toBeUndefined()
   })
+
+  test('--skip-auth-check flag parses', () => {
+    const args = parseArgs(['--sweep', 'p.yaml', '--skip-auth-check'])
+    expect(args.skipAuthCheck).toBe(true)
+  })
+
+  test('--skip-auth-check default is false', () => {
+    const args = parseArgs(['--sweep', 'p.yaml'])
+    expect(args.skipAuthCheck).toBe(false)
+  })
 })
