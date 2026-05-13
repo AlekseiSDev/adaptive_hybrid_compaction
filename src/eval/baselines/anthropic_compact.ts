@@ -33,11 +33,25 @@ import type {
 export type AnthropicCompactDeps = {
   apiKey?: string
   authToken?: string
-  model?: AnthropicModel
   /**
-   * Trigger threshold (input tokens) for compaction. Default 4000 (low —
-   * compaction will fire on shorter convos for testability). Real sweeps may
-   * use Anthropic's default 150000.
+   * Override the SDK base URL. Used to route through an Anthropic-protocol
+   * proxy (e.g. local LiteLLM on http://localhost:4400). When set, the proxy
+   * is responsible for upstream auth — the `apiKey`/`authToken` here is the
+   * proxy's own token. Defaults to Anthropic direct.
+   */
+  baseURL?: string
+  /**
+   * Model name. Type is widened from `AnthropicModel` to `string` so proxy-
+   * specific aliases (e.g. LiteLLM's `claude-sonnet-4.6` dot-form) can be
+   * passed without losing the canonical Anthropic IDs autocompletion.
+   */
+  model?: AnthropicModel | (string & Record<never, never>)
+  /**
+   * Trigger threshold (input tokens) for compaction. Default 100000 (matches
+   * Anthropic SDK's `DEFAULT_TOKEN_THRESHOLD`). API enforces a hard minimum
+   * of 50000; values below it are 400-rejected. Real long-trajectory sweeps
+   * may keep the default; compaction-fire tests pre-load ≥100k tokens of
+   * history before stepping.
    */
   triggerInputTokens?: number
   /** Optional summarization instructions to influence compaction quality. */
@@ -46,12 +60,12 @@ export type AnthropicCompactDeps = {
   maxTokens?: number
 }
 
-const DEFAULT_MODEL: AnthropicModel = 'claude-sonnet-4-6'
-const DEFAULT_TRIGGER_INPUT_TOKENS = 4_000
+const DEFAULT_MODEL: NonNullable<AnthropicCompactDeps['model']> = 'claude-sonnet-4-6'
+const DEFAULT_TRIGGER_INPUT_TOKENS = 100_000
 const DEFAULT_MAX_TOKENS = 1024
 
 type AnthropicScratch = {
-  model: AnthropicModel
+  model: NonNullable<AnthropicCompactDeps['model']>
   compaction_blocks: BetaCompactionBlock[]
 }
 
@@ -117,10 +131,11 @@ export function anthropicCompactBaseline(deps: AnthropicCompactDeps): Baseline {
       'anthropicCompactBaseline: pass only one of apiKey or authToken — both would create ambiguous billing',
     )
   }
+  const baseURLOpt = deps.baseURL !== undefined ? { baseURL: deps.baseURL } : {}
   const client = hasAuthToken
-    ? new Anthropic({ authToken })
-    : new Anthropic({ apiKey })
-  const model: AnthropicModel = deps.model ?? DEFAULT_MODEL
+    ? new Anthropic({ authToken, ...baseURLOpt })
+    : new Anthropic({ apiKey, ...baseURLOpt })
+  const model = deps.model ?? DEFAULT_MODEL
   const trigger = deps.triggerInputTokens ?? DEFAULT_TRIGGER_INPUT_TOKENS
   const maxTokens = deps.maxTokens ?? DEFAULT_MAX_TOKENS
 
@@ -170,10 +185,17 @@ export function anthropicCompactBaseline(deps: AnthropicCompactDeps): Baseline {
       const beforeBytes = approximateBytes(historyBeta)
 
       const start = Date.now()
+      // `betas: ['compact-2026-01-12']` is required — without it the API
+      // rejects the `context_management` field as "Extra inputs are not
+      // permitted" (the parameter exists only behind this beta gate). The
+      // beta name dashes, not the strategy's `compact_20260112` underscore
+      // form. Source: https://platform.claude.com/docs/en/build-with-claude/
+      // compaction.
       const response: BetaMessage = await client.beta.messages.create({
         model: scratch.model,
         max_tokens: maxTokens,
         messages: historyBeta,
+        betas: ['compact-2026-01-12'],
         context_management: {
           edits: [
             {

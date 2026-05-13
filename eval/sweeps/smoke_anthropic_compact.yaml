@@ -1,0 +1,7 @@
+name: smoke_anthropic_compact
+benches: [synthetic]
+configs:
+  - id: anthropic_compact
+    baseline: anthropic_compact
+seeds: [42]
+budget_usd: 0.5

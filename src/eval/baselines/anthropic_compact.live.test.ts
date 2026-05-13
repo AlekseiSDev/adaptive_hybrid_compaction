@@ -3,16 +3,24 @@ import { anthropicCompactBaseline } from './anthropic_compact.js'
 import type { Message, Task } from '../types.js'
 
 // Real-Anthropic integration tests (skip-marked unless ANY of:
-// ANTHROPIC_API_KEY | ANTHROPIC_AUTH_TOKEN | CLAUDE_CODE_OAUTH_TOKEN).
-// Phase-5 of live-tests plan — validates the dual-auth path against the
-// real API. The file is SEPARATE from anthropic_compact.test.ts because the
+// LITELLM_MASTER_KEY+LITELLM_BASE_URL (proxy) | CLAUDE_CODE_OAUTH_TOKEN
+// (Pro/Max subscription) | ANTHROPIC_API_KEY (console)).
+// Phase-5 of live-tests plan — validates the auth paths against the real
+// API. The file is SEPARATE from anthropic_compact.test.ts because the
 // latter has a module-level `vi.mock('@anthropic-ai/sdk')`, which would
 // otherwise stub out the network here too.
 
-const ANTHROPIC_TOKEN =
-  process.env['ANTHROPIC_AUTH_TOKEN'] ?? process.env['CLAUDE_CODE_OAUTH_TOKEN']
+const LITELLM_KEY = process.env['LITELLM_MASTER_KEY']
+const LITELLM_URL = process.env['LITELLM_BASE_URL']
+const ANTHROPIC_TOKEN = process.env['CLAUDE_CODE_OAUTH_TOKEN']
 const ANTHROPIC_API_KEY = process.env['ANTHROPIC_API_KEY']
+const HAS_LITELLM =
+  LITELLM_KEY !== undefined &&
+  LITELLM_KEY.length > 0 &&
+  LITELLM_URL !== undefined &&
+  LITELLM_URL.length > 0
 const ANTHROPIC_LIVE =
+  HAS_LITELLM ||
   (ANTHROPIC_TOKEN !== undefined && ANTHROPIC_TOKEN.length > 0) ||
   (ANTHROPIC_API_KEY !== undefined && ANTHROPIC_API_KEY.length > 0)
 const liveDescribe = ANTHROPIC_LIVE ? describe : describe.skip
@@ -24,6 +32,13 @@ const makeUser = (text: string): Message => ({
 })
 
 function makeBaseline() {
+  if (HAS_LITELLM) {
+    return anthropicCompactBaseline({
+      apiKey: LITELLM_KEY,
+      baseURL: LITELLM_URL,
+      model: 'claude-sonnet-4.6',
+    })
+  }
   if (ANTHROPIC_TOKEN !== undefined && ANTHROPIC_TOKEN.length > 0) {
     return anthropicCompactBaseline({ authToken: ANTHROPIC_TOKEN })
   }

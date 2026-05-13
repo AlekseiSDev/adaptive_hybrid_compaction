@@ -107,25 +107,43 @@ function makeMastraOmRunner(): Runner {
   return buildRunnerFromBaseline(baseline)
 }
 
+// LiteLLM proxy uses Anthropic's `model_name` field with dot-form aliases
+// (e.g. `claude-sonnet-4.6` → upstream `anthropic/claude-sonnet-4-6`). Sending
+// the raw dash-form to the proxy yields 400 "Invalid model name". Pinned to
+// 4.6 for parity with the direct-Anthropic default; bump together when both
+// are upgraded.
+const LITELLM_MODEL = 'claude-sonnet-4.6'
+
 function makeAnthropicCompactRunner(): Runner {
-  // Auth priority: OAuth (subscription billing) over API key (console credits).
-  // ANTHROPIC_AUTH_TOKEN is the SDK-native name; CLAUDE_CODE_OAUTH_TOKEN is
-  // the long-lived OAuth produced by `claude setup-token` — reused here so a
-  // single token works across this project and Claude Code CLI itself.
+  // Auth priority: LiteLLM proxy → OAuth (subscription) → API key (console).
+  // LiteLLM path runs through a local proxy (e.g. jay-canvas/llm-proxy on
+  // :4400) that upstream-billet a corporate Anthropic key; preferred when
+  // available because Pro/Max OAuth is severely rate-limited on programmatic
+  // use. CLAUDE_CODE_OAUTH_TOKEN comes from `claude setup-token`.
   // See docs/investigations/anthropic-pro-max-oauth.md.
-  const oauthToken =
-    process.env['ANTHROPIC_AUTH_TOKEN'] ?? process.env['CLAUDE_CODE_OAUTH_TOKEN']
+  const litellmKey = process.env['LITELLM_MASTER_KEY']
+  const litellmUrl = process.env['LITELLM_BASE_URL']
+  const oauthToken = process.env['CLAUDE_CODE_OAUTH_TOKEN']
   const apiKey = process.env['ANTHROPIC_API_KEY']
-  if (
-    (oauthToken === undefined || oauthToken.length === 0) &&
-    (apiKey === undefined || apiKey.length === 0)
-  ) {
+  const hasLitellm =
+    litellmKey !== undefined &&
+    litellmKey.length > 0 &&
+    litellmUrl !== undefined &&
+    litellmUrl.length > 0
+  const hasOauth = oauthToken !== undefined && oauthToken.length > 0
+  const hasApiKey = apiKey !== undefined && apiKey.length > 0
+  if (!hasLitellm && !hasOauth && !hasApiKey) {
     throw new Error(
-      'baseline=anthropic_compact requires one of: ANTHROPIC_AUTH_TOKEN or CLAUDE_CODE_OAUTH_TOKEN (Pro/Max subscription billing), or ANTHROPIC_API_KEY (console credits). Vendor exception per decisions.md 2026-05-13.',
+      'baseline=anthropic_compact requires one of: LITELLM_MASTER_KEY + LITELLM_BASE_URL (Anthropic-protocol proxy), CLAUDE_CODE_OAUTH_TOKEN (Pro/Max subscription billing, via `claude setup-token`), or ANTHROPIC_API_KEY (console credits). Vendor exception per decisions.md 2026-05-13.',
     )
   }
-  const baseline =
-    oauthToken !== undefined && oauthToken.length > 0
+  const baseline = hasLitellm
+    ? anthropicCompactBaseline({
+        apiKey: litellmKey,
+        baseURL: litellmUrl,
+        model: LITELLM_MODEL,
+      })
+    : hasOauth
       ? anthropicCompactBaseline({ authToken: oauthToken })
       : anthropicCompactBaseline({ apiKey: apiKey ?? '' })
   return buildRunnerFromBaseline(baseline)
