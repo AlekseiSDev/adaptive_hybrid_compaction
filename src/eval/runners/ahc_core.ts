@@ -14,6 +14,7 @@ import type {
 } from '../../core/index.js'
 import {
   ANTHROPIC_DIRECT_PRICING,
+  GOOGLE_DIRECT_PRICING,
   createAnthropicClient,
   createOpenRouterClient,
   OPENROUTER_PRICING,
@@ -47,6 +48,7 @@ import type {
 // stable prefix; AHC's stable Tier-1 prefix benefits.
 const DEFAULT_OPENROUTER_MODEL = 'openai/gpt-5.4-mini'
 const DEFAULT_ANTHROPIC_MODEL = 'claude-sonnet-4-6'
+const DEFAULT_GOOGLE_DIRECT_MODEL = 'gemini-3-flash-preview'
 
 // AHC_ACTOR_MODEL env override → shared helper `resolveActorModel` in
 // src/eval/llm.ts (Track H H1: 4 default-constant sites consolidated).
@@ -104,11 +106,15 @@ type AhcScratch = {
 
 function resolveDefaultModel(provider: AhcProvider): string {
   if (provider === 'anthropic_direct') return DEFAULT_ANTHROPIC_MODEL
+  if (provider === 'google_direct') return resolveActorModel(DEFAULT_GOOGLE_DIRECT_MODEL)
   return resolveActorModel(DEFAULT_OPENROUTER_MODEL)
 }
 
 function resolvePricing(provider: AhcProvider, model: string): ModelPricing {
-  const table = provider === 'anthropic_direct' ? ANTHROPIC_DIRECT_PRICING : OPENROUTER_PRICING
+  let table: Record<string, ModelPricing>
+  if (provider === 'anthropic_direct') table = ANTHROPIC_DIRECT_PRICING
+  else if (provider === 'google_direct') table = GOOGLE_DIRECT_PRICING
+  else table = OPENROUTER_PRICING
   return table[model] ?? ZERO_PRICING
 }
 
@@ -122,6 +128,22 @@ function defaultLlmClient(
       apiKey,
       ...(baseURL !== undefined ? { baseURL } : {}),
     })
+  }
+  if (provider === 'google_direct') {
+    // AHC internal calls (digest, observer, reflection) need an LLM caller.
+    // Native @ai-sdk/google routes through `chat()`, but our LLMCaller surface
+    // is provider-neutral chat-completions style — Google direct doesn't fit
+    // without a Google→LLMClient adapter (out of scope for H3.1 v1).
+    // Fallback: route internal calls through OpenRouter (small prompts, $0.01
+    // cost negligible). Documented asymmetry — main actor + cache_read on
+    // Gemini direct, AHC internals on OpenRouter. P4 acceptance unaffected.
+    const openrouterKey = process.env['OPENROUTER_API_KEY']
+    if (!openrouterKey || openrouterKey.length === 0) {
+      throw new Error(
+        'provider=google_direct requires OPENROUTER_API_KEY for AHC internal calls (digest/observer). Set it in .env.',
+      )
+    }
+    return createOpenRouterClient({ apiKey: openrouterKey, appName: 'AHC' })
   }
   return createOpenRouterClient({ apiKey, appName: 'AHC' })
 }

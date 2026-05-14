@@ -51,6 +51,28 @@ describe('createAhcRuntime — provider dispatch', () => {
     expect(runtime.model).toBeDefined()
   })
 
+  test('provider:google_direct returns wrapped LanguageModelV3', () => {
+    const runtime = createAhcRuntime({
+      ...baseOpts,
+      provider: 'google_direct',
+      model: 'gemini-3-flash-preview',
+    })
+    expect(runtime.model).toBeDefined()
+    expect(
+      (runtime.model as { specificationVersion?: string }).specificationVersion,
+    ).toBe('v3')
+  })
+
+  test('provider:google_direct accepts optional baseURL (for Vertex AI / proxy)', () => {
+    const runtime = createAhcRuntime({
+      ...baseOpts,
+      provider: 'google_direct',
+      model: 'gemini-3-flash-preview',
+      baseURL: 'https://my-proxy.example.com',
+    })
+    expect(runtime.model).toBeDefined()
+  })
+
   test('unsupported provider throws (exhaustive guard)', () => {
     expect(() =>
       createAhcRuntime({

@@ -68,6 +68,25 @@ export const OPENROUTER_PRICING: Record<string, ModelPricing> = Object.freeze({
 // Anthropic-direct; main sweeps stay on OpenRouter. Cache discount /
 // premium applied by `anthropicCostFromUsageWithCache` when cache token
 // fields are populated on the response.
+// Google AI Studio direct-API pricing snapshot. Track H P4 (2026-05-14) —
+// E3-style cache verification on Gemini requires direct route (OpenRouter
+// strips usageMetadata.cachedContentTokenCount per investigation
+// 2026-05-13 round 2). Rates verified live at ai.google.dev/pricing
+// 2026-05-14 — refresh per sweep. Cached prompt billed at 25% of input.
+export const GOOGLE_DIRECT_PRICING: Record<string, ModelPricing> = Object.freeze({
+  'gemini-3-flash-preview': {
+    input_per_million_usd: 0.30,
+    output_per_million_usd: 2.50,
+    cache_read_factor: 0.25,
+  },
+  // 2.5-flash variant for fallback / cross-version sanity comparison.
+  'gemini-2.5-flash': {
+    input_per_million_usd: 0.30,
+    output_per_million_usd: 2.50,
+    cache_read_factor: 0.25,
+  },
+})
+
 export const ANTHROPIC_DIRECT_PRICING: Record<string, ModelPricing> = Object.freeze({
   'claude-sonnet-4-6': {
     input_per_million_usd: 3.0,

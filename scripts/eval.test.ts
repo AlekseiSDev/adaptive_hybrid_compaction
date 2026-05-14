@@ -76,10 +76,12 @@ describe('validateSweep — provider per-row enum (E0)', () => {
 })
 
 describe('VALID_PROVIDERS constant', () => {
-  test('contains both providers', () => {
+  test('contains all 3 supported providers', () => {
     expect(VALID_PROVIDERS.has('openrouter')).toBe(true)
     expect(VALID_PROVIDERS.has('anthropic_direct')).toBe(true)
-    expect(VALID_PROVIDERS.size).toBe(2)
+    // Track H P4 (2026-05-14) — google_direct for honest Gemini cache_read.
+    expect(VALID_PROVIDERS.has('google_direct')).toBe(true)
+    expect(VALID_PROVIDERS.size).toBe(3)
   })
 })
 

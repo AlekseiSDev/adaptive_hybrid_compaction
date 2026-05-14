@@ -8,6 +8,7 @@ import {
   costFromUsageWithCache,
   createAnthropicClient,
   createOpenRouterClient,
+  GOOGLE_DIRECT_PRICING,
   OPENROUTER_PRICING,
   resolveActorModel,
 } from './llm.js'
@@ -311,6 +312,20 @@ describe('anthropicCostFromUsageWithCache — Anthropic semantics', () => {
       cache_read_input_tokens: 20,
     }
     expect(anthropicCostFromUsageWithCache('claude-future-99', usage)).toBe(0)
+  })
+})
+
+describe('GOOGLE_DIRECT_PRICING — H3.1 (Track H P4) shape', () => {
+  test('gemini-3-flash-preview entry has cache_read_factor 0.25 (25% of input)', () => {
+    const entry = GOOGLE_DIRECT_PRICING['gemini-3-flash-preview']
+    expect(entry).toBeDefined()
+    expect(entry?.cache_read_factor).toBe(0.25)
+    expect(entry?.input_per_million_usd).toBeGreaterThan(0)
+    expect(entry?.output_per_million_usd).toBeGreaterThan(0)
+  })
+
+  test('gemini-2.5-flash entry exists for fallback / cross-version compare', () => {
+    expect(GOOGLE_DIRECT_PRICING['gemini-2.5-flash']).toBeDefined()
   })
 })
 

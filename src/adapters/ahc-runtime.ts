@@ -1,6 +1,7 @@
 import { wrapLanguageModel } from 'ai'
 import type { LanguageModelV3 } from '@ai-sdk/provider'
 import { createAnthropic } from '@ai-sdk/anthropic'
+import { createGoogleGenerativeAI } from '@ai-sdk/google'
 import { createOpenAI } from '@ai-sdk/openai'
 import { createAhcMiddleware, type AhcMiddlewareDeps } from './ai-sdk-v6.js'
 import { type SessionScratchpadRegistry, type SessionId } from './sessionScratchpad.js'
@@ -34,7 +35,7 @@ import type {
 // Pricing tables (OPENROUTER_PRICING, ANTHROPIC_DIRECT_PRICING) live in
 // src/eval/llm.ts — eval-side concern, not part of this layer.
 
-export type AhcProvider = 'openrouter' | 'anthropic_direct'
+export type AhcProvider = 'openrouter' | 'anthropic_direct' | 'google_direct'
 
 export type AhcRuntimeOptions = {
   provider: AhcProvider
@@ -99,7 +100,6 @@ function buildBaseModel(opts: AhcRuntimeOptions): LanguageModelV3 {
     // tool calls. See decisions.md 2026-05-13 OpenRouter + @ai-sdk/openai.
     return openai.chat(opts.model)
   }
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
   if (opts.provider === 'anthropic_direct') {
     // @ai-sdk/anthropic expects baseURL to include the API version segment
     // (default: 'https://api.anthropic.com/v1'); it appends '/messages' for
@@ -113,6 +113,21 @@ function buildBaseModel(opts: AhcRuntimeOptions): LanguageModelV3 {
       ...(baseURL !== undefined ? { baseURL } : {}),
     })
     return anthropic(opts.model)
+  }
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+  if (opts.provider === 'google_direct') {
+    // Track H P4 (2026-05-14): direct Google AI Studio path for honest
+    // Gemini cache_read measurement. OpenRouter passthrough strips
+    // `usageMetadata.cachedContentTokenCount` from Gemini responses (probe
+    // 2026-05-13, docs/investigations/openrouter-cache-passthrough.md round 2);
+    // direct API exposes it. Implicit cache fires automatically on ≥1024-token
+    // stable prefix — no providerOptions hint required; cacheControlEnabled
+    // stays false for google_direct (asymmetric vs anthropic_direct).
+    const google = createGoogleGenerativeAI({
+      apiKey: opts.apiKey,
+      ...(opts.baseURL !== undefined ? { baseURL: opts.baseURL } : {}),
+    })
+    return google.chat(opts.model)
   }
   throw new Error(`createAhcRuntime: unsupported provider: ${String(opts.provider)}`)
 }

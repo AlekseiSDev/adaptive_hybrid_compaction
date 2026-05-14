@@ -139,7 +139,7 @@ export async function preflightAuthCheck(
   return { failures, report }
 }
 
-export const VALID_PROVIDERS = new Set(['openrouter', 'anthropic_direct'])
+export const VALID_PROVIDERS = new Set(['openrouter', 'anthropic_direct', 'google_direct'])
 
 // E0: sweep output dir convention. benchmarks/runs/<plan.name>/<bench>/<cfg>/<seed>
 // — per-sweep subdir so E1/E2/E3 outputs don't collide on shared

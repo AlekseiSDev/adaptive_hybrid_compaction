@@ -230,6 +230,21 @@ function makeAhcCoreRunner(config: ConfigDef): Runner {
     }
     apiKey = key
     baseURL = 'https://openrouter.ai/api/v1'
+  } else if (provider === 'google_direct') {
+    // Track H P4 (2026-05-14): @ai-sdk/google reads GOOGLE_GENERATIVE_AI_API_KEY
+    // by default, but our project's .env uses GOOGLE_GENAI_API_KEY (alias).
+    // Accept both — alias-key-rename in env was rejected during D fast-track.
+    const directKey = process.env['GOOGLE_GENERATIVE_AI_API_KEY']
+      ?? process.env['GOOGLE_GENAI_API_KEY']
+    if (directKey === undefined || directKey.length === 0) {
+      throw new Error(
+        'ahc_core runner with provider=google_direct requires ' +
+          'GOOGLE_GENERATIVE_AI_API_KEY or GOOGLE_GENAI_API_KEY env var.',
+      )
+    }
+    apiKey = directKey
+    // No baseURL — defaults to https://generativelanguage.googleapis.com/v1beta.
+    resolvedModelDefault = 'gemini-3-flash-preview'
   } else {
     // provider === 'anthropic_direct': prefer LiteLLM forwarder → fall back to
     // direct ANTHROPIC_API_KEY. CLAUDE_CODE_OAUTH_TOKEN unsupported here
@@ -377,13 +392,22 @@ export const defaultRunnerRegistry: RunnerRegistry = {
 export async function computeTotalTasks(
   plan: SweepPlan,
   adapters: AdapterRegistry,
+  opts: { maxTasksPerCell?: number } = {},
 ): Promise<number> {
   let total = 0
   for (const bench of plan.benches) {
     const { adapter } = adapters.resolve(bench)
     for (const seed of plan.seeds) {
       const tasks = await adapter.loadTasks(seed)
-      total += tasks.length * plan.configs.length
+      // Track H P1 (2026-05-14): respect --max-tasks-per-cell CLI cap so
+      // CostTracker projection doesn't extrapolate from the FULL baked subset
+      // when the sweep is intentionally subsetted. Pre-fix: lme-multiturn
+      // 120 baked tasks × 3 configs = 360 in projection, but real run was
+      // 30 (cap=10) → projection 12× too high, halt triggered after 20 tasks.
+      const perCell = opts.maxTasksPerCell !== undefined
+        ? Math.min(tasks.length, opts.maxTasksPerCell)
+        : tasks.length
+      total += perCell * plan.configs.length
     }
   }
   return total
@@ -484,7 +508,9 @@ export async function runSweep(
 ): Promise<RunSweepResult> {
   const configResults: RunSweepConfigResult[] = []
   const costTracker = new CostTracker()
-  const totalTasks = await computeTotalTasks(plan, adapters)
+  const totalTasks = await computeTotalTasks(plan, adapters, {
+    ...(options.maxTasksPerCell !== undefined ? { maxTasksPerCell: options.maxTasksPerCell } : {}),
+  })
   const tracer = options.tracer ?? trace.getTracer('ahc-eval')
 
   let halted = false
