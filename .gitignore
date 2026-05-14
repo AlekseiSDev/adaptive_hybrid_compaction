@@ -14,10 +14,11 @@ out/
 *.tsbuildinfo
 .turbo/
 
-# eval raw output (summary.json + meta.json коммитятся для воспроизводимости)
-benchmarks/runs/**/*.ndjson
-# synthetic smoke output is B1 dev-noise, not a real bench
-benchmarks/runs/synthetic/
+# Eval sweep output — experiments aren't part of the repo (2026-05-14).
+# Code/wiring/adapters/sweep YAMLs + audit docs ARE; raw summary/meta/ndjson
+# from `benchmarks/runs/**` stays local. Reproduce by re-running the sweep.
+benchmarks/runs/**
+!benchmarks/runs/.gitkeep
 
 # local processes / state
 *.pid
