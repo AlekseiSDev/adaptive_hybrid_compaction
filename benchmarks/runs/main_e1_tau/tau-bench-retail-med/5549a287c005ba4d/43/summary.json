@@ -1,10 +1,10 @@
 {
   "bench": "tau-bench-retail-med",
-  "config_id": "7f88131ac5b49e57",
+  "config_id": "5549a287c005ba4d",
   "seed": 43,
-  "n_total": 10,
-  "n_completed": 10,
+  "n_total": 30,
+  "n_completed": 30,
   "mean_primary_score": 0.1,
-  "total_cost_usd": 0.1235125,
+  "total_cost_usd": 0.53218575,
   "status": "complete"
 }
