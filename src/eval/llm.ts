@@ -11,9 +11,20 @@ import type {
 // OpenRouter pricing snapshot — manual maintenance, fresh per commit.
 // Cost calc: (prompt_tokens × input + completion_tokens × output) / 1e6.
 // Verified против OpenRouter /models 2026-05-13 (B4). Refresh перед main sweep (E1).
+//
+// `cache_read_factor` / `cache_write_factor` — multipliers applied to
+// `input_per_million_usd` for tokens served from the provider's prompt cache
+// (`cache_read_factor`) or newly added to it (`cache_write_factor`). Both
+// default to 1.0 (no discount, no premium) when undefined, so callers can opt
+// into cache-aware costing per-model without touching others. Used by
+// `costFromUsageWithCache` / `anthropicCostFromUsageWithCache` to back-fill
+// actor cost for baselines that have token counts but no SDK-side $ field
+// (mastra_om, anthropic_compact).
 export type ModelPricing = {
   input_per_million_usd: number
   output_per_million_usd: number
+  cache_read_factor?: number
+  cache_write_factor?: number
 }
 
 export const OPENROUTER_PRICING: Record<string, ModelPricing> = Object.freeze({
@@ -33,29 +44,36 @@ export const OPENROUTER_PRICING: Record<string, ModelPricing> = Object.freeze({
   // fires automatically on OpenRouter on ≥1024-token stable prefix — no
   // cache_control plumbing required. Probe verified ~80% cached_tokens
   // ratio on 3rd identical-prefix call. Pricing live 2026-05-13 OpenRouter.
+  // Cached input billed at 50% of full rate (OpenAI standard).
   'openai/gpt-5.4-mini': {
     input_per_million_usd: 0.75,
     output_per_million_usd: 4.5,
+    cache_read_factor: 0.5,
   },
   // D4 judge model. Sonnet 4-7 not yet on OpenRouter (2026-05-13 verified via
   // /api/v1/models); fallback to 4.6 per plan. Note: OpenRouter uses dot
   // notation (4.6), Anthropic SDK uses dash (4-6). Pricing verified live.
+  // Anthropic prompt cache rates: read at 10% of input, write at 125%.
   'anthropic/claude-sonnet-4.6': {
     input_per_million_usd: 3.0,
     output_per_million_usd: 15.0,
+    cache_read_factor: 0.1,
+    cache_write_factor: 1.25,
   },
 })
 
 // Anthropic direct-API pricing snapshot — separate table from OpenRouter
-// proxy pricing because direct API has slightly different prompt-cache rates
-// and uses dash-form model ids (claude-sonnet-4-6, not 4.6). E3 cache-hit
-// subset routes through Anthropic-direct; main sweeps stay on OpenRouter.
-// Cache rates ignored in cost calc — F report uses cache_read_input_tokens
-// ratio as the metric, not a per-token cost line. Refresh перед E3 launch.
+// proxy pricing because direct API uses dash-form model ids
+// (claude-sonnet-4-6, not 4.6). E3 cache-hit subset routes through
+// Anthropic-direct; main sweeps stay on OpenRouter. Cache discount /
+// premium applied by `anthropicCostFromUsageWithCache` when cache token
+// fields are populated on the response.
 export const ANTHROPIC_DIRECT_PRICING: Record<string, ModelPricing> = Object.freeze({
   'claude-sonnet-4-6': {
     input_per_million_usd: 3.0,
     output_per_million_usd: 15.0,
+    cache_read_factor: 0.1,
+    cache_write_factor: 1.25,
   },
   // LiteLLM proxy uses dot-form model aliases (claude-sonnet-4.6 rewrites
   // upstream to anthropic/claude-sonnet-4-6). Same pricing — keep both keys
@@ -63,6 +81,8 @@ export const ANTHROPIC_DIRECT_PRICING: Record<string, ModelPricing> = Object.fre
   'claude-sonnet-4.6': {
     input_per_million_usd: 3.0,
     output_per_million_usd: 15.0,
+    cache_read_factor: 0.1,
+    cache_write_factor: 1.25,
   },
 })
 
@@ -71,6 +91,41 @@ export function costFromUsage(model: string, usage: OpenRouterUsage): number {
   if (!pricing) return 0
   return (
     (usage.prompt_tokens * pricing.input_per_million_usd +
+      usage.completion_tokens * pricing.output_per_million_usd) /
+    1_000_000
+  )
+}
+
+// OpenRouter / OpenAI semantics: `prompt_tokens` is TOTAL input (cached subset
+// included). `prompt_tokens_details.cached_tokens` reports the subset served
+// from prompt cache. Cached tokens are billed at
+// `pricing.cache_read_factor × input_per_million_usd` (defaults to 1.0 when
+// pricing entry omits the factor — i.e. cache-naive, identical to costFromUsage).
+// AHC_ACTOR_MODEL env override — shared helper for all default-model
+// constants (ahc_core, full_context, mastra_om, tau-bench actor). Track H H1
+// (2026-05-14): pre-H1, full_context + mastra_om hardcoded `gpt-5.4-mini`,
+// so `AHC_ACTOR_MODEL=google/gemini-3-flash-preview` produced an asymmetric
+// sweep (AHC + tau switched to Gemini, FC + mastra_om stayed on gpt) — false
+// cross-model comparison. Helper closes that gap so a single env-set affects
+// all four call sites consistently.
+//
+// Per-config `ahc_flags.model` in sweep YAML still takes precedence (consumer
+// applies it as `deps.model ?? resolveActorModel(default)`).
+export const ACTOR_MODEL_ENV_VAR = 'AHC_ACTOR_MODEL'
+export function resolveActorModel(defaultModelId: string): string {
+  const v = process.env[ACTOR_MODEL_ENV_VAR]
+  return v !== undefined && v.length > 0 ? v : defaultModelId
+}
+
+export function costFromUsageWithCache(model: string, usage: OpenRouterUsage): number {
+  const pricing = OPENROUTER_PRICING[model]
+  if (!pricing) return 0
+  const cached = usage.prompt_tokens_details?.cached_tokens ?? 0
+  const uncached = Math.max(0, usage.prompt_tokens - cached)
+  const readFactor = pricing.cache_read_factor ?? 1
+  return (
+    (uncached * pricing.input_per_million_usd +
+      cached * pricing.input_per_million_usd * readFactor +
       usage.completion_tokens * pricing.output_per_million_usd) /
     1_000_000
   )
@@ -324,6 +379,30 @@ export function anthropicCostFromUsage(model: string, usage: AnthropicUsage): nu
   if (!pricing) return 0
   return (
     (usage.input_tokens * pricing.input_per_million_usd +
+      usage.output_tokens * pricing.output_per_million_usd) /
+    1_000_000
+  )
+}
+
+// Anthropic semantics: `input_tokens` excludes cached and creation slices
+// (each reported in its own field). Effective input billed is
+//   input_tokens + cache_read * read_factor + cache_creation * write_factor
+// times `input_per_million_usd`. Factors default to 1.0 when pricing entry
+// omits them — degenerates to anthropicCostFromUsage for cache-naive models.
+export function anthropicCostFromUsageWithCache(
+  model: string,
+  usage: AnthropicUsage,
+): number {
+  const pricing = ANTHROPIC_DIRECT_PRICING[model]
+  if (!pricing) return 0
+  const readFactor = pricing.cache_read_factor ?? 1
+  const writeFactor = pricing.cache_write_factor ?? 1
+  const cacheRead = usage.cache_read_input_tokens ?? 0
+  const cacheCreate = usage.cache_creation_input_tokens ?? 0
+  const effectiveInput =
+    usage.input_tokens + cacheRead * readFactor + cacheCreate * writeFactor
+  return (
+    (effectiveInput * pricing.input_per_million_usd +
       usage.output_tokens * pricing.output_per_million_usd) /
     1_000_000
   )

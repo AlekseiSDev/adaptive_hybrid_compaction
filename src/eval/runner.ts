@@ -37,7 +37,7 @@ import { anthropicCompactBaseline } from './baselines/anthropic_compact.js'
 import { fullContextBaseline } from './baselines/full_context.js'
 import { mastraOmBaseline } from './baselines/mastra_om.js'
 import { CostTracker } from './cost.js'
-import { createOpenRouterClient } from './llm.js'
+import { createOpenRouterClient, resolveActorModel } from './llm.js'
 import { ahcCoreBaseline } from './runners/ahc_core.js'
 import { noopAhcBaseline, noopBaseline } from './runners/stub.js'
 import { aggregateTurnEvents } from './telemetry.js'
@@ -180,7 +180,8 @@ function makeFullContextRunner(): Runner {
   })
   const baseline = fullContextBaseline({
     llmClient,
-    model: FULL_CONTEXT_DEFAULT_MODEL,
+    // H1: respect AHC_ACTOR_MODEL env override for cross-model symmetry.
+    model: resolveActorModel(FULL_CONTEXT_DEFAULT_MODEL),
     systemPrompt: DEFAULT_AGENT_SYSTEM_PROMPT,
   })
   return buildRunnerFromBaseline(baseline)

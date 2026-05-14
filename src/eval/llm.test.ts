@@ -1,11 +1,15 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import {
+  ACTOR_MODEL_ENV_VAR,
   ANTHROPIC_DIRECT_PRICING,
   anthropicCostFromUsage,
+  anthropicCostFromUsageWithCache,
   costFromUsage,
+  costFromUsageWithCache,
   createAnthropicClient,
   createOpenRouterClient,
   OPENROUTER_PRICING,
+  resolveActorModel,
 } from './llm.js'
 import type { AnthropicUsage, OpenRouterUsage } from './types.js'
 
@@ -201,6 +205,8 @@ describe('ANTHROPIC_DIRECT_PRICING + anthropicCostFromUsage', () => {
     expect(pricing).toEqual({
       input_per_million_usd: 3.0,
       output_per_million_usd: 15.0,
+      cache_read_factor: 0.1,
+      cache_write_factor: 1.25,
     })
   })
 
@@ -229,6 +235,110 @@ describe('ANTHROPIC_DIRECT_PRICING + anthropicCostFromUsage', () => {
     const dotted = ANTHROPIC_DIRECT_PRICING['claude-sonnet-4.6']
     const dashed = ANTHROPIC_DIRECT_PRICING['claude-sonnet-4-6']
     expect(dotted).toEqual(dashed)
+  })
+})
+
+describe('costFromUsageWithCache — OpenRouter shape', () => {
+  test('gpt-5.4-mini: cached_tokens discounted by cache_read_factor (0.5)', () => {
+    // 10000 total input, 2000 cached → uncached 8000, output 500.
+    // 8000 * $0.75/M + 2000 * $0.75/M * 0.5 + 500 * $4.50/M
+    //   = 0.006 + 0.00075 + 0.00225 = 0.009
+    const usage: OpenRouterUsage = {
+      prompt_tokens: 10_000,
+      completion_tokens: 500,
+      prompt_tokens_details: { cached_tokens: 2_000 },
+    }
+    const cost = costFromUsageWithCache('openai/gpt-5.4-mini', usage)
+    expect(cost).toBeCloseTo((8000 * 0.75 + 2000 * 0.75 * 0.5 + 500 * 4.5) / 1e6, 9)
+  })
+
+  test('no cached_tokens → identical to costFromUsage', () => {
+    const usage: OpenRouterUsage = { prompt_tokens: 1000, completion_tokens: 500 }
+    expect(costFromUsageWithCache('openai/gpt-5.4-mini', usage)).toBeCloseTo(
+      costFromUsage('openai/gpt-5.4-mini', usage),
+      9,
+    )
+  })
+
+  test('model without cache_read_factor → discount no-op (factor defaults 1.0)', () => {
+    // gemini-3-flash-preview has no cache factor in pricing table.
+    const usage: OpenRouterUsage = {
+      prompt_tokens: 1000,
+      completion_tokens: 200,
+      prompt_tokens_details: { cached_tokens: 400 },
+    }
+    expect(costFromUsageWithCache('google/gemini-3-flash-preview', usage)).toBeCloseTo(
+      costFromUsage('google/gemini-3-flash-preview', usage),
+      9,
+    )
+  })
+
+  test('unknown model → 0 silent (mirrors costFromUsage contract)', () => {
+    const usage: OpenRouterUsage = { prompt_tokens: 100, completion_tokens: 50 }
+    expect(costFromUsageWithCache('unknown/model', usage)).toBe(0)
+  })
+})
+
+describe('anthropicCostFromUsageWithCache — Anthropic semantics', () => {
+  test('claude-sonnet-4-6: input_tokens is non-cached; cache_read at 10%, cache_creation at 125%', () => {
+    // Anthropic: input_tokens excludes cached. So billed-input is
+    //   input_tokens + cache_read * 0.1 + cache_creation * 1.25 (all × input price).
+    // 800 + 600 * 0.1 + 400 * 1.25 = 800 + 60 + 500 = 1360 effective input tokens.
+    // 1360 * $3/M + 200 * $15/M = 0.00408 + 0.003 = 0.00708
+    const usage: AnthropicUsage = {
+      input_tokens: 800,
+      output_tokens: 200,
+      cache_read_input_tokens: 600,
+      cache_creation_input_tokens: 400,
+    }
+    const cost = anthropicCostFromUsageWithCache('claude-sonnet-4-6', usage)
+    const expected = ((800 + 600 * 0.1 + 400 * 1.25) * 3 + 200 * 15) / 1e6
+    expect(cost).toBeCloseTo(expected, 9)
+  })
+
+  test('cache fields absent → matches anthropicCostFromUsage (cache-naive)', () => {
+    const usage: AnthropicUsage = { input_tokens: 1000, output_tokens: 500 }
+    expect(anthropicCostFromUsageWithCache('claude-sonnet-4-6', usage)).toBeCloseTo(
+      anthropicCostFromUsage('claude-sonnet-4-6', usage),
+      9,
+    )
+  })
+
+  test('unknown model → 0', () => {
+    const usage: AnthropicUsage = {
+      input_tokens: 100,
+      output_tokens: 50,
+      cache_read_input_tokens: 20,
+    }
+    expect(anthropicCostFromUsageWithCache('claude-future-99', usage)).toBe(0)
+  })
+})
+
+describe('resolveActorModel — H1 env-override hardening', () => {
+  beforeEach(() => {
+    vi.stubEnv(ACTOR_MODEL_ENV_VAR, '')
+  })
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
+  test('no env → returns default', () => {
+    expect(resolveActorModel('openai/gpt-5.4-mini')).toBe('openai/gpt-5.4-mini')
+  })
+
+  test('AHC_ACTOR_MODEL set → returns env value', () => {
+    vi.stubEnv(ACTOR_MODEL_ENV_VAR, 'google/gemini-3-flash-preview')
+    expect(resolveActorModel('openai/gpt-5.4-mini')).toBe('google/gemini-3-flash-preview')
+  })
+
+  test('AHC_ACTOR_MODEL empty string → returns default (treats as unset)', () => {
+    vi.stubEnv(ACTOR_MODEL_ENV_VAR, '')
+    expect(resolveActorModel('openai/gpt-5.4-mini')).toBe('openai/gpt-5.4-mini')
+  })
+
+  test('AHC_ACTOR_MODEL identical to default → returns same string', () => {
+    vi.stubEnv(ACTOR_MODEL_ENV_VAR, 'openai/gpt-5.4-mini')
+    expect(resolveActorModel('openai/gpt-5.4-mini')).toBe('openai/gpt-5.4-mini')
   })
 })
 

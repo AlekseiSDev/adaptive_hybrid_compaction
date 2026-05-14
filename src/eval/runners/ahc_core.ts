@@ -17,6 +17,7 @@ import {
   createAnthropicClient,
   createOpenRouterClient,
   OPENROUTER_PRICING,
+  resolveActorModel,
   type ModelPricing,
 } from '../llm.js'
 import { composeTurnRecord, mapAiSdkUsage } from '../telemetry.js'
@@ -47,14 +48,9 @@ import type {
 const DEFAULT_OPENROUTER_MODEL = 'openai/gpt-5.4-mini'
 const DEFAULT_ANTHROPIC_MODEL = 'claude-sonnet-4-6'
 
-// E1: AHC_ACTOR_MODEL env var, if set, overrides the default actor model.
-// Used to swap actor mid-pipeline (e.g. flash → flash-lite when OpenRouter
-// budget runs low). Honored by ahc_core (here) and tau_bench (agent-runner).
+// AHC_ACTOR_MODEL env override → shared helper `resolveActorModel` in
+// src/eval/llm.ts (Track H H1: 4 default-constant sites consolidated).
 // Per-config `ahc_flags.model` in sweep YAML takes precedence over env.
-function envActorModel(): string | undefined {
-  const v = process.env['AHC_ACTOR_MODEL']
-  return v && v.length > 0 ? v : undefined
-}
 // AI SDK v6 recommends passing the system prompt as the top-level `system:`
 // option rather than as a `{role:'system'}` entry in `messages:` (prompt-
 // injection-attack mitigation). A6 middleware's `transformParams` reads the
@@ -108,7 +104,7 @@ type AhcScratch = {
 
 function resolveDefaultModel(provider: AhcProvider): string {
   if (provider === 'anthropic_direct') return DEFAULT_ANTHROPIC_MODEL
-  return envActorModel() ?? DEFAULT_OPENROUTER_MODEL
+  return resolveActorModel(DEFAULT_OPENROUTER_MODEL)
 }
 
 function resolvePricing(provider: AhcProvider, model: string): ModelPricing {

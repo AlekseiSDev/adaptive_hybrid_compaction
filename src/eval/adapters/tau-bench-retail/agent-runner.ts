@@ -21,7 +21,7 @@ import {
 import { createAhcMiddleware } from '../../../adapters/ai-sdk-v6.js'
 import { SessionScratchpadRegistry } from '../../../adapters/sessionScratchpad.js'
 import type { FeatureFlags, HysteresisState } from '../../../core/index.js'
-import { costFromUsage, OPENROUTER_PRICING, type ModelPricing } from '../../llm.js'
+import { costFromUsage, OPENROUTER_PRICING, resolveActorModel, type ModelPricing } from '../../llm.js'
 import {
   mapCoreEventToInstrumentation,
   wrapLlmClientAsLLMCaller,
@@ -32,15 +32,14 @@ import { retailTools } from './tools.js'
 import type { Episode, EnvState } from './types.js'
 import { userSimStep } from './user-sim.js'
 
-// E1: AHC_ACTOR_MODEL env var overrides this default when set. Used for
-// cross-phase budget hedge (swap to flash-lite if OpenRouter credit runs low).
-// User-sim model NOT subject to override — customer behavior should stay
-// consistent across sweeps for comparable success rates.
+// AHC_ACTOR_MODEL env override → shared helper `resolveActorModel`
+// (Track H H1, src/eval/llm.ts). User-sim model NOT subject to override
+// — customer behavior should stay consistent across sweeps for comparable
+// success rates.
 // Per decisions.md 2026-05-13 pivot — supersedes gemini-3-flash-preview.
 const TAU_ACTOR_FLASH_DEFAULT = 'openai/gpt-5.4-mini'
 function resolveTauActorDefault(): string {
-  const env = process.env['AHC_ACTOR_MODEL']
-  return env && env.length > 0 ? env : TAU_ACTOR_FLASH_DEFAULT
+  return resolveActorModel(TAU_ACTOR_FLASH_DEFAULT)
 }
 export const TAU_ACTOR_DEFAULT_MODEL = TAU_ACTOR_FLASH_DEFAULT
 export const TAU_USER_SIM_DEFAULT_MODEL = 'openai/gpt-4o-mini'

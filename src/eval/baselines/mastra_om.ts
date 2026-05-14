@@ -4,11 +4,13 @@ import { Agent } from '@mastra/core/agent'
 import { LibSQLStore } from '@mastra/libsql'
 import { Memory } from '@mastra/memory'
 import { DEFAULT_AGENT_SYSTEM_PROMPT } from '../../core/prompts.js'
+import { costFromUsageWithCache, resolveActorModel } from '../llm.js'
 import { composeTurnRecord } from '../telemetry.js'
 import type {
   Baseline,
   BaselineState,
   Message,
+  OpenRouterUsage,
   Task,
   TurnRecord,
 } from '../types.js'
@@ -22,11 +24,12 @@ import type {
 // `./.mastra/c1_<task_id>.db`; thread_id within Mastra Memory keeps history
 // addressable across step() calls; `finalize` cleans up the file.
 //
-// Real LLM wire — OpenRouter Gemini-3.1-Flash via Mastra's OpenAI-compatible
-// model config. Provider-Cost not tracked here (Mastra owns the provider call);
-// `cost_usd: 0` returned per BaselineStepResult — main accuracy/tokens metrics
-// still flow through `telemetry.input_tokens/output_tokens` mapped from
-// Mastra's `usage` shape.
+// Real LLM wire — OpenRouter `gpt-5.4-mini` via Mastra's OpenAI-compatible
+// model config. Mastra owns the provider call and does not propagate a $
+// figure, but the AI SDK v6 `usage` shape it returns carries enough token
+// counts (input/output/cached) to back-fill cost against OPENROUTER_PRICING.
+// `cost_usd` is computed via `costFromUsageWithCache` in step(). Cache
+// discount is applied per-model via `cache_read_factor` in the pricing table.
 
 export type MastraOMDeps = {
   /** OpenRouter API key (or any OpenAI-compatible). */
@@ -82,7 +85,11 @@ function resolveMastraModel(deps: MastraOMDeps): {
 } {
   return {
     providerId: deps.providerId ?? DEFAULT_PROVIDER_ID,
-    modelId: deps.modelId ?? DEFAULT_MODEL_ID,
+    // H1: respect AHC_ACTOR_MODEL env override (shared with the other 3
+    // default-model sites). Pre-H1 sweep of cross-model main set was
+    // asymmetric — Mastra stayed on the hardcoded gpt-5.4-mini while ahc_core
+    // + tau switched to Gemini.
+    modelId: deps.modelId ?? resolveActorModel(DEFAULT_MODEL_ID),
     url: deps.url ?? DEFAULT_URL,
     apiKey: deps.apiKey,
   }
@@ -223,6 +230,21 @@ export function mastraOmBaseline(deps: MastraOMDeps): Baseline {
         {},
       )
 
+      // Back-fill actor cost from token counts: Mastra owns the provider call
+      // and does not report $ directly, but the AI SDK v6 usage shape gives us
+      // enough to price the call against OPENROUTER_PRICING. Reshape into the
+      // OpenRouterUsage form (`prompt_tokens` is total input including cached;
+      // `cached_tokens` is the subset to apply cache_read_factor on).
+      const resolvedModelId = deps.modelId ?? DEFAULT_MODEL_ID
+      const usageForCost: OpenRouterUsage = {
+        prompt_tokens: usage.inputTokens ?? 0,
+        completion_tokens: usage.outputTokens ?? 0,
+        ...(usage.cachedInputTokens !== undefined
+          ? { prompt_tokens_details: { cached_tokens: usage.cachedInputTokens } }
+          : {}),
+      }
+      const cost_usd = costFromUsageWithCache(resolvedModelId, usageForCost)
+
       return {
         response: responseMsg,
         state: {
@@ -230,7 +252,7 @@ export function mastraOmBaseline(deps: MastraOMDeps): Baseline {
           history: [...state.history, userMsg, responseMsg],
         },
         telemetry,
-        cost_usd: 0,
+        cost_usd,
       }
     },
 
