@@ -1,0 +1,22 @@
+name: _smoke_lme_mt_observer
+# Smoke for Track H P1 mechanism validation only. NOT a published sweep —
+# leading underscore + ad-hoc — gitignored from sanity-aggregate batches
+# anyway because it lives outside benchmarks/runs/ when run with
+# --max-tasks-per-cell=1.
+#
+# Runs only ahc_full × 1 lme-multiturn task → verifies observer fires
+# end-to-end with the new adapter + threshold override. ~$0.20 spend.
+
+benches:
+  - lme-multiturn
+configs:
+  - id: ahc_full
+    ahc_flags:
+      TASK_AWARE_EXTRACTION: true
+      TYPE_AWARE_OFFLOAD: true
+      TRAJECTORY_CLASSIFIER: true
+      RECALL_TOOL: true
+    thresholds:
+      OBSERVER_THRESHOLD: 4000
+seeds: [42]
+budget_usd: 5

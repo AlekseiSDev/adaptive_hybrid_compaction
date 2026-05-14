@@ -22,26 +22,33 @@ name: main_e1_text_lme_mt
 # server-side compact_20260112, ahc_full uses AHC tier rotation. Fair
 # comparison: same tasks, same prompt segments, same grader.
 #
-# Cost: 4 baselines × n=20 × ~47 step()s/task × ~3K toks ≈ 11M tokens =
-# ~$8.25 on gpt-5.4-mini (input $0.75/M, output $4.5/M, ~80% cached
-# from turn 2 onwards → effective ~$0.30/M input). anthropic_compact
-# path runs through Sonnet via LITELLM → ~$3 extra. Total est. ~$12,
-# budget cap $20 leaves headroom.
+# Cost (revised post-smoke 2026-05-14): ahc_full × 1 LME task = $0.62 real.
+# full_context on 47-session replay accumulates cumulative history quadratically
+# (sum_{i=1..47}(session_i tokens) ≈ 2.9M tokens/task on $0.75/M = $2.18/task).
+# Original plan estimate of $12 for 4 baselines × n=20 underestimated by ~5×.
+# Revised: drop anthropic_compact (Sonnet pricing exacerbates the cumulative-
+# history multiplier); ahc_full FIRST in configs list (cheap-first ordering
+# so it completes even if CostTracker halts mid-sweep); n=10 not 20.
+#
+# Updated cost estimate:
+#   ahc_full       × 10 tasks ≈ $6 (compaction bounds input growth)
+#   mastra_om      × 10 tasks ≈ $10 (OM bounds via Mastra ObservationalMemory)
+#   full_context   × 10 tasks ≈ $22 (no compaction — full cumulative history)
+#   total ≈ $38, budget_usd=40 → halt at $60.
+#
+# anthropic_compact deferred to P3 (cache_hit_e3 sweep — separately verifies
+# Anthropic-protocol cache rate on real LME).
 #
 # Run:
 #   set -a && . ./.env && set +a
 #   pnpm tsx scripts/eval.ts --sweep eval/sweeps/main_e1_text_lme_mt.yaml \
-#     --concurrency=10 --max-tasks-per-cell=20
+#     --concurrency=5 --max-tasks-per-cell=10
 
 benches:
   - lme-multiturn
 configs:
-  - id: full_context
-    baseline: full_context
-  - id: mastra_om
-    baseline: mastra_om
-  - id: anthropic_compact
-    baseline: anthropic_compact
+  # ahc_full FIRST — most cost-bounded baseline; on halt, ensure observer
+  # density data survives.
   - id: ahc_full
     ahc_flags:
       TASK_AWARE_EXTRACTION: true
@@ -50,5 +57,9 @@ configs:
       RECALL_TOOL: true
     thresholds:
       OBSERVER_THRESHOLD: 4000
+  - id: mastra_om
+    baseline: mastra_om
+  - id: full_context
+    baseline: full_context
 seeds: [42]
-budget_usd: 20
+budget_usd: 40
