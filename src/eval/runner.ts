@@ -24,6 +24,7 @@ import {
   longmemevalAdapter,
 } from './adapters/longmemeval-med.js'
 import { defaultLmeJudge } from './adapters/longmemeval-med.judge.js'
+import { longmemevalMultiturnAdapter } from './adapters/longmemeval-multiturn.js'
 import { syntheticAdapter, syntheticGrader } from './adapters/synthetic.js'
 import {
   makeTauBenchRunner,
@@ -132,6 +133,14 @@ export const defaultAdapterRegistry: AdapterRegistry = {
     if (bench === 'longmemeval-med') {
       return {
         adapter: longmemevalAdapter,
+        grader: createLongMemEvalGrader({ llmJudge: defaultLmeJudge() }),
+      }
+    }
+    if (bench === 'lme-multiturn') {
+      // Same baked LME tasks, same grader — different adapter.prepare shape
+      // (multi-turn replay activates AHC observer). Track H P1.
+      return {
+        adapter: longmemevalMultiturnAdapter,
         grader: createLongMemEvalGrader({ llmJudge: defaultLmeJudge() }),
       }
     }
@@ -266,6 +275,9 @@ function makeAhcCoreRunner(config: ConfigDef): Runner {
     // Other ahc_flags keys (TRAJECTORY_CLASSIFIER, REFLECTION, etc.) map to
     // FeatureFlags — pass through directly; createAhcMiddleware merges with defaults.
     ahcFlags: featureFlagsRaw,
+    // Threshold overrides (e.g. OBSERVER_THRESHOLD=4000 for lme-multiturn sweep).
+    // createAhcMiddleware merges with defaultThresholds. Track H P1 plumbing.
+    ...(config.thresholds !== undefined ? { thresholds: config.thresholds } : {}),
     systemPrompt: DEFAULT_AGENT_SYSTEM_PROMPT,
   })
   return buildRunnerFromBaseline(baseline)

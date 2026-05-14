@@ -10,6 +10,7 @@ import type {
   LLMRequest as CoreLLMRequest,
   LLMResponse as CoreLLMResponse,
   Message,
+  Thresholds,
 } from '../../core/index.js'
 import {
   ANTHROPIC_DIRECT_PRICING,
@@ -73,6 +74,14 @@ export type AhcCoreBaselineDeps = {
    */
   provider?: AhcProvider
   ahcFlags?: Partial<FeatureFlags>
+  /**
+   * Optional threshold overrides (Track H P1). Forwarded to
+   * `createAhcRuntime` which merges with `defaultThresholds` inside the
+   * middleware. Used by the lme-multiturn sweep to drop
+   * `OBSERVER_THRESHOLD` from 8000 → 4000 so observer fires reliably on
+   * Mode A session-per-turn replay (per docs/design/H_ablations_and_TODOs §12.2).
+   */
+  thresholds?: Partial<Thresholds>
   pricing?: ModelPricing
   /**
    * Optional override of the LLMCaller used by AHC core for internal
@@ -169,6 +178,7 @@ export function ahcCoreBaseline(deps: AhcCoreBaselineDeps): Baseline {
         model,
         ...(deps.baseURL !== undefined ? { baseURL: deps.baseURL } : {}),
         ...(deps.ahcFlags !== undefined ? { flags: deps.ahcFlags } : {}),
+        ...(deps.thresholds !== undefined ? { thresholds: deps.thresholds } : {}),
         sessionId: () => state.task_id,
         scratchpadRegistry: scratch.registry,
         hysteresisStateOverride: scratch.hysteresis,

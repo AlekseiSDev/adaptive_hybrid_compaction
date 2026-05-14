@@ -10,6 +10,7 @@ import type {
   FeatureFlags,
   HysteresisState,
   LLMCaller,
+  Thresholds,
 } from '../core/index.js'
 
 // createAhcRuntime — canonical assembly of AHC over AI SDK v6 provider.
@@ -47,6 +48,13 @@ export type AhcRuntimeOptions = {
    */
   baseURL?: string
   flags?: Partial<FeatureFlags>
+  /**
+   * Optional threshold overrides forwarded to `createAhcMiddleware`. Use to
+   * tune OBSERVER_THRESHOLD / T_SIZE / K_RECENT per-sweep (e.g. Track H P1
+   * lme-multiturn sweep lowers OBSERVER_THRESHOLD 8000 → 4000 to fire
+   * observer reliably on session-per-turn replay).
+   */
+  thresholds?: Partial<Thresholds>
   sessionId: () => SessionId
   scratchpadRegistry: SessionScratchpadRegistry
   hysteresisStateOverride?: Map<SessionId, HysteresisState>
@@ -123,6 +131,7 @@ export function createAhcRuntime(opts: AhcRuntimeOptions): AhcRuntime {
     scratchpadRegistry: opts.scratchpadRegistry,
     cacheControlEnabled,
     ...(opts.flags !== undefined ? { flags: opts.flags } : {}),
+    ...(opts.thresholds !== undefined ? { thresholds: opts.thresholds } : {}),
     ...(opts.hysteresisStateOverride !== undefined
       ? { hysteresisStateOverride: opts.hysteresisStateOverride }
       : {}),

@@ -1,16 +1,21 @@
 // Eval harness types. Source of truth: docs/design/B_eval-harness.md §3.
 // Field renames or removals require a docs/decisions.md entry.
 
-import type { Message, TrajectoryClass } from '../core/index.js'
+import type { Message, Thresholds, TrajectoryClass } from '../core/index.js'
 
 // Re-export core types so eval-side modules import a single surface
 // (`./types.js`). Avoids cross-module drift if core paths change.
-export type { Message, TrajectoryClass }
+export type { Message, Thresholds, TrajectoryClass }
 
 // §3 union extended with 'synthetic' for B1 smoke. Real benches land in
 // Track D (assistant-traj) and B-tail (longmemeval/locomo/tau-bench).
+// 'lme-multiturn' added in Track H Phase 1 (2026-05-14) — same baked
+// longmemeval-med tasks, but adapter replays each haystack session as a
+// separate user turn so AHC's Task-Aware Observer fires (Tier-3 fills
+// past OBSERVER_THRESHOLD across replay).
 export type Bench =
   | 'longmemeval-med'
+  | 'lme-multiturn'
   | 'locomo-med'
   | 'tau-bench-retail-med'
   | 'assistant-traj'
@@ -124,6 +129,14 @@ export type ConfigDef = {
    * baselines. Per decisions.md [2026-05-13] E0 — ConfigDef.provider field.
    */
   provider?: 'openrouter' | 'anthropic_direct'
+  /**
+   * Optional threshold overrides for `ahc_core` baseline. Track H P1 added
+   * for the lme-multiturn sweep where natural Tier-3 size (~7.8K tok with
+   * Mode A replay) is borderline at default OBSERVER_THRESHOLD=8000 — lowering
+   * to 4000 makes observer fire reliably (per H_ablations_and_TODOs §12.2).
+   * Ignored for non-AHC baselines.
+   */
+  thresholds?: Partial<Thresholds>
 }
 
 export type RunnerContext = {

@@ -1,0 +1,54 @@
+name: main_e1_text_lme_mt
+# Track H Phase 1 (2026-05-14) — LME multi-turn replay sweep.
+#
+# Why: Phase D sweep showed observer (compaction_events.type='observer')
+# fires in 0 of 240 records — flag-gated off by default AND single-turn
+# longmemeval-med leaves Tier-3 empty (tierize puts first user msg in
+# Tier-1). H6.6 path: same baked 120 tasks, but adapter replays each
+# of ~47 haystack sessions as a separate user turn. K_RECENT=6 means
+# last 6 sessions live in Tier-3 — ~7.8K tokens at session avg ~2.6K.
+# OBSERVER_THRESHOLD=4000 (lowered from default 8000) makes observer
+# fire reliably on Mode A replay per docs/design/H_ablations_and_TODOs §12.2.
+#
+# Acceptance gate (per plan): >=80% records carry >=1 observer event in
+# ahc_full × lme-multiturn cell. Verify via:
+#   pnpm tsx scripts/sanity-aggregate.ts benchmarks/runs/main_e1_text_lme_mt/
+# The `obs/off/rec` column on ahc_full cell row should show obs_n >= 16/20.
+#
+# Per-baseline replay: all 4 baselines drive the same per-session message
+# stream via `Baseline.step()` (the canonical multi-turn interface per
+# src/eval/types.ts:173-182). full_context accumulates the full history,
+# mastra_om triggers OM at its own threshold, anthropic_compact uses
+# server-side compact_20260112, ahc_full uses AHC tier rotation. Fair
+# comparison: same tasks, same prompt segments, same grader.
+#
+# Cost: 4 baselines × n=20 × ~47 step()s/task × ~3K toks ≈ 11M tokens =
+# ~$8.25 on gpt-5.4-mini (input $0.75/M, output $4.5/M, ~80% cached
+# from turn 2 onwards → effective ~$0.30/M input). anthropic_compact
+# path runs through Sonnet via LITELLM → ~$3 extra. Total est. ~$12,
+# budget cap $20 leaves headroom.
+#
+# Run:
+#   set -a && . ./.env && set +a
+#   pnpm tsx scripts/eval.ts --sweep eval/sweeps/main_e1_text_lme_mt.yaml \
+#     --concurrency=10 --max-tasks-per-cell=20
+
+benches:
+  - lme-multiturn
+configs:
+  - id: full_context
+    baseline: full_context
+  - id: mastra_om
+    baseline: mastra_om
+  - id: anthropic_compact
+    baseline: anthropic_compact
+  - id: ahc_full
+    ahc_flags:
+      TASK_AWARE_EXTRACTION: true
+      TYPE_AWARE_OFFLOAD: true
+      TRAJECTORY_CLASSIFIER: true
+      RECALL_TOOL: true
+    thresholds:
+      OBSERVER_THRESHOLD: 4000
+seeds: [42]
+budget_usd: 20
