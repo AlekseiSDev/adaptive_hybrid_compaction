@@ -1,0 +1,10 @@
+{
+  "bench": "lme-multiturn",
+  "config_id": "8860902b4499f79f",
+  "seed": 42,
+  "n_total": 10,
+  "n_completed": 10,
+  "mean_primary_score": 0.2,
+  "total_cost_usd": 4.7449114,
+  "status": "complete"
+}

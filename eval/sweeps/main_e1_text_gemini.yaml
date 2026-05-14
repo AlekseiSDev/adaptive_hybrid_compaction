@@ -1,0 +1,40 @@
+name: main_e1_text_gemini
+# Track H Phase 4 (H3-GD, 2026-05-14) — Gemini-3-flash direct route via
+# @ai-sdk/google adapter. Verifies AHC cache_read on Gemini (OpenRouter
+# strips usageMetadata.cachedContentTokenCount on Gemini models, see
+# docs/investigations/openrouter-cache-passthrough.md round 2).
+#
+# Scope (v1, intentionally minimal):
+#   - One AHC cell on lme-multiturn → confirms google_direct provider wiring
+#     end-to-end + cache_read_input_tokens > 0.
+#   - full_context / mastra_om would need separate runner-side `provider:
+#     google_direct` plumbing (each baseline hardcodes OpenRouter). Out of
+#     scope for v1 — F-report cross-model comparison can lean on cache-rate
+#     differential between providers on the same actor (AHC@gpt-mini vs
+#     AHC@Gemini), no cross-baseline-cross-provider matrix required.
+#
+# Env required:
+#   GOOGLE_GENERATIVE_AI_API_KEY or GOOGLE_GENAI_API_KEY
+#
+# Cost estimate: 1 cell × 10 tasks × ~$0.30/task (Gemini-3 cheaper input
+# rate + cache discount) ≈ $3-5.
+#
+# Run:
+#   set -a && . ./.env && set +a
+#   pnpm tsx scripts/eval.ts --sweep eval/sweeps/main_e1_text_gemini.yaml \
+#     --concurrency=3 --max-tasks-per-cell=10
+
+benches:
+  - lme-multiturn
+configs:
+  - id: ahc_full_gemini
+    provider: google_direct
+    ahc_flags:
+      TASK_AWARE_EXTRACTION: true
+      TYPE_AWARE_OFFLOAD: true
+      TRAJECTORY_CLASSIFIER: true
+      RECALL_TOOL: true
+    thresholds:
+      OBSERVER_THRESHOLD: 4000
+seeds: [42]
+budget_usd: 10
