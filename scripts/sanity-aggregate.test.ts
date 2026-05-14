@@ -148,6 +148,61 @@ describe('aggregateRun', () => {
     expect(rows[0]?.judge_cost_usd).toBeCloseTo(0.003, 6)
   })
 
+  test('event-density counters: observer/offload/recall computed per record', async () => {
+    const recs = [
+      // record 1: 1 observer + 1 offload + 1 recall → contributes to all 3
+      baseRecord({
+        task_id: 't1',
+        turns: [
+          {
+            turn_index: 0,
+            input_tokens: 0,
+            output_tokens: 0,
+            wall_clock_ms: 0,
+            recall_events: [{ recall_id: 'r1', tool_name: 'x', reason: 'y', turn_index: 0 }],
+            compaction_events: [
+              { type: 'observer', turn_index: 0, before_bytes: 100, after_bytes: 50 },
+              { type: 'offload', turn_index: 0, before_bytes: 200, after_bytes: 60 },
+            ],
+          },
+        ],
+      }),
+      // record 2: only reflection → no obs/off/rec match
+      baseRecord({
+        task_id: 't2',
+        turns: [
+          {
+            turn_index: 0,
+            input_tokens: 0,
+            output_tokens: 0,
+            wall_clock_ms: 0,
+            recall_events: [],
+            compaction_events: [{ type: 'reflection', turn_index: 0, before_bytes: 1, after_bytes: 0 }],
+          },
+        ],
+      }),
+      // record 3: observer only
+      baseRecord({
+        task_id: 't3',
+        turns: [
+          {
+            turn_index: 0,
+            input_tokens: 0,
+            output_tokens: 0,
+            wall_clock_ms: 0,
+            recall_events: [],
+            compaction_events: [{ type: 'observer', turn_index: 0, before_bytes: 1, after_bytes: 0 }],
+          },
+        ],
+      }),
+    ]
+    await writeCell(workspace, 'synthetic', 'cfg-aaaa', 42, recs, baseSummary({ n_total: 3, n_completed: 3 }))
+    const rows = await aggregateRun(workspace)
+    expect(rows[0]?.obs_n).toBe(2)  // records 1 + 3
+    expect(rows[0]?.off_n).toBe(1)  // record 1 only
+    expect(rows[0]?.rec_n).toBe(1)  // record 1 only
+  })
+
   test('error rate computed from records', async () => {
     const recs = [
       baseRecord({ task_id: 't1' }),
@@ -174,10 +229,14 @@ describe('formatTable', () => {
         err_rate: 0,
         judge_cost_usd: 0.01,
         status: 'complete',
+        obs_n: 0,
+        off_n: 0,
+        rec_n: 0,
       },
     ])
     expect(text).toContain('| bench | config | seed | n | accuracy')
-    expect(text).toContain('| synthetic | cfg-aaaa | 42 | 3 | 0.733 | 0.5000 | 0.0% | 0.0100 | complete |')
+    expect(text).toContain('obs/off/rec')
+    expect(text).toContain('| synthetic | cfg-aaaa | 42 | 3 | 0.733 | 0.5000 | 0.0% | 0.0100 | 0/0/0 | complete |')
     expect(text).toContain('Totals')
     expect(text).toContain('cells=1')
   })
@@ -193,17 +252,29 @@ describe('formatTable', () => {
       {
         bench: 'a', config_id: 'c', seed: 42, n: 5,
         accuracy: 0.5, cost_usd: 1.0, err_rate: 0, judge_cost_usd: 0.1,
-        status: 'complete' as const,
+        status: 'complete' as const, obs_n: 0, off_n: 0, rec_n: 0,
       },
       {
         bench: 'b', config_id: 'c', seed: 42, n: 5,
         accuracy: 0.5, cost_usd: 2.5, err_rate: 0, judge_cost_usd: 0.25,
-        status: 'complete' as const,
+        status: 'complete' as const, obs_n: 0, off_n: 0, rec_n: 0,
       },
     ]
     const text = formatTable(rows)
     expect(text).toContain('records=10')
     expect(text).toContain('cost=$3.5000')
     expect(text).toContain('judge=$0.3500')
+  })
+
+  test('event-density counters surfaced per cell', () => {
+    const text = formatTable([
+      {
+        bench: 'lme-multiturn', config_id: 'ahc_full', seed: 42, n: 20,
+        accuracy: 0.45, cost_usd: 1.2, err_rate: 0, judge_cost_usd: 0.5,
+        status: 'complete' as const,
+        obs_n: 17, off_n: 2, rec_n: 4,
+      },
+    ])
+    expect(text).toContain('| 17/2/4 |')
   })
 })

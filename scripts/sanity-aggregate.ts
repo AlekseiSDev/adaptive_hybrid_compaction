@@ -23,6 +23,13 @@ export type CellRow = {
   err_rate: number
   judge_cost_usd: number
   status: 'complete' | 'partial' | 'missing'
+  // Per H6.5/H6.7 audit (2026-05-14): event-density counters expose whether
+  // observer/offloader/recall actually fired in the cell. Sweeps with
+  // `obs_n=0` on AHC configs signal flag-dormancy (compare against
+  // `defaultFeatureFlags` + sweep YAML). Counters span all records' turns.
+  obs_n: number       // records with >=1 compaction.type='observer'
+  off_n: number       // records with >=1 compaction.type='offload'
+  rec_n: number       // records with >=1 recall_events entry
 }
 
 async function findCells(runDir: string): Promise<{ summary: string; records: string; bench: string; config_id: string; seed: number }[]> {
@@ -102,6 +109,19 @@ export async function aggregateRun(runDir: string): Promise<CellRow[]> {
       (acc, r) => acc + (r.score?.judge_cost_usd ?? 0),
       0,
     )
+    const obsN = records.filter((r) =>
+      (r.turns ?? []).some((t) =>
+        (t.compaction_events ?? []).some((e) => e.type === 'observer'),
+      ),
+    ).length
+    const offN = records.filter((r) =>
+      (r.turns ?? []).some((t) =>
+        (t.compaction_events ?? []).some((e) => e.type === 'offload'),
+      ),
+    ).length
+    const recN = records.filter((r) =>
+      (r.turns ?? []).some((t) => (t.recall_events ?? []).length > 0),
+    ).length
     const status: CellRow['status'] = summary?.status ?? 'missing'
     rows.push({
       bench: cell.bench,
@@ -113,6 +133,9 @@ export async function aggregateRun(runDir: string): Promise<CellRow[]> {
       err_rate: records.length > 0 ? totalErrors / records.length : 0,
       judge_cost_usd: judgeCost,
       status,
+      obs_n: obsN,
+      off_n: offN,
+      rec_n: recN,
     })
   }
   rows.sort((a, b) => {
@@ -125,18 +148,19 @@ export async function aggregateRun(runDir: string): Promise<CellRow[]> {
 
 export function formatTable(rows: CellRow[]): string {
   const lines: string[] = []
-  lines.push('| bench | config | seed | n | accuracy | cost ($) | err_rate | judge ($) | status |')
-  lines.push('|-------|--------|------|---|----------|----------|----------|-----------|--------|')
+  lines.push('| bench | config | seed | n | accuracy | cost ($) | err_rate | judge ($) | obs/off/rec | status |')
+  lines.push('|-------|--------|------|---|----------|----------|----------|-----------|-------------|--------|')
   for (const r of rows) {
+    const evtCol = `${String(r.obs_n)}/${String(r.off_n)}/${String(r.rec_n)}`
     lines.push(
       `| ${r.bench} | ${r.config_id} | ${String(r.seed)} | ${String(r.n)} | ` +
         `${r.accuracy.toFixed(3)} | ${r.cost_usd.toFixed(4)} | ` +
         `${(r.err_rate * 100).toFixed(1)}% | ${r.judge_cost_usd.toFixed(4)} | ` +
-        `${r.status} |`,
+        `${evtCol} | ${r.status} |`,
     )
   }
   if (rows.length === 0) {
-    lines.push('| (no cells found) | | | | | | | | |')
+    lines.push('| (no cells found) | | | | | | | | | |')
   }
   // Tail: total row.
   const total = rows.reduce(

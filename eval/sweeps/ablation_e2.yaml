@@ -30,8 +30,27 @@ benches:
   - assistant-traj
   - longmemeval-med
 configs:
-  - { id: ahc_full,             ahc_flags: {} }
-  - { id: ahc_no_observer,      ahc_flags: { TASK_AWARE_EXTRACTION: false } }
-  - { id: ahc_no_offloader,     ahc_flags: { TYPE_AWARE_OFFLOAD: false } }
+  # Per H6.5/H6.7 audit (2026-05-14): ahc_full baseline must carry explicit flag
+  # set (defaultFeatureFlags mostly OFF); without this fix `ahc_no_observer:
+  # TASK_AWARE_EXTRACTION: false` was ablating from an already-false baseline =
+  # null ablation. Each ahc_no_X mirrors ahc_full minus the single ablated flag.
+  - id: ahc_full
+    ahc_flags:
+      TASK_AWARE_EXTRACTION: true
+      TYPE_AWARE_OFFLOAD: true
+      TRAJECTORY_CLASSIFIER: true
+      RECALL_TOOL: true
+  - id: ahc_no_observer
+    ahc_flags:
+      TASK_AWARE_EXTRACTION: false
+      TYPE_AWARE_OFFLOAD: true
+      TRAJECTORY_CLASSIFIER: true
+      RECALL_TOOL: true
+  - id: ahc_no_offloader
+    ahc_flags:
+      TASK_AWARE_EXTRACTION: true
+      TYPE_AWARE_OFFLOAD: false
+      TRAJECTORY_CLASSIFIER: true
+      RECALL_TOOL: true
 seeds: [42, 43]
 budget_usd: 12

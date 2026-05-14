@@ -18,6 +18,15 @@ benches:
   - tau-bench-retail-med
 configs:
   - { id: tau_bench_agent,     baseline: tau_bench_agent }
-  - { id: tau_bench_agent_ahc, baseline: tau_bench_agent_ahc, ahc_flags: {} }
+  # tau_bench_agent_ahc: explicit flag set per H6.7 audit (2026-05-14).
+  # Tau is tool-heavy → dispatch routes to offloader (observer dormant by policy,
+  # but flag set for consistency with main_e1_text ahc_full).
+  - id: tau_bench_agent_ahc
+    baseline: tau_bench_agent_ahc
+    ahc_flags:
+      TASK_AWARE_EXTRACTION: true
+      TYPE_AWARE_OFFLOAD: true
+      TRAJECTORY_CLASSIFIER: true
+      RECALL_TOOL: true
 seeds: [42, 43]
 budget_usd: 30

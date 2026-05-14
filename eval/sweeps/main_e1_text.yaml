@@ -20,6 +20,14 @@ configs:
   - { id: full_context,      baseline: full_context }
   - { id: mastra_om,         baseline: mastra_om }
   - { id: anthropic_compact, baseline: anthropic_compact }
-  - { id: ahc_full,          ahc_flags: {} }   # ahc_full = all AHC defaults ON
+  # ahc_full: explicit flag set per H6.5 audit (2026-05-14). Comment in earlier
+  # version said "all AHC defaults ON" but defaultFeatureFlags has only REFLECTION
+  # at true; observer + offloader + classifier + recall must be flipped via YAML.
+  - id: ahc_full
+    ahc_flags:
+      TASK_AWARE_EXTRACTION: true
+      TYPE_AWARE_OFFLOAD: true
+      TRAJECTORY_CLASSIFIER: true
+      RECALL_TOOL: true
 seeds: [42]
 budget_usd: 90

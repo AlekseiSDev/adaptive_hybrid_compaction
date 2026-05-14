@@ -43,7 +43,13 @@ configs:
   # `ahc_flags.model` here would override that; leaving it absent so the
   # factory picks the right form for the active auth path.
   - id: ahc_full_anthropic
-    ahc_flags: {}
+    # Explicit flag set per H6.5/H6.7 audit (2026-05-14) — defaultFeatureFlags
+    # mostly OFF, must flip via YAML to exercise observer/offloader code paths.
+    ahc_flags:
+      TASK_AWARE_EXTRACTION: true
+      TYPE_AWARE_OFFLOAD: true
+      TRAJECTORY_CLASSIFIER: true
+      RECALL_TOOL: true
     provider: anthropic_direct
   - id: anthropic_compact
     baseline: anthropic_compact

@@ -232,6 +232,27 @@ export async function checkRun(runDir: string): Promise<CheckResult> {
       })
     }
 
+    // AHC feature-dormancy detection (H6.5/H6.7 audit, 2026-05-14).
+    // If the cell looks like an AHC config but no compaction events fired
+    // across any record, the sweep YAML likely shipped `ahc_flags: {}` —
+    // defaultFeatureFlags has TASK_AWARE_EXTRACTION/TYPE_AWARE_OFFLOAD/etc. at
+    // false, so dispatch skips them silently. Surfaces as warn (cell still
+    // produces accuracy numbers; just none of the AHC mechanisms exercised).
+    const looksAhc = /(^ahc_)|(_ahc(?:$|_))/.test(cell.cellRel.split('/')[1] ?? '')
+    if (looksAhc && records.length >= 3) {
+      const totalCompactionEvents = records.reduce(
+        (acc, r) => acc + (r.turns ?? []).reduce((a, t) => a + (t.compaction_events?.length ?? 0), 0),
+        0,
+      )
+      if (totalCompactionEvents === 0) {
+        issues.push({
+          severity: 'warn',
+          path: cell.cellRel,
+          message: `AHC dormancy: 0 compaction events across ${String(records.length)} records — verify ahc_flags in sweep YAML (defaults are mostly OFF; H6.5 audit)`,
+        })
+      }
+    }
+
     // Accuracy distribution non-degeneracy. Skip for small n (statistical noise
     // can produce a constant value with only 1-2 tasks).
     if (records.length >= ACCURACY_STDDEV_MIN_N) {

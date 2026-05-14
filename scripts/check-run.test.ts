@@ -286,6 +286,52 @@ describe('checkRun — summary status', () => {
   })
 })
 
+describe('checkRun — AHC dormancy detection (H6.5)', () => {
+  test('config_id starts with ahc_ + zero compaction events → warn', async () => {
+    const recs = Array.from({ length: 3 }, (_, i) =>
+      baseRecord({ task_id: `t${String(i)}`, config_id: 'ahc_full', turns: [] }),
+    )
+    await writeCell(workspace, 'synthetic', 'ahc_full', 42, recs, baseSummary({ config_id: 'ahc_full', n_total: 3, n_completed: 3 }))
+    const result = await checkRun(workspace)
+    expect(result.issues.some((i) => i.severity === 'warn' && i.message.includes('AHC dormancy'))).toBe(true)
+  })
+
+  test('non-AHC config with zero events → no dormancy warning', async () => {
+    const recs = Array.from({ length: 3 }, (_, i) => baseRecord({ task_id: `t${String(i)}`, turns: [] }))
+    await writeCell(workspace, 'synthetic', 'full_context', 42, recs, baseSummary({ config_id: 'full_context', n_total: 3, n_completed: 3 }))
+    const result = await checkRun(workspace)
+    expect(result.issues.some((i) => i.message.includes('AHC dormancy'))).toBe(false)
+  })
+
+  test('ahc_ config WITH compaction events → no dormancy warning', async () => {
+    const recs = Array.from({ length: 3 }, (_, i) =>
+      baseRecord({
+        task_id: `t${String(i)}`,
+        turns: [
+          {
+            turn_index: 0,
+            input_tokens: 0,
+            output_tokens: 0,
+            wall_clock_ms: 0,
+            recall_events: [],
+            compaction_events: [{ type: 'observer', turn_index: 0, before_bytes: 100, after_bytes: 50 }],
+          },
+        ],
+      }),
+    )
+    await writeCell(workspace, 'synthetic', 'ahc_full', 42, recs, baseSummary({ config_id: 'ahc_full', n_total: 3, n_completed: 3 }))
+    const result = await checkRun(workspace)
+    expect(result.issues.some((i) => i.message.includes('AHC dormancy'))).toBe(false)
+  })
+
+  test('tau_bench_agent_ahc suffix matches dormancy regex', async () => {
+    const recs = Array.from({ length: 3 }, (_, i) => baseRecord({ task_id: `t${String(i)}`, turns: [] }))
+    await writeCell(workspace, 'tau-bench-retail-med', 'tau_bench_agent_ahc', 42, recs, baseSummary({ config_id: 'tau_bench_agent_ahc', n_total: 3, n_completed: 3 }))
+    const result = await checkRun(workspace)
+    expect(result.issues.some((i) => i.severity === 'warn' && i.message.includes('AHC dormancy'))).toBe(true)
+  })
+})
+
 describe('formatReport', () => {
   test('produces lines that contain cell count + record count', () => {
     const text = formatReport({ cells_checked: 2, records_checked: 5, issues: [] })
