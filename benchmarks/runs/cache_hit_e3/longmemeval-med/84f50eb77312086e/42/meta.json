@@ -1,0 +1,16 @@
+{
+  "config": {
+    "id": "ahc_full_anthropic",
+    "ahc_flags": {
+      "TASK_AWARE_EXTRACTION": true,
+      "TYPE_AWARE_OFFLOAD": true,
+      "TRAJECTORY_CLASSIFIER": true,
+      "RECALL_TOOL": true
+    },
+    "provider": "anthropic_direct"
+  },
+  "bench": "longmemeval-med",
+  "seed": 42,
+  "git_sha": "e4298e75577317bba2f8b3ae13795308f56b49d6",
+  "timestamp": "2026-05-14T02:50:21.195Z"
+}
