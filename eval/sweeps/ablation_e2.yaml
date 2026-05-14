@@ -53,4 +53,7 @@ configs:
       TRAJECTORY_CLASSIFIER: true
       RECALL_TOOL: true
 seeds: [42, 43]
-budget_usd: 12
+# Track H P5 (2026-05-14): bumped 12 → 25 to handle 3 configs × 2 benches ×
+# 2 seeds × n=10 ≈ $8-12 actual + projection headroom. Pre-bump budget
+# triggered halt on the long-context LME cell.
+budget_usd: 25
