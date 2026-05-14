@@ -337,6 +337,7 @@ numbers процитированы; повторно интегрировать 
 - **Track E** — Main runs (требует A + B + C + D)
 - **Track F** — Course report writing (требует E)
 - **Track G** — Demo UI (требует Track A полностью + B2 telemetry; параллелится с E/F)
+- **Track H** — Follow-up sweeps (cross-model / multi-seed / ablations / activation gates) — extends E, blocks F-report numbers beyond single-seed headline. См. `docs/design/H_ablations_and_TODOs.md`, `docs/runs/h_followup_audit.md`.
 
 ### 7.2 Phase schedule с описанием шагов
 

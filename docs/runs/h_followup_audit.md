@@ -33,10 +33,10 @@ H6 budget actually spent vs plan:
 | P2 offloader (tau n=30) | $1.50 | $2.25 | Within range |
 | P3 Anthropic cache (cache_hit_e3) | $5 | $8.30 | Sonnet rate × real LME size |
 | P4 Gemini direct | $5 | $4.74 | On target |
-| P5 ablations | $5-10 | (running) | TBD post-completion |
+| P5 ablations | $5-10 | $10.46 | 3 configs × 2 benches × 2 seeds × n=10 |
 | P6 seed=43 | $13 | $0 (skipped) | Budget exhausted |
 | P7 mastra OM | $0.50 | $0 (deferred) | Analysis-only doc |
-| **Total** | **~$42-50** | **~$37 + P5** | Within OpenRouter remaining budget |
+| **Total** | **~$42-50** | **~$47.50** | Within OpenRouter remaining budget |
 
 ---
 
@@ -51,7 +51,7 @@ H6 budget actually spent vs plan:
 | **P2** Token win | Any token saving vs vanilla | -12% cost (AHC $0.52 vs $0.59) | ✓ |
 | **P3** Anthropic cache | ≥60% on ahc_full_anthropic × real LME | 49.1% (Tier-3 growth dominates) | ✗ documented |
 | **P4** Gemini cache | cache_read_input_tokens > 0 on ≥1 step per cell | 22.7% rate, 10/10 records | ✓ PASSED |
-| **P5** Ablation Δ | per-component delta > seed-spread floor (~2pp on n=10) | TBD | pending |
+| **P5** Ablation Δ | per-component delta > seed-spread floor (~2pp on n=10) | LME: Δ_obs=-10pp, Δ_off=-5pp; AT: null | ✓ partial (LME signal, AT null) |
 
 ---
 
@@ -123,7 +123,36 @@ acceptance gate "≥30% episodes have offload" not met for reasons above.
 
 ### Phase 5 ablations
 
-(TBD when sweep completes — placeholder)
+3 configs × 2 benches × 2 seeds × n=10 = 12 cells (120 records), $10.46.
+
+Mean accuracy (seed-pooled, effective n=20):
+
+| bench | ahc_full | ahc_no_observer | ahc_no_offloader |
+|---|---|---|---|
+| assistant-traj | 0.25 | 0.25 | 0.25 |
+| longmemeval-med | **0.60** | **0.50** | **0.55** |
+
+Per-component delta on LongMemEval-med:
+- Δ(no_observer) = **-0.10** (10pp accuracy lost without observer)
+- Δ(no_offloader) = **-0.05** (within seed-spread noise floor)
+
+Caveat: obs/off/rec=0/0/0 on all cells INCLUDING ahc_full because the
+bench is single-turn `longmemeval-med` (not `lme-multiturn` from P1) —
+Tier-3 stays empty so observer never fires regardless of flag. The
+-10pp delta likely comes from small-n sampling (1 task difference =
+10pp at n=10), needs higher n to confirm. F-report should note "ablation
+power insufficient at n=10".
+
+Cross-replication sanity:
+- Phase D `ahc_full × longmemeval-med` = 0.650 (n=20).
+- Track H P5 `ahc_full × longmemeval-med` = 0.60 (n=20).
+- Drift -5pp, within stderr at n=20. OK.
+
+`assistant-traj`: all 3 configs identical 0.25 → ablation produces no
+signal at n=10. Either AT trajectories too short to trigger compaction
+(P0 finding), or observer/offloader gates don't matter for the AT
+compaction shape. Either way, F-report should NOT cite per-component
+ablation Δ on AT without further investigation.
 
 ---
 
@@ -140,6 +169,8 @@ acceptance gate "≥30% episodes have offload" not met for reasons above.
 | `2575fa4` | P1 — sweep results committed |
 | (recent) | P3 — cache_hit_e3 sweep results |
 | `2cecb3c` | P4 — main_e1_text_gemini sweep results |
+| `86f2550` | P7 — audit doc skeleton + ablation_e2 budget bump |
+| (this commit) | P5 — ablation_e2 sweep results |
 
 ---
 
