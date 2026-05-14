@@ -1,0 +1,15 @@
+{
+  "config": {
+    "id": "ahc_no_observer",
+    "ahc_flags": {
+      "TASK_AWARE_EXTRACTION": false,
+      "TYPE_AWARE_OFFLOAD": true,
+      "TRAJECTORY_CLASSIFIER": true,
+      "RECALL_TOOL": true
+    }
+  },
+  "bench": "assistant-traj",
+  "seed": 43,
+  "git_sha": "2cecb3c01c813a585f20e4bc61ada5621cd8deb8",
+  "timestamp": "2026-05-14T03:46:13.149Z"
+}
