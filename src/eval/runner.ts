@@ -533,11 +533,19 @@ export async function runSweep(
         let n_completed = 0
 
         // Filter out already-completed tasks, apply caps before chunking.
+        // maxTasksPerCell is a TOTAL cap (NDJSON-already-completed counts
+        // toward it) — pre-fix: cap was applied to pending only, so a cell
+        // resumed from N completed + cap=N ran N more tasks (2N total),
+        // breaking the contract (Track H P1 surfaced this on lme-multiturn
+        // re-launch). Post-fix: cap = max(0, target - already_done).
         const pending = tasks.filter((t) => !completed.has(t.id))
         const n_skipped = tasks.length - pending.length
         let cap: number = pending.length
         if (dryRun) cap = Math.min(cap, dryRun.nTasksPerCell)
-        if (maxTasksPerCell !== undefined) cap = Math.min(cap, maxTasksPerCell)
+        if (maxTasksPerCell !== undefined) {
+          const remainingBudget = Math.max(0, maxTasksPerCell - completed.size)
+          cap = Math.min(cap, remainingBudget)
+        }
         const limited = pending.slice(0, cap)
 
         // Chunked Promise.all execution. concurrency=1 preserves sequential
