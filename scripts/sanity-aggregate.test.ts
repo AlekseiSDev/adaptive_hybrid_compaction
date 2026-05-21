@@ -77,7 +77,14 @@ describe('aggregateRun', () => {
       'synthetic',
       'cfg-aaaa',
       42,
-      [baseRecord({ task_id: 't1', cost_usd: 0.5, score: { primary: 0.7 } })],
+      [
+        baseRecord({
+          task_id: 't1',
+          cost_usd: 0.5,
+          score: { primary: 0.7 },
+          totals: { input: 100, output: 50, cache_read: 30 },
+        }),
+      ],
       baseSummary({
         n_total: 1,
         n_completed: 1,
@@ -93,6 +100,53 @@ describe('aggregateRun', () => {
     expect(rows[0]?.accuracy).toBeCloseTo(0.7, 6)
     expect(rows[0]?.cost_usd).toBeCloseTo(0.5, 6)
     expect(rows[0]?.status).toBe('complete')
+    expect(rows[0]?.input_tokens).toBe(100)
+    expect(rows[0]?.cache_read_tokens).toBe(30)
+    expect(rows[0]?.output_tokens).toBe(50)
+  })
+
+  test('token totals: input + cache_read + output summed across records', async () => {
+    const recs = [
+      baseRecord({ task_id: 't1', totals: { input: 1000, output: 50, cache_read: 400 } }),
+      baseRecord({ task_id: 't2', totals: { input: 2500, output: 80, cache_read: 1800 } }),
+      // Record without cache_read (e.g. anthropic_compact via LITELLM): cache treated as 0
+      baseRecord({ task_id: 't3', totals: { input: 500, output: 20 } }),
+    ]
+    await writeCell(
+      workspace,
+      'synthetic',
+      'cfg-aaaa',
+      42,
+      recs,
+      baseSummary({ n_total: 3, n_completed: 3 }),
+    )
+    const rows = await aggregateRun(workspace)
+    expect(rows[0]?.input_tokens).toBe(4000)
+    expect(rows[0]?.cache_read_tokens).toBe(2200)
+    expect(rows[0]?.output_tokens).toBe(150)
+  })
+
+  test('token totals tolerate missing/null totals fields per record', async () => {
+    const recs = [
+      baseRecord({ task_id: 't1', totals: { input: 100, output: 10, cache_read: 50 } }),
+      // Simulated edge case: AHC record where cache_read=null surfaced from
+      // provider (observed on ahc_full × lme-multiturn cell).
+      baseRecord({
+        task_id: 't2',
+        totals: { input: 200, output: 20, cache_read: undefined },
+      }),
+    ]
+    await writeCell(
+      workspace,
+      'synthetic',
+      'cfg-aaaa',
+      42,
+      recs,
+      baseSummary({ n_total: 2, n_completed: 2 }),
+    )
+    const rows = await aggregateRun(workspace)
+    expect(rows[0]?.input_tokens).toBe(300)
+    expect(rows[0]?.cache_read_tokens).toBe(50)
   })
 
   test('multiple cells sorted by (bench, config, seed) ascending', async () => {
@@ -232,11 +286,18 @@ describe('formatTable', () => {
         obs_n: 0,
         off_n: 0,
         rec_n: 0,
+        input_tokens: 12_345,
+        cache_read_tokens: 4_321,
+        output_tokens: 678,
       },
     ])
-    expect(text).toContain('| bench | config | seed | n | accuracy')
+    expect(text).toContain('| bench | config | seed | n |')
+    expect(text).toContain('input_tok')
+    expect(text).toContain('cache_read')
+    expect(text).toContain('cache%')
     expect(text).toContain('obs/off/rec')
-    expect(text).toContain('| synthetic | cfg-aaaa | 42 | 3 | 0.733 | 0.5000 | 0.0% | 0.0100 | 0/0/0 | complete |')
+    expect(text).toContain('| 12,345 | 4,321 | 35.0% |')
+    expect(text).toContain('| 0.733 | 0.5000 | 0.0% | 0.0100 | 0/0/0 | complete |')
     expect(text).toContain('Totals')
     expect(text).toContain('cells=1')
   })
@@ -253,11 +314,13 @@ describe('formatTable', () => {
         bench: 'a', config_id: 'c', seed: 42, n: 5,
         accuracy: 0.5, cost_usd: 1.0, err_rate: 0, judge_cost_usd: 0.1,
         status: 'complete' as const, obs_n: 0, off_n: 0, rec_n: 0,
+        input_tokens: 0, cache_read_tokens: 0, output_tokens: 0,
       },
       {
         bench: 'b', config_id: 'c', seed: 42, n: 5,
         accuracy: 0.5, cost_usd: 2.5, err_rate: 0, judge_cost_usd: 0.25,
         status: 'complete' as const, obs_n: 0, off_n: 0, rec_n: 0,
+        input_tokens: 0, cache_read_tokens: 0, output_tokens: 0,
       },
     ]
     const text = formatTable(rows)
@@ -273,8 +336,22 @@ describe('formatTable', () => {
         accuracy: 0.45, cost_usd: 1.2, err_rate: 0, judge_cost_usd: 0.5,
         status: 'complete' as const,
         obs_n: 17, off_n: 2, rec_n: 4,
+        input_tokens: 0, cache_read_tokens: 0, output_tokens: 0,
       },
     ])
     expect(text).toContain('| 17/2/4 |')
+  })
+
+  test('cache% displays as em-dash when input_tokens=0 (no NaN%)', () => {
+    const text = formatTable([
+      {
+        bench: 'synthetic', config_id: 'cfg', seed: 42, n: 0,
+        accuracy: 0, cost_usd: 0, err_rate: 0, judge_cost_usd: 0,
+        status: 'missing' as const, obs_n: 0, off_n: 0, rec_n: 0,
+        input_tokens: 0, cache_read_tokens: 0, output_tokens: 0,
+      },
+    ])
+    expect(text).toContain('| — |')
+    expect(text).not.toContain('NaN')
   })
 })

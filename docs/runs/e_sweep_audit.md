@@ -9,6 +9,12 @@
 > Track F consumes the numbers below. Follow-up runs (cross-model,
 > seed=43, ablations, scale-up) live in
 > [`docs/design/H_ablations_and_TODOs.md`](../design/H_ablations_and_TODOs.md).
+>
+> **Competitor baseline numbers** (`full_context`, `anthropic_compact`,
+> `mastra_om`) — canonical в [`baselines_frozen.md`](baselines_frozen.md).
+> Future sweeps re-use frozen — competitor cells не перегоняются.
+> Этот audit-doc — исторический snapshot Phase D, frozen file его
+> цитирует.
 
 ---
 
@@ -34,6 +40,35 @@ LoCoMo. All baselines share `DEFAULT_AGENT_SYSTEM_PROMPT`
 | locomo-med | anthropic_compact | 20 | 1 294 774 | 0 | 0% | 0.600 | n/a* | 0.015 | 0.015 |
 | locomo-med | mastra_om | 20 | 1 119 349 | 1 048 064 | 93.6% | 0.600 | n/a* | 0.011 | 0.011 |
 | locomo-med | ahc_full | 20 | 1 119 277 | 1 105 920 | **98.8%** | 0.600 | 0.851 | 0.010 | 0.862 |
+| lme-multiturn ✠ | full_context | 10 | 28 376 258 | 25 596 416 | **90.2%** | 0.500 | 21.711 | 0.007 | 21.718 |
+| lme-multiturn ✠ | anthropic_compact | — | — | — | — | — | — | — | — |
+| lme-multiturn ✠ | mastra_om | 10 | 9 344 594 | 7 235 584 | 77.4% | 0.500 | 4.738 | 0.008 | 4.746 |
+| lme-multiturn ✠ | ahc_full | 15 | 3 548 449 | 1 530 368 | 43.1% | 0.133 | 9.000 | 0.012 | 9.012 |
+
+✠ `lme-multiturn` cells run in Track H Phase 1 (commit `c40b8c4`, sealed
+post-Phase-D), NOT part of the original Phase D fast-track sweep. Added here
+for one-table cross-bench glance per user request. Authoritative source:
+[`h_followup_audit.md §Headline numbers`](h_followup_audit.md#headline-numbers).
+`anthropic_compact` not run on `lme-multiturn`.
+
+**n divergence**: cell n is 10 (FC, mastra_om) / 15 (ahc_full) because
+sweep YAML hit `budget_usd=40` halt — FC × lme-multiturn costs ~$2.17/task
+(quadratic cumulative history across 47-session replay), so n=15 across all
+3 cells would have exceeded the cap. Cheap-first config ordering (ahc_full
+first per YAML comment) ensured ahc reached n=15 before halt.
+
+**Numbers re-aggregated 2026-05-22** via `pnpm tsx scripts/sanity-aggregate.ts
+benchmarks/runs/main_e1_text_lme_mt/` (token/cache columns added that day —
+see `scripts/sanity-aggregate.ts`). Supersedes earlier h_followup_audit values
+of `2.27M / 0.97M` for ahc_full × lme-mt input/cache (cache% unchanged at
+43%; absolute totals were under-reported in h_followup-headline; cost/task
+$0.601 still matches).
+
+**mastra_om actor cost is bubbled here** — unlike Phase D rows above where
+mastra_om / anthropic_compact were marked `n/a*`. The `mastra_om` baseline
+last touched `5777796` (post-Phase-D), which restored Mastra-side cost
+bubbling. `anthropic_compact` cost bubbling status unchanged (still
+LITELLM-routed, still n/a).
 
 *`n/a` actor cost: `mastra_om` and `anthropic_compact` do not bubble
 provider-side cost back to our `RunRecord` (Mastra owns its own LLM

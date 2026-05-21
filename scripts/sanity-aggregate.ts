@@ -30,6 +30,12 @@ export type CellRow = {
   obs_n: number       // records with >=1 compaction.type='observer'
   off_n: number       // records with >=1 compaction.type='offload'
   rec_n: number       // records with >=1 recall_events entry
+  // Token totals summed across records in the cell. Per-baseline cache% is
+  // the primary AHC §2.1 invariant — observability for it lives in the raw
+  // `RunRecord.totals` field; this aggregator surfaces it for audit-doc parity.
+  input_tokens: number
+  cache_read_tokens: number
+  output_tokens: number
 }
 
 async function findCells(runDir: string): Promise<{ summary: string; records: string; bench: string; config_id: string; seed: number }[]> {
@@ -122,6 +128,12 @@ export async function aggregateRun(runDir: string): Promise<CellRow[]> {
     const recN = records.filter((r) =>
       (r.turns ?? []).some((t) => (t.recall_events ?? []).length > 0),
     ).length
+    const inputTokens = records.reduce((a, r) => a + (r.totals?.input ?? 0), 0)
+    const cacheReadTokens = records.reduce(
+      (a, r) => a + (r.totals?.cache_read ?? 0),
+      0,
+    )
+    const outputTokens = records.reduce((a, r) => a + (r.totals?.output ?? 0), 0)
     const status: CellRow['status'] = summary?.status ?? 'missing'
     rows.push({
       bench: cell.bench,
@@ -136,6 +148,9 @@ export async function aggregateRun(runDir: string): Promise<CellRow[]> {
       obs_n: obsN,
       off_n: offN,
       rec_n: recN,
+      input_tokens: inputTokens,
+      cache_read_tokens: cacheReadTokens,
+      output_tokens: outputTokens,
     })
   }
   rows.sort((a, b) => {
@@ -146,21 +161,32 @@ export async function aggregateRun(runDir: string): Promise<CellRow[]> {
   return rows
 }
 
+const FMT_INT = new Intl.NumberFormat('en-US')
+
 export function formatTable(rows: CellRow[]): string {
   const lines: string[] = []
-  lines.push('| bench | config | seed | n | accuracy | cost ($) | err_rate | judge ($) | obs/off/rec | status |')
-  lines.push('|-------|--------|------|---|----------|----------|----------|-----------|-------------|--------|')
+  lines.push(
+    '| bench | config | seed | n | input_tok | cache_read | cache% | accuracy | cost ($) | err_rate | judge ($) | obs/off/rec | status |',
+  )
+  lines.push(
+    '|-------|--------|------|---|-----------|------------|--------|----------|----------|----------|-----------|-------------|--------|',
+  )
   for (const r of rows) {
     const evtCol = `${String(r.obs_n)}/${String(r.off_n)}/${String(r.rec_n)}`
+    const cachePct =
+      r.input_tokens > 0
+        ? `${((r.cache_read_tokens / r.input_tokens) * 100).toFixed(1)}%`
+        : '—'
     lines.push(
       `| ${r.bench} | ${r.config_id} | ${String(r.seed)} | ${String(r.n)} | ` +
+        `${FMT_INT.format(r.input_tokens)} | ${FMT_INT.format(r.cache_read_tokens)} | ${cachePct} | ` +
         `${r.accuracy.toFixed(3)} | ${r.cost_usd.toFixed(4)} | ` +
         `${(r.err_rate * 100).toFixed(1)}% | ${r.judge_cost_usd.toFixed(4)} | ` +
         `${evtCol} | ${r.status} |`,
     )
   }
   if (rows.length === 0) {
-    lines.push('| (no cells found) | | | | | | | | | |')
+    lines.push('| (no cells found) | | | | | | | | | | | | |')
   }
   // Tail: total row.
   const total = rows.reduce(
