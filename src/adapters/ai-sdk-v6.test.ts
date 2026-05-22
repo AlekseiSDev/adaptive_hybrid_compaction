@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest'
 import type { LanguageModelV3, LanguageModelV3Message } from '@ai-sdk/provider'
-import type { CompactResult } from '../core/index.js'
+import type { CompactResult, LLMCaller } from '../core/index.js'
 import { createAhcMiddleware } from './ai-sdk-v6.js'
 import type { SessionId } from './sessionScratchpad.js'
 
@@ -170,6 +170,93 @@ describe('createAhcMiddleware — A6 LanguageModelV3Middleware', () => {
     expect(seen[0]?.sessionId).toBe('sess-A')
     expect(seen[0]?.result.assembledMessages.length).toBeGreaterThan(0)
     expect(seen[0]?.result.newTier2).toBeDefined()
+  })
+
+  test('Tier-2 persists across transformParams calls on same sessionId — observations accumulate', async () => {
+    // Stub LLM caller always returns one observation per fire.
+    // eslint-disable-next-line @typescript-eslint/require-await -- async required to satisfy LLMCaller type
+    const stubLlm: LLMCaller = async () => ({ text: '- 1 (high) persistence-test observation' })
+
+    // Heavy text in Tier-3 candidate region to trigger observer (>= OBSERVER_THRESHOLD).
+    const heavy = 'x'.repeat(400) // ~100 tokens via chars/4
+    const heavyAsst: LanguageModelV3Message = {
+      role: 'assistant',
+      content: [{ type: 'text', text: heavy }],
+    }
+    const prompt: LanguageModelV3Message[] = [sys, user('first'), heavyAsst, user(heavy)]
+
+    const seen: CompactResult[] = []
+    const mw = createAhcMiddleware({
+      flags: { TASK_AWARE_EXTRACTION: true },
+      thresholds: { OBSERVER_THRESHOLD: 50, K_RECENT: 2 },
+      configuredClass: 'mixed',
+      sessionId: () => 'sticky',
+      llmCaller: stubLlm,
+      onCompactResult: (_sid, r) => seen.push(r),
+    })
+
+    await mw.transformParams?.({
+      type: 'generate',
+      params: baseParams(prompt),
+      model: stubModel(),
+    })
+    await mw.transformParams?.({
+      type: 'generate',
+      params: baseParams(prompt),
+      model: stubModel(),
+    })
+
+    expect(seen).toHaveLength(2)
+    expect(seen[0]?.newTier2.observations).toHaveLength(1)
+    // After fix: turn 2 carries the turn-1 observation forward + appends a new one.
+    expect(seen[1]?.newTier2.observations.length).toBeGreaterThanOrEqual(2)
+    expect(seen[1]?.newTier2.observations[0]).toEqual(seen[0]?.newTier2.observations[0])
+  })
+
+  test('Tier-2 observations accumulate monotonically over 5 turns with persistent session', async () => {
+    // Stronger gravity than the 2-call test: observations must grow monotonically
+    // (or stay equal) call-over-call, and the first observation from turn 1 must
+    // survive verbatim through turn 5.
+    let callIdx = 0
+    // eslint-disable-next-line @typescript-eslint/require-await -- async required to satisfy LLMCaller type
+    const stubLlm: LLMCaller = async () => {
+      callIdx += 1
+      return { text: `- ${String(callIdx)} (high) turn-${String(callIdx)}-observation` }
+    }
+    const heavy = 'y'.repeat(400)
+    const heavyAsst: LanguageModelV3Message = {
+      role: 'assistant',
+      content: [{ type: 'text', text: heavy }],
+    }
+    const prompt: LanguageModelV3Message[] = [sys, user('first'), heavyAsst, user(heavy)]
+    const seen: CompactResult[] = []
+    const mw = createAhcMiddleware({
+      flags: { TASK_AWARE_EXTRACTION: true },
+      thresholds: { OBSERVER_THRESHOLD: 50, K_RECENT: 2 },
+      configuredClass: 'mixed',
+      sessionId: () => 'sticky-5',
+      llmCaller: stubLlm,
+      onCompactResult: (_sid, r) => seen.push(r),
+    })
+
+    for (let i = 0; i < 5; i++) {
+      await mw.transformParams?.({
+        type: 'generate',
+        params: baseParams(prompt),
+        model: stubModel(),
+      })
+    }
+
+    expect(seen).toHaveLength(5)
+    const counts = seen.map((r) => r.newTier2.observations.length)
+    // Monotonic non-decreasing
+    for (let i = 1; i < counts.length; i++) {
+      expect(counts[i]).toBeGreaterThanOrEqual(counts[i - 1] ?? 0)
+    }
+    // Final turn must carry the first turn's observation at index 0
+    expect(seen[4]?.newTier2.observations[0]).toEqual(seen[0]?.newTier2.observations[0])
+    // Should have accumulated at least 5 observations (one per fired turn)
+    expect(counts[4]).toBeGreaterThanOrEqual(5)
   })
 
   test('onCompactResult NOT called when prompt is passthrough (no system message)', async () => {

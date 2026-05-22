@@ -5,7 +5,7 @@ import * as core from './index.js'
 describe('Thresholds defaults', () => {
   test('defaultThresholds matches §10.4 constants (+ T_SIZE_MIXED from A2 §5.2)', () => {
     expect(defaultThresholds).toEqual({
-      OBSERVER_THRESHOLD: 8000,
+      OBSERVER_THRESHOLD: 30000,
       T_SIZE: 4096,
       T_SIZE_MIXED: 2048,
       T_CUM: 24000,
@@ -13,10 +13,17 @@ describe('Thresholds defaults', () => {
       BUFFER_TOKENS: 0.2,
       BUFFER_ACTIVATION: 0.8,
       REFLECTION_THRESHOLD: 40000,
+      TIER3_TOKEN_BUDGET: 30000,
     })
   })
 
   test('defaults accessible from core index re-export', () => {
     expect(core.defaultThresholds).toBe(defaultThresholds)
+  })
+
+  test('TIER3_TOKEN_BUDGET defaults to OBSERVER_THRESHOLD — they are intentionally coupled', () => {
+    expect(defaultThresholds.TIER3_TOKEN_BUDGET).toBe(defaultThresholds.OBSERVER_THRESHOLD)
+    expect(Number.isInteger(defaultThresholds.TIER3_TOKEN_BUDGET)).toBe(true)
+    expect(defaultThresholds.TIER3_TOKEN_BUDGET).toBeGreaterThan(0)
   })
 })

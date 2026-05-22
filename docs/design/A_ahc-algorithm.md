@@ -287,7 +287,7 @@ type CompactionContext = {
 }
 
 type Thresholds = {
-  OBSERVER_THRESHOLD: number        // default 8000
+  OBSERVER_THRESHOLD: number        // default 30000 (raised from 8000 — H8 calibration)
   T_SIZE: number                    // default 4096
   T_CUM: number                     // default 24000
   K_RECENT: number                  // default 6
@@ -652,13 +652,14 @@ defaults.
 ### 10.4 Defaults без калибровки
 
 Reasonable defaults из литературы (Mastra OM defaults, codex#14589 measurements):
-- `OBSERVER_THRESHOLD = 8000`
+- `OBSERVER_THRESHOLD = 30000` (raised from 8000 in H Phase 8 — at 8K observer fired on every turn ≥2 in lme-multiturn, erasing answer-bearing details. Mastra OM runs with working window ≈25K before its own compact; 30K places AHC in the same envelope. See `decisions.md`.)
 - `T_SIZE = 4096`
 - `T_CUM = 24000`
-- `K_RECENT = 6`
+- `K_RECENT = 6` — **lower bound** on Tier-3 message count (minimum keep-raw on short tasks). Upper bound is `TIER3_TOKEN_BUDGET` — Tier-3 grows past K_RECENT messages up to the token budget; observer clips when it crosses OBSERVER_THRESHOLD. See `decisions.md` 2026-05-22.
 - `BUFFER_TOKENS = 0.2`
 - `BUFFER_ACTIVATION = 0.8`
 - `REFLECTION_THRESHOLD = 40000`
+- `TIER3_TOKEN_BUDGET = 30000` (default coupled to `OBSERVER_THRESHOLD` — observer fires exactly when Tier-3 overflows the budget, target clip = 0.2 × OBSERVER_THRESHOLD leaves predictable residue. Decoupled in sweeps via threshold override. See `decisions.md` 2026-05-22.)
 
 Эти числа — стартовая точка; пилотный run (~10 трасс из target domain) корректирует
 с минимальным эффортом.

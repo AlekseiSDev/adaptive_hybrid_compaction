@@ -19,6 +19,7 @@ import {
   type LLMCaller,
   type Message,
   type Thresholds,
+  type Tier2,
   type TrajectoryClass,
 } from '../core/index.js'
 import {
@@ -37,6 +38,13 @@ export type AhcMiddlewareDeps = {
   scratchpadRegistry?: SessionScratchpadRegistry
   // Suppresses use of classifyWithHysteresis — tests / explicit class control.
   hysteresisStateOverride?: Map<SessionId, HysteresisState>
+  // Persists Tier-2 (observations + pointers + classSignal) across LLM calls
+  // for a given sessionId. Per A_ahc-algorithm §2.1 Tier-2 is append-only
+  // across turns; without this map every transformParams call would start
+  // from an empty Tier-2 and drop accumulated state (root cause of acc 0.108
+  // collapse on lme-multiturn, see decisions.md 2026-05-22). Mirrors the
+  // hysteresisStateOverride pattern — adapter-owned Map, no TTL.
+  tier2Registry?: Map<SessionId, Tier2>
   // Fires after compact() completes; consumer reads newTier2 / events from result.
   // Not called on passthrough paths (no system message / tierize failure).
   onCompactResult?: (sessionId: SessionId, result: CompactResult) => void
@@ -160,6 +168,7 @@ function withAnthropicCacheControlOnSystem(
 export function createAhcMiddleware(deps: AhcMiddlewareDeps): LanguageModelV3Middleware {
   const registry = deps.scratchpadRegistry ?? new SessionScratchpadRegistry()
   const hysteresisStates = deps.hysteresisStateOverride ?? new Map<SessionId, HysteresisState>()
+  const tier2Registry = deps.tier2Registry ?? new Map<SessionId, Tier2>()
   const flags: FeatureFlags = { ...defaultFeatureFlags, ...deps.flags }
   const thresholds: Thresholds = { ...defaultThresholds, ...deps.thresholds }
 
@@ -174,13 +183,22 @@ export function createAhcMiddleware(deps: AhcMiddlewareDeps): LanguageModelV3Mid
       const enriched = withDerivedMetadata(coreMessages)
       const scratchpad = registry.get(sessionId)
       const prevState = hysteresisStates.get(sessionId)
+      const prevTier2 = tier2Registry.get(sessionId)
       const lastUser = [...enriched].reverse().find((m) => m.role === 'user')
       const lastUserText =
         lastUser?.content.find((p) => p.type === 'text')?.text ?? ''
 
       let tierized: ReturnType<typeof tierize>
       try {
-        tierized = tierize(enriched, { kRecent: thresholds.K_RECENT })
+        tierized = tierize(enriched, {
+          kRecent: thresholds.K_RECENT,
+          kRecentTokenBudget: thresholds.TIER3_TOKEN_BUDGET,
+          // Observer can only clip Tier-3 back when an llmCaller is wired; without
+          // it we must keep the legacy K_RECENT message-count cap or Tier-3 would
+          // grow unbounded (D5 of decisions.md 2026-05-22).
+          canRunObserver: flags.TASK_AWARE_EXTRACTION && deps.llmCaller !== undefined,
+          ...(prevTier2 !== undefined ? { previousTier2: prevTier2 } : {}),
+        })
       } catch {
         // tierize requires exactly one system message and at least one user message;
         // if the caller violates this we fall back to passthrough.
@@ -216,6 +234,7 @@ export function createAhcMiddleware(deps: AhcMiddlewareDeps): LanguageModelV3Mid
       if (result.newHysteresisState !== undefined) {
         hysteresisStates.set(sessionId, result.newHysteresisState)
       }
+      tier2Registry.set(sessionId, result.newTier2)
 
       deps.onCompactResult?.(sessionId, result)
 

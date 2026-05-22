@@ -9,7 +9,7 @@ import { compactWithOffload } from './offloader.js'
 import { createInMemoryScratchpad } from './scratchpad.js'
 import { defaultFeatureFlags } from './featureFlags.js'
 import { defaultThresholds } from './thresholds.js'
-import { serializeForCache } from './serializeForCache.js'
+import { canonicalJSON, serializeForCache } from './serializeForCache.js'
 import { tierize } from './tiers.js'
 import { byteLengthOfContent, charsOver4TokenCounter } from './tokenCounter.js'
 import type { LLMCaller } from './llm.js'
@@ -131,6 +131,73 @@ describe('Cache invariance (§9.1) — bytewise via serializeForCache', () => {
         .concat(turnB.events)
         .some((e) => e.kind === 'compaction' && e.type === 'reflection'),
     ).toBe(false)
+  })
+
+  test('persisted Tier-2 across compact() calls — observations append-only (turn 1 obs survives in turn 2)', async () => {
+    // Direct verification of decisions.md 2026-05-22 D7: when adapter persists
+    // result.newTier2 across LLM calls (Tier-2 cross-turn contract per §2.1),
+    // observations grow append-only — turn 1's observations appear verbatim in
+    // turn 2's serialization at the same byte offsets.
+    const { tier1, tier2, tier3 } = tierize(baseHistory)
+    const scratchpad = createInMemoryScratchpad<AtomicGroup>()
+    let callIdx = 0
+    const llmCaller = vi.fn<LLMCaller>().mockImplementation(async () => {
+      callIdx += 1
+      return Promise.resolve({
+        text: `- ${String(callIdx)} (high) obs-from-call-${String(callIdx)}`,
+      })
+    })
+    // OBSERVER_THRESHOLD=1 → observer fires on any non-empty Tier-3.
+    const lowObs = { ...defaultThresholds, OBSERVER_THRESHOLD: 1 }
+    const flagsWithObs = { ...defaultFeatureFlags, TASK_AWARE_EXTRACTION: true }
+
+    const turn1 = await compact({
+      tier1,
+      tier2,
+      tier3,
+      scratchpad,
+      flags: flagsWithObs,
+      configuredClass: 'mixed',
+      thresholds: lowObs,
+      deps: {
+        byteCounter: byteLengthOfContent,
+        tokenCounter: charsOver4TokenCounter,
+        llmCaller,
+        currentQuery: 'q',
+      },
+    })
+    expect(turn1.newTier2.observations.length).toBeGreaterThanOrEqual(1)
+
+    const turn2 = await compact({
+      tier1: turn1.newTier1,
+      tier2: turn1.newTier2,
+      tier3: turn1.newTier3,
+      scratchpad,
+      flags: flagsWithObs,
+      configuredClass: 'mixed',
+      thresholds: lowObs,
+      deps: {
+        byteCounter: byteLengthOfContent,
+        tokenCounter: charsOver4TokenCounter,
+        llmCaller,
+        currentQuery: 'q',
+      },
+    })
+    // Append-only: turn 2 carries all turn 1 observations + at least one more.
+    expect(turn2.newTier2.observations.length).toBeGreaterThan(
+      turn1.newTier2.observations.length,
+    )
+    expect(turn2.newTier2.observations[0]).toEqual(turn1.newTier2.observations[0])
+
+    // Bytewise: turn 1's first observation appears at the same byte offset in
+    // both serializations (canonical JSON guarantee under append-only growth).
+    const bytes1 = serializeForCache({ tier1: turn1.newTier1, tier2: turn1.newTier2 })
+    const bytes2 = serializeForCache({ tier1: turn2.newTier1, tier2: turn2.newTier2 })
+    const obs1Json = canonicalJSON(turn1.newTier2.observations[0])
+    const off1 = bytes1.toString('utf8').indexOf(obs1Json)
+    const off2 = bytes2.toString('utf8').indexOf(obs1Json)
+    expect(off1).toBeGreaterThan(0)
+    expect(off2).toBe(off1)
   })
 
   test('across-reflection: forced reflection emits exactly one reflection event', async () => {

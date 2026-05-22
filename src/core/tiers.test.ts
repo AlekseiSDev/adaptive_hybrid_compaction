@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest'
 import { tierize } from './tiers.js'
-import type { Message } from './types.js'
+import type { Message, Tier2 } from './types.js'
 
 const sysMsg: Message = { role: 'system', content: [{ type: 'text', text: 'be helpful' }] }
 const userMsg = (s: string, turn: number): Message => ({
@@ -109,5 +109,107 @@ describe('tierize', () => {
   test('throws when no user message present', () => {
     const history: Message[] = [sysMsg]
     expect(() => tierize(history)).toThrow(/user message/)
+  })
+
+  test('Tier-3 grows beyond K_RECENT message count up to TIER3_TOKEN_BUDGET tokens', () => {
+    const history: Message[] = [sysMsg, userMsg('start', 0)]
+    for (let i = 0; i < 30; i++) history.push(asstMsg(`tiny-${String(i)}`, i))
+    const { tier3 } = tierize(history, {
+      kRecent: 6,
+      kRecentTokenBudget: 100_000,
+      canRunObserver: true,
+    })
+    expect(tier3.recent.length).toBe(30)
+  })
+
+  test('Tier-3 stops at TIER3_TOKEN_BUDGET when messages exceed budget — K_RECENT is lower bound', () => {
+    const heavy = 'x'.repeat(4000) // ~1000 tokens by chars/4
+    const history: Message[] = [sysMsg, userMsg('start', 0)]
+    for (let i = 0; i < 30; i++) history.push(asstMsg(`${heavy}${String(i)}`, i))
+    const { tier3 } = tierize(history, {
+      kRecent: 6,
+      kRecentTokenBudget: 5000,
+      canRunObserver: true,
+    })
+    // budget=5000 fits ~5 messages, but K_RECENT=6 is lower bound → 6
+    expect(tier3.recent.length).toBe(6)
+  })
+
+  test('K_RECENT lower bound enforced even when per-message cost > budget', () => {
+    const huge = 'x'.repeat(40_000) // ~10k tokens each
+    const history: Message[] = [sysMsg, userMsg('start', 0)]
+    for (let i = 0; i < 10; i++) history.push(asstMsg(`${huge}${String(i)}`, i))
+    const { tier3 } = tierize(history, {
+      kRecent: 6,
+      kRecentTokenBudget: 1000,
+      canRunObserver: true,
+    })
+    expect(tier3.recent.length).toBeGreaterThanOrEqual(6)
+  })
+
+  test('atomic tool_use/tool_result pair pulled in past token budget — §5.1 under budget path', () => {
+    const tu = useMsg('tu_pair', 0)
+    const tr = resultMsg('tu_pair', 0)
+    const heavy = (i: number): Message => asstMsg('x'.repeat(2000), i) // ~500 tok
+    const history: Message[] = [
+      sysMsg,
+      userMsg('start', 0),
+      tu, // remaining[0]
+      asstMsg('mid', 0), // remaining[1]
+      heavy(1), // remaining[2]
+      heavy(2), // remaining[3]
+      heavy(3), // remaining[4]
+      heavy(4), // remaining[5]
+      heavy(5), // remaining[6]
+      heavy(6), // remaining[7]
+      tr, // remaining[8] ← orphan tool_result
+      asstMsg('tail', 7), // remaining[9]
+    ]
+    const { tier3 } = tierize(history, {
+      kRecent: 2,
+      kRecentTokenBudget: 3000,
+      canRunObserver: true,
+    })
+    expect(tier3.recent).toContain(tu)
+    expect(tier3.recent).toContain(tr)
+  })
+
+  test('canRunObserver=false falls back to legacy K_RECENT message-count cap (no budget growth)', () => {
+    const history: Message[] = [sysMsg, userMsg('start', 0)]
+    for (let i = 0; i < 30; i++) history.push(asstMsg(`m-${String(i)}`, i))
+    const { tier3 } = tierize(history, {
+      kRecent: 6,
+      kRecentTokenBudget: 1_000_000,
+      canRunObserver: false,
+    })
+    expect(tier3.recent.length).toBe(6)
+  })
+
+  test('honors previousTier2 — returned tier2 carries forward observations and pointers', () => {
+    const history: Message[] = [sysMsg, userMsg('q1', 0), asstMsg('a1', 0), userMsg('q2', 1)]
+    const previousTier2: Tier2 = {
+      observations: [
+        {
+          timestamp: 1,
+          confidence: 'high',
+          statement: 'user prefers concise responses',
+          sourceTurn: 0,
+        },
+      ],
+      pointers: [
+        {
+          recall_id: 'ptr_1',
+          tool_name: 'search',
+          original_size_bytes: 1024,
+          digest: 'abc123',
+          turn_index: 0,
+        },
+      ],
+      classSignal: { class: 'mixed', confidence: 0.5, updatedAt: 3 },
+    }
+    const { tier2 } = tierize(history, { previousTier2 })
+    expect(tier2.observations).toEqual(previousTier2.observations)
+    expect(tier2.pointers).toEqual(previousTier2.pointers)
+    expect(tier2.classSignal).toEqual(previousTier2.classSignal)
   })
 })
