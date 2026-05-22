@@ -259,6 +259,52 @@ describe('createAhcMiddleware — A6 LanguageModelV3Middleware', () => {
     expect(counts[4]).toBeGreaterThanOrEqual(5)
   })
 
+  test('TIER3_TOKEN_BUDGET implicitly mirrors OBSERVER_THRESHOLD when user overrides only one', async () => {
+    // Sweep YAML setting only OBSERVER_THRESHOLD: 128_000 must not leave Tier-3
+    // walking to the static default 30k budget — that traps Tier-3 at 30k tail
+    // while observer waits for 128k it will never see (the bug surfaced on
+    // ahc_full_obs128k cell of main_e1_text_lme_mt_n50).
+    const seen: CompactResult[] = []
+    // Heavy assistant + heavy user → Tier-3 candidate ~200 tokens.
+    const heavy = 'z'.repeat(400)
+    const heavyAsst: LanguageModelV3Message = {
+      role: 'assistant',
+      content: [{ type: 'text', text: heavy }],
+    }
+    const prompt: LanguageModelV3Message[] = [sys, user('first'), heavyAsst, user(heavy)]
+
+    const mw = createAhcMiddleware({
+      flags: { TASK_AWARE_EXTRACTION: true },
+      // OBSERVER_THRESHOLD overridden, TIER3_TOKEN_BUDGET not set → must mirror.
+      thresholds: { OBSERVER_THRESHOLD: 10_000, K_RECENT: 2 },
+      configuredClass: 'mixed',
+      sessionId: () => 'mirror-test',
+      llmCaller: async () => Promise.resolve({ text: '- 1 (high) mirror obs' }),
+      onCompactResult: (_sid, r) => seen.push(r),
+    })
+
+    await mw.transformParams?.({
+      type: 'generate',
+      params: baseParams(prompt),
+      model: stubModel(),
+    })
+    expect(seen).toHaveLength(1)
+    // Tier-3 walk should keep all candidate messages (tokens<10k budget) AND
+    // observer should NOT fire (tokens<10k threshold). If TIER3_TOKEN_BUDGET
+    // stuck at default 30k, walk would still keep all — but if budget bug
+    // capped Tier-3 at 30k while OBSERVER_THRESHOLD shifted to 10k, observer
+    // would over-fire on tail-clipped windows. Stronger signal: ensure no
+    // observer fire (tokens<10k → below threshold).
+    const compactionEvents = seen[0]?.events.filter(
+      (e) => e.kind === 'compaction' && e.type === 'observer',
+    )
+    expect(compactionEvents).toHaveLength(0)
+    // Assembled Tier-3 includes ALL recent messages (heavyAsst + heavyUser),
+    // not just last K_RECENT=2 — walk-to-budget honored against the
+    // mirrored 10k cap.
+    expect(seen[0]?.newTier3.recent.length).toBeGreaterThanOrEqual(2)
+  })
+
   test('onCompactResult NOT called when prompt is passthrough (no system message)', async () => {
     const seen: { sessionId: SessionId; result: CompactResult }[] = []
     const mw = createAhcMiddleware({

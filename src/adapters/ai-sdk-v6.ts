@@ -170,7 +170,17 @@ export function createAhcMiddleware(deps: AhcMiddlewareDeps): LanguageModelV3Mid
   const hysteresisStates = deps.hysteresisStateOverride ?? new Map<SessionId, HysteresisState>()
   const tier2Registry = deps.tier2Registry ?? new Map<SessionId, Tier2>()
   const flags: FeatureFlags = { ...defaultFeatureFlags, ...deps.flags }
-  const thresholds: Thresholds = { ...defaultThresholds, ...deps.thresholds }
+  const userThresholds = deps.thresholds ?? {}
+  const thresholds: Thresholds = { ...defaultThresholds, ...userThresholds }
+  // Implicit coupling per decisions.md 2026-05-22 D3: TIER3_TOKEN_BUDGET mirrors
+  // OBSERVER_THRESHOLD when the caller overrides one without the other. Otherwise
+  // a sweep YAML setting `OBSERVER_THRESHOLD: 128000` would leave the budget at
+  // the static default 30000 — Tier-3 walks to 30k, observer never fires (its
+  // threshold is now 128k), Tier-3 effectively stuck at 30k tail. Sweep YAMLs
+  // can still decouple by setting both explicitly.
+  if (userThresholds.TIER3_TOKEN_BUDGET === undefined) {
+    thresholds.TIER3_TOKEN_BUDGET = thresholds.OBSERVER_THRESHOLD
+  }
 
   return {
     specificationVersion: 'v3',
