@@ -1,0 +1,28 @@
+name: main_e1_text_lme_mt_n50_mastra_agent
+# 2026-05-22 — Mastra Agent baseline (Track I phase I1) на lme-multiturn,
+# те же tasks/seed/n что в main_e1_text_lme_mt_n50.yaml (4-cell sweep A).
+# Запускается отдельным sweep'ом потому что:
+#   1) на момент планирования предполагалось что mastra_agent.ts ещё
+#      не landed (нужен background coding agent) — оказалось уже готов;
+#   2) отдельный sweep даёт independent budget cap + чистый run_dir для
+#      audit'а.
+#
+# Pairs с sweep A для cross-baseline сравнения. Aggregator (S6) читает
+# оба run_dir'а одновременно.
+#
+# Cost ballpark: mastra-agent на text-bench без tools ≈ mastra_om
+# structurally (single agent.generate() per step) → ~$25-50 на n=50.
+# budget_usd=100 даёт буфер.
+#
+# Run:
+#   set -a && . ./.env && set +a
+#   pnpm tsx scripts/eval.ts --sweep eval/sweeps/main_e1_text_lme_mt_n50_mastra_agent.yaml \
+#     --concurrency=5
+
+benches:
+  - lme-multiturn
+configs:
+  - id: mastra_agent
+    baseline: mastra-agent
+seeds: [42]
+budget_usd: 100

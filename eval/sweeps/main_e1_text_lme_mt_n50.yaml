@@ -1,0 +1,61 @@
+name: main_e1_text_lme_mt_n50
+# 2026-05-22 — AHC (128k vs 30k observer) vs Mastra OM vs Full Context on
+# lme-multiturn @ n=50, single seed=42, actor=gpt-5.4-mini.
+#
+# Why n=50 + this lineup:
+# Прежние lme-mt sweeps крутились n=10-20 (main_e1_text_lme_mt: n=10 на seed=[42]).
+# User просит закрепить competitor numbers на n=50, single seed/model — honest
+# head-to-head. Две вариации AHC чтобы развести два режима observer:
+#   - ahc_full_obs30k:  OBSERVER_THRESHOLD=30000 (current default; observer fires
+#                       on ~10-15 sessions in — realistic compaction).
+#   - ahc_full_obs128k: OBSERVER_THRESHOLD=128000 ≈ half of gpt-5.4-mini's
+#                       user-stated 256k context. AHC почти не fire'ит на типичной
+#                       lme-mt task (40-60 sessions, accumulated ~30-80k tokens).
+#                       Ожидаемый result: AHC ≈ full_context — "AHC когда контекста
+#                       много" режим.
+#
+# Companion sweep: main_e1_text_lme_mt_n50_mastra_agent.yaml (1 cell, n=50,
+# same seed/tasks). Стартует отдельно после того как Track I phase I1
+# (src/eval/baselines/mastra_agent.ts) landed.
+#
+# Cost ballpark (extrapolated from docs/runs/baselines_frozen.md n=10 numbers):
+#   ahc_full_obs30k   × 50 ≈ $60   (compaction kicks in mid-trajectory)
+#   mastra_om         × 50 ≈ $25   (91% cache hit on stable prefix)
+#   ahc_full_obs128k  × 50 ≈ $110  (≈ full_context — observer не fire)
+#   full_context      × 50 ≈ $110
+#   total ≈ $305 → budget_usd=400 даёт буфер.
+#
+# Cell ordering: cost-bounded first (NDJSON resume safe; budget halt order
+# matters — если halt'нёт mid-sweep, гарантируем что хотя бы дешёвые cells
+# полные).
+#
+# Run:
+#   set -a && . ./.env && set +a
+#   pnpm tsx scripts/eval.ts --sweep eval/sweeps/main_e1_text_lme_mt_n50.yaml \
+#     --concurrency=5
+
+benches:
+  - lme-multiturn
+configs:
+  - id: ahc_full_obs30k
+    ahc_flags:
+      TASK_AWARE_EXTRACTION: true
+      TYPE_AWARE_OFFLOAD: true
+      TRAJECTORY_CLASSIFIER: true
+      RECALL_TOOL: true
+    thresholds:
+      OBSERVER_THRESHOLD: 30000
+  - id: mastra_om
+    baseline: mastra_om
+  - id: ahc_full_obs128k
+    ahc_flags:
+      TASK_AWARE_EXTRACTION: true
+      TYPE_AWARE_OFFLOAD: true
+      TRAJECTORY_CLASSIFIER: true
+      RECALL_TOOL: true
+    thresholds:
+      OBSERVER_THRESHOLD: 128000
+  - id: full_context
+    baseline: full_context
+seeds: [42]
+budget_usd: 400
