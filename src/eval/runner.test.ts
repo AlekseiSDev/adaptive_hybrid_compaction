@@ -117,6 +117,78 @@ describe('runSweep — lifecycle smoke (synthetic + stub runners)', () => {
       expect(ndjson.trim().split('\n')).toHaveLength(2)
     }
   })
+
+  test('forceCellsForConfigs wipes cells for named configs, leaves others intact', async () => {
+    // Motivation: config_hash is computed from sweep YAML JSON only, not from
+    // baseline source code. If algo code changes, hash stays same → resume
+    // would silently merge new-code records with old-code records. --force=id
+    // gives users an explicit "wipe and rerun THIS algo's cells" escape hatch.
+    const first = await runSweep(
+      smokePlan,
+      defaultAdapterRegistry,
+      defaultRunnerRegistry,
+      { rootDir: workspace, gitSha: 'test-sha' },
+    )
+    expect(first.configs.every((c) => c.n_completed === 2)).toBe(true)
+
+    const second = await runSweep(
+      smokePlan,
+      defaultAdapterRegistry,
+      defaultRunnerRegistry,
+      {
+        rootDir: workspace,
+        gitSha: 'test-sha',
+        forceCellsForConfigs: new Set(['noop_ahc']),
+      },
+    )
+
+    // Forced cell (noop_ahc) wiped → ran 2 tasks fresh, n_skipped=0.
+    // Non-forced (noop_baseline) → all 2 task_ids in NDJSON, resume skips all.
+    const ahcResult = second.configs.find((c) => c.n_completed === 2)
+    const baselineResult = second.configs.find((c) => c.n_completed === 0)
+    expect(ahcResult).toBeDefined()
+    expect(baselineResult).toBeDefined()
+    expect(ahcResult?.n_skipped).toBe(0)
+    expect(baselineResult?.n_skipped).toBe(2)
+
+    // The non-forced cell still has its original 2 records (file untouched).
+    if (baselineResult) {
+      const ndjson = await readFile(
+        join(baselineResult.runDir, 'records.ndjson'),
+        'utf8',
+      )
+      expect(ndjson.trim().split('\n')).toHaveLength(2)
+    }
+    // The forced cell has fresh 2 records (not 4 = appended).
+    if (ahcResult) {
+      const ndjson = await readFile(
+        join(ahcResult.runDir, 'records.ndjson'),
+        'utf8',
+      )
+      expect(ndjson.trim().split('\n')).toHaveLength(2)
+    }
+  })
+
+  test('forceCellsForConfigs with id not in plan is a no-op', async () => {
+    await runSweep(smokePlan, defaultAdapterRegistry, defaultRunnerRegistry, {
+      rootDir: workspace,
+      gitSha: 'test-sha',
+    })
+    const second = await runSweep(
+      smokePlan,
+      defaultAdapterRegistry,
+      defaultRunnerRegistry,
+      {
+        rootDir: workspace,
+        gitSha: 'test-sha',
+        forceCellsForConfigs: new Set(['does_not_exist']),
+      },
+    )
+    for (const cfg of second.configs) {
+      expect(cfg.n_completed).toBe(0)
+      expect(cfg.n_skipped).toBe(2)
+    }
+  })
 })
 
 describe('runSweep — Instrumentation aggregation (B2)', () => {
@@ -192,6 +264,77 @@ describe('runSweep — Instrumentation aggregation (B2)', () => {
     expect(record.turns[0]?.compaction_events).toHaveLength(1)
     expect(record.turns[0]?.compaction_events[0]?.type).toBe('offload')
     expect(record.turns[0]?.class_signal).toEqual({ class: 'tool_heavy', confidence: 0.85 })
+  })
+
+  // Regression: H Phase 8 (2026-05-22). AHC core baselines populate their
+  // own TurnRecord.compaction_events (PATH A) AND emit the same events via
+  // ctx.instrumentation for trace correlation (PATH B). Pre-fix runner
+  // unconditionally merged both streams, double-counting every observer event
+  // (audit cells showed 2× true density). Fix: if turn already carries events,
+  // trust them and ignore instrumentation re-aggregation for that field.
+  test('events present in both TurnRecord and instrumentation are not double-counted', async () => {
+    const adapter: AdapterRegistry = {
+      resolve: () => ({
+        adapter: {
+          name: 'synthetic',
+          loadTasks: () => Promise.resolve([{ id: 'tsk-1', input: 'x', expected: 'y' }]),
+          prepare: (task) => ({
+            messages: [{ role: 'user', content: [{ type: 'text', text: String(task.input) }] }],
+          }),
+        },
+        grader: { score: () => Promise.resolve({ primary: 1 }) },
+      }),
+    }
+    const runnerReg: RunnerRegistry = {
+      resolve: () => ({
+        name: 'emit',
+        execute: (_conv, ctx) => {
+          const obsEvent = {
+            kind: 'compaction' as const,
+            payload: {
+              type: 'observer' as const,
+              turn_index: 0,
+              before_bytes: 30000,
+              after_bytes: 6000,
+            },
+          }
+          ctx.instrumentation?.(obsEvent)
+          return Promise.resolve({
+            text: 'y',
+            turns: [
+              {
+                turn_index: 0,
+                input_tokens: 10,
+                output_tokens: 5,
+                wall_clock_ms: 1,
+                recall_events: [],
+                compaction_events: [obsEvent.payload],
+              },
+            ],
+            errors: [],
+            totals: { input: 10, output: 5 },
+            cost_usd: 0.01,
+          })
+        },
+      }),
+    }
+    const plan: SweepPlan = {
+      name: 'no-dup',
+      benches: ['synthetic'],
+      configs: [{ id: 'emit', baseline: 'emit' }],
+      seeds: [0],
+      budget_usd: 10,
+    }
+    const result = await runSweep(plan, adapter, runnerReg, { rootDir: workspace, gitSha: 't' })
+    const cfg = result.configs[0]
+    expect(cfg).toBeDefined()
+    if (!cfg) return
+    const ndjson = await readFile(join(cfg.runDir, 'records.ndjson'), 'utf8')
+    const record = JSON.parse(ndjson.trim()) as {
+      turns: { compaction_events: { type: string }[] }[]
+    }
+    expect(record.turns[0]?.compaction_events).toHaveLength(1)
+    expect(record.turns[0]?.compaction_events[0]?.type).toBe('observer')
   })
 })
 

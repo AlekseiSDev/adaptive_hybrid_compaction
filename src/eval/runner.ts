@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { rm } from 'node:fs/promises'
 import { context, SpanStatusCode, trace, type Tracer } from '@opentelemetry/api'
 import {
   appendRecord,
@@ -86,6 +87,13 @@ export type RunSweepOptions = {
   // (unlike dryRun.nTasksPerCell). Used for "mini-smoke" mode: 1 task per
   // cell live spend → validity check → auto-resume to full sweep skips those.
   maxTasksPerCell?: number
+  // Escape hatch for "code changed but YAML didn't" scenario. `config_hash` is
+  // computed from sweep YAML only, not from baseline source code — so editing
+  // e.g. `src/core/observer.ts` and re-running silently appends new-code
+  // records to old-code records.ndjson. Listing a `config.id` here deletes the
+  // cell-dir (all bench × seed combinations for that config) before the run.
+  // CLI flag: `--force=<config_id>[,<id>...]` in scripts/eval.ts.
+  forceCellsForConfigs?: ReadonlySet<string>
 }
 
 const TASK_INPUT_ATTR = 'langfuse.observation.input'
@@ -413,6 +421,14 @@ export async function computeTotalTasks(
   return total
 }
 
+// AHC core baselines populate TurnRecord.{recall,compaction}_events themselves
+// (PATH A in src/eval/runners/ahc_core.ts) and also emit the same events via
+// ctx.instrumentation for trace correlation (PATH B). Unconditionally merging
+// both streams double-counted every event — H6.5 audit numbers ran at 2× true
+// density. Baselines without their own per-turn aggregation (tau-bench-retail
+// per its episode-turns.test.ts:43 note) still rely on instrumentation
+// backfill, so the fallback kicks in only when the turn arrives empty.
+// class_signal stays instrumentation-only (no PATH A duplicate exists).
 function enrichTurnsWithEvents(
   turns: readonly TurnRecord[],
   events: readonly InstrumentationEvent[],
@@ -421,8 +437,10 @@ function enrichTurnsWithEvents(
     const part = aggregateTurnEvents(events, turn.turn_index)
     return {
       ...turn,
-      recall_events: [...turn.recall_events, ...part.recall_events],
-      compaction_events: [...turn.compaction_events, ...part.compaction_events],
+      recall_events:
+        turn.recall_events.length > 0 ? turn.recall_events : part.recall_events,
+      compaction_events:
+        turn.compaction_events.length > 0 ? turn.compaction_events : part.compaction_events,
       ...(part.class_signal !== undefined ? { class_signal: part.class_signal } : {}),
     }
   })
@@ -526,6 +544,12 @@ export async function runSweep(
       const config_id = computeConfigId(config)
       for (const seed of plan.seeds) {
         const runDir = runDirFor(options.rootDir, bench, config_id, seed)
+        // --force=<config.id>: wipe cell-dir before resume read so old NDJSON
+        // can't merge with fresh-code records. No-op if dir doesn't exist.
+        if (!dryRun && options.forceCellsForConfigs?.has(config.id) === true) {
+          console.warn(`[runSweep] --force: wiping ${runDir}`)
+          await rm(runDir, { recursive: true, force: true })
+        }
         // Dry-run skips resume logic — every cell starts fresh, no NDJSON read.
         const completed = dryRun ? new Set<string>() : await readCompletedTaskIds(runDir)
         const tasks = await adapter.loadTasks(seed)

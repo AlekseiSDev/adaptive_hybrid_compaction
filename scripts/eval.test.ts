@@ -247,3 +247,34 @@ describe('parseArgs — --concurrency + --max-tasks-per-cell (E1)', () => {
     expect(args.skipAuthCheck).toBe(false)
   })
 })
+
+describe('parseArgs — --force=<config_id> (re-run override for code changes)', () => {
+  test('default: force is empty set', () => {
+    const args = parseArgs(['--sweep', 'p.yaml'])
+    expect(args.force).toEqual(new Set<string>())
+  })
+
+  test('--force=ahc_full parses single config_id', () => {
+    const args = parseArgs(['--sweep', 'p.yaml', '--force=ahc_full'])
+    expect(args.force).toEqual(new Set(['ahc_full']))
+  })
+
+  test('--force=a,b,c parses CSV', () => {
+    const args = parseArgs(['--sweep', 'p.yaml', '--force=ahc_full,full_context'])
+    expect(args.force).toEqual(new Set(['ahc_full', 'full_context']))
+  })
+
+  test('--force=a --force=b accumulates across flags (repeatable)', () => {
+    const args = parseArgs(['--sweep', 'p.yaml', '--force=ahc_full', '--force=mastra_om'])
+    expect(args.force).toEqual(new Set(['ahc_full', 'mastra_om']))
+  })
+
+  test('--force=ahc_full , full_context strips whitespace', () => {
+    const args = parseArgs(['--sweep', 'p.yaml', '--force=ahc_full , full_context'])
+    expect(args.force).toEqual(new Set(['ahc_full', 'full_context']))
+  })
+
+  test('--force= (empty value) rejects', () => {
+    expect(() => parseArgs(['--sweep', 'p.yaml', '--force='])).toThrow(/expects.*config_id/)
+  })
+})

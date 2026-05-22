@@ -22,6 +22,11 @@ type CliArgs = {
   concurrency: number
   maxTasksPerCell: number | undefined
   skipAuthCheck: boolean
+  // --force=<config_id>[,<id>...] (repeatable). Wipes prior records.ndjson /
+  // summary.json / meta.json for the named configs before running. Use when
+  // baseline source code changed but YAML config didn't (so config_hash stayed
+  // the same → NDJSON skip would silently mix old-code + new-code records).
+  force: Set<string>
 }
 
 const DRY_RUN_DEFAULT_N_PER_CELL = 2
@@ -35,6 +40,7 @@ export function parseArgs(argv: string[]): CliArgs {
   let concurrency = CONCURRENCY_DEFAULT
   let maxTasksPerCell: number | undefined
   let skipAuthCheck = false
+  const force = new Set<string>()
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i]
     if (a === '--sweep') {
@@ -73,16 +79,28 @@ export function parseArgs(argv: string[]): CliArgs {
       maxTasksPerCell = parsed
     } else if (a === '--skip-auth-check') {
       skipAuthCheck = true
+    } else if (a !== undefined && a.startsWith('--force=')) {
+      const raw = a.slice('--force='.length)
+      const ids = raw
+        .split(',')
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0)
+      if (ids.length === 0) {
+        throw new Error(
+          `error: --force expects config_id (or CSV list), got "${raw}"`,
+        )
+      }
+      for (const id of ids) force.add(id)
     }
   }
   if (!sweep) {
     throw new Error(
       'usage: tsx scripts/eval.ts --sweep <path/to/sweep.yaml> ' +
         '[--dry-run [--n-per-cell=N]] [--concurrency=N] [--max-tasks-per-cell=N] ' +
-        '[--skip-auth-check]',
+        '[--skip-auth-check] [--force=<config_id>[,<id>...]]',
     )
   }
-  return { sweep, dryRun, nPerCell, concurrency, maxTasksPerCell, skipAuthCheck }
+  return { sweep, dryRun, nPerCell, concurrency, maxTasksPerCell, skipAuthCheck, force }
 }
 
 // Inspects sweep configs to determine which auth paths the run will exercise,
@@ -259,6 +277,9 @@ async function main(): Promise<void> {
               concurrency: args.concurrency,
               ...(args.maxTasksPerCell !== undefined
                 ? { maxTasksPerCell: args.maxTasksPerCell }
+                : {}),
+              ...(args.force.size > 0
+                ? { forceCellsForConfigs: args.force }
                 : {}),
             },
           )
