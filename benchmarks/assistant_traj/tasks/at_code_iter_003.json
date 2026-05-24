@@ -8,153 +8,35 @@
       "content": [
         {
           "type": "text",
-          "text": "Нужен Python-скрипт `sd_prompt_builder.py`, который принимает список персонажей в JSON (имя, внешность, одежда, настроение, признаки) и собирает один Stable Diffusion промпт на английском с группой персонажей. Сначала набросай минимальную версию."
+          "text": "Создай изображение .Вот требования к изображению:- что должно быть на изображении: Проанализируй следующих персонажей из цикла книг &quot;Сказания Земноморья&quot;: 1) Аррен 2) Тень Аррена 3) Терру 4) Тенар 5) Ястреб (Гёд) 6) Паук 7) Печварри 8) Харе 9) Калессин Ссылайся именно на книги. Выпиши подробное описание по каждому персонажу для создания промта на русском языке, для дальнейшей визуализации. Описывай: их внешность, повадки, одежду, стабильное настроение, черты лица, характер и прочее.. Твой промпт должен быть понятным и полным, но не слишком длинным, пиши его только на английском и используй синтаксис Stable Diffusion. Если нужно использовать изображения из контекста, то передай их URL в поле &#39;images&#39;Не задавай уточняющих вопросов, создай изображение с помощью функции create_image и выведи в ответе ссылку на изображение."
         }
-      ]
-    },
-    {
-      "role": "assistant",
-      "content": [
+      ],
+      "expected_tool_calls": [
         {
-          "type": "text",
-          "text": "Минимальная версия:\n\n```python\nimport json, sys\n\ndef build_prompt(characters: list[dict]) -> str:\n    parts = []\n    for c in characters:\n        chunk = f\"{c['name']}: {c['appearance']}, wearing {c['clothing']}, {c['mood']}\"\n        parts.append(chunk)\n    return \"group portrait, \" + \"; \".join(parts) + \", detailed, cinematic lighting\"\n\nif __name__ == '__main__':\n    data = json.load(open(sys.argv[1]))\n    print(build_prompt(data['characters']))\n```\n\nИспользование: `python sd_prompt_builder.py chars.json`."
-        }
-      ]
-    },
-    {
-      "role": "user",
-      "content": [
-        {
-          "type": "text",
-          "text": "Запустил с 9 персонажами Земноморья (Аррен, Тень Аррена, Терру, Тенар, Гед, Паук, Печварри, Харе, Калессин) — промпт получился >800 токенов, SD обрезает. Нужно ограничение длины и приоритизация: главные персонажи первыми, второстепенные сжато."
-        }
-      ]
-    },
-    {
-      "role": "assistant",
-      "content": [
-        {
-          "type": "text",
-          "text": "Добавил приоритет и токен-бюджет:\n\n```python\nMAX_TOKENS = 75  # SD-1.5 single-clip limit; bump до 150 для SDXL\n\ndef estimate_tokens(s: str) -> int:\n    return len(s.split()) + s.count(',')\n\ndef build_prompt(characters: list[dict], max_tokens: int = MAX_TOKENS) -> str:\n    # priority: primary first, then secondary; truncate secondary aggressively\n    primary = [c for c in characters if c.get('role') == 'primary']\n    secondary = [c for c in characters if c.get('role') != 'primary']\n    parts = [f\"{c['name']}: {c['appearance']}, {c['clothing']}, {c['mood']}\" for c in primary]\n    for c in secondary:\n        # короткая форма: только имя + 2 ключевых атрибута\n        parts.append(f\"{c['name']} ({c['appearance'].split(',')[0]})\")\n    prompt = \"group portrait, \" + \"; \".join(parts) + \", cinematic lighting, detailed\"\n    while estimate_tokens(prompt) > max_tokens and len(parts) > 1:\n        parts.pop()  # drop least-priority tail\n        prompt = \"group portrait, \" + \"; \".join(parts) + \", cinematic lighting, detailed\"\n    return prompt\n```\n\nДобавь в JSON поле `role: \"primary\" | \"secondary\"` для каждого персонажа."
-        }
-      ]
-    },
-    {
-      "role": "user",
-      "content": [
-        {
-          "type": "text",
-          "text": "Got TypeError: 'NoneType' object is not subscriptable on c['clothing'] — у Калессина (дракон) нет одежды, ставил null."
-        }
-      ]
-    },
-    {
-      "role": "assistant",
-      "content": [
-        {
-          "type": "text",
-          "text": "Нужны safe accessors. Для не-гуманоидов (драконы) одежда не применима:\n\n```python\ndef format_character(c: dict) -> str:\n    fields = [c.get('appearance', '')]\n    if c.get('clothing'):\n        fields.append(f\"wearing {c['clothing']}\")\n    if c.get('mood'):\n        fields.append(c['mood'])\n    if c.get('species') and c['species'] != 'human':\n        fields.insert(0, c['species'])\n    return f\"{c['name']}: \" + \", \".join(f for f in fields if f)\n```\n\nПодстави в `build_prompt` вместо inline f-string. Для Калессина в JSON ставь `\"species\": \"dragon\", \"clothing\": null` — теперь skip-аем gracefully."
-        }
-      ]
-    },
-    {
-      "role": "user",
-      "content": [
-        {
-          "type": "text",
-          "text": "Хорошо. Теперь добавь негативный промпт — стандартный набор для SD: «blurry, low quality, deformed, extra limbs, watermark, text». Скрипт должен возвращать обе строки."
-        }
-      ]
-    },
-    {
-      "role": "assistant",
-      "content": [
-        {
-          "type": "text",
-          "text": "Меняю return на dataclass:\n\n```python\nfrom dataclasses import dataclass, asdict\n\nDEFAULT_NEGATIVE = \"blurry, low quality, deformed, extra limbs, watermark, text, mutated hands, bad anatomy\"\n\n@dataclass\nclass SDPrompt:\n    positive: str\n    negative: str\n\ndef build_prompt(characters: list[dict], max_tokens: int = MAX_TOKENS,\n                 extra_negative: str | None = None) -> SDPrompt:\n    pos = _build_positive(characters, max_tokens)\n    neg = DEFAULT_NEGATIVE\n    if extra_negative:\n        neg += \", \" + extra_negative\n    return SDPrompt(positive=pos, negative=neg)\n```\n\nВ main печатай как JSON: `print(json.dumps(asdict(build_prompt(data['characters'])), indent=2))`."
-        }
-      ]
-    },
-    {
-      "role": "user",
-      "content": [
-        {
-          "type": "text",
-          "text": "Добавь CLI-флаги: --max-tokens (по умолчанию 75), --model {sd15,sdxl,flux} — для sdxl бюджет 150, для flux 250. И --output (stdout | путь к файлу)."
-        }
-      ]
-    },
-    {
-      "role": "assistant",
-      "content": [
-        {
-          "type": "text",
-          "text": "Использую argparse:\n\n```python\nimport argparse\n\nMODEL_BUDGETS = {'sd15': 75, 'sdxl': 150, 'flux': 250}\n\ndef parse_args() -> argparse.Namespace:\n    p = argparse.ArgumentParser()\n    p.add_argument('input', help='path to characters JSON')\n    p.add_argument('--max-tokens', type=int, default=None,\n                   help='override model budget')\n    p.add_argument('--model', choices=MODEL_BUDGETS.keys(), default='sd15')\n    p.add_argument('--output', default='-', help='\"-\" for stdout or file path')\n    return p.parse_args()\n\ndef resolve_budget(args) -> int:\n    return args.max_tokens if args.max_tokens else MODEL_BUDGETS[args.model]\n```\n\nВ main: `budget = resolve_budget(args); result = build_prompt(data['characters'], budget)`. Output: если `--output -` → stdout, иначе `Path(args.output).write_text(json.dumps(asdict(result), indent=2, ensure_ascii=False))`."
-        }
-      ]
-    },
-    {
-      "role": "user",
-      "content": [
-        {
-          "type": "text",
-          "text": "И последнее: если JSON-файл не валиден или нет ни одного `role: primary` — exit 1 с понятной ошибкой в stderr."
-        }
-      ]
-    },
-    {
-      "role": "assistant",
-      "content": [
-        {
-          "type": "text",
-          "text": "```python\ndef load_characters(path: str) -> list[dict]:\n    try:\n        raw = json.loads(Path(path).read_text(encoding='utf-8'))\n    except json.JSONDecodeError as e:\n        print(f'error: invalid JSON: {e}', file=sys.stderr)\n        sys.exit(1)\n    chars = raw.get('characters')\n    if not isinstance(chars, list) or not chars:\n        print('error: JSON must contain non-empty \"characters\" array', file=sys.stderr)\n        sys.exit(1)\n    if not any(c.get('role') == 'primary' for c in chars):\n        print('error: at least one character must have role=\"primary\"', file=sys.stderr)\n        sys.exit(1)\n    return chars\n```"
-        }
-      ]
-    },
-    {
-      "role": "user",
-      "content": [
-        {
-          "type": "text",
-          "text": "Собери всё в финальный self-contained файл sd_prompt_builder.py — со всеми накопленными фичами (приоритеты, токен-бюджет, безопасные accessors, негативный промпт, CLI с --max-tokens/--model/--output, валидация). Один python-блок, без комментариев перед ним и без частичных фрагментов."
+          "tool_name": "image_gen",
+          "required": true,
+          "args_match": "subset"
         }
       ]
     }
   ],
   "tools_available": [
     {
-      "name": "run_python",
-      "description": "Execute a Python snippet and return stdout/stderr.",
-      "input_schema": {}
+      "name": "image_gen",
+      "description": "Generate an image from a text prompt. Returns image URL plus short caption.",
+      "input_schema": {
+        "type": "object",
+        "description": "Generate an image from a text prompt. Returns image URL plus short caption. (concrete shape: TOOL_INPUT_SCHEMAS.image_gen)"
+      }
     }
   ],
   "evaluation": {
-    "strategy": "composite",
-    "aggregate": "all",
-    "rules": [
-      {
-        "strategy": "regex",
-        "pattern": "^```python\\b[\\s\\S]+?```\\s*$",
-        "flags": "m"
-      },
-      {
-        "strategy": "regex",
-        "pattern": "argparse",
-        "flags": ""
-      },
-      {
-        "strategy": "regex",
-        "pattern": "MODEL_BUDGETS|model_budgets",
-        "flags": ""
-      },
-      {
-        "strategy": "llm_judge",
-        "rubric_id": "code_iter",
-        "expected_summary": "Self-contained Python file sd_prompt_builder.py wrapped in a single ```python``` block: (1) reads characters from JSON file path argument; (2) validates JSON parses + 'characters' array non-empty + at least one role=='primary', otherwise sys.exit(1) with stderr message; (3) safe field access (skip clothing when null, prepend species when non-human, handle missing fields gracefully); (4) priority handling: primary characters first with full detail, secondary with compact form; (5) token budget enforcement with whitespace+comma estimator, pops least-priority entries until under budget; (6) SDPrompt dataclass returning positive + negative strings; default negative includes blurry/deformed/watermark; (7) CLI flags --max-tokens, --model {sd15,sdxl,flux} with budgets 75/150/250, --output ('-' for stdout or filepath); (8) output as JSON via json.dumps with indent=2 and ensure_ascii=False. No prose around the code block."
-      }
-    ]
+    "strategy": "llm_judge",
+    "rubric_id": "code_iter",
+    "expected_summary": "Вот групповой портрет девяти ключевых персонажей «Сказаний Земноморья»:\n\n![Групповой портрет персонажей Земноморья](https://fb2679aa-8d64-4a3c-8ef7-ba93abea130b.selstorage.ru/9e5a6739-906c-4c6e-a717-b82d1fd944b8_f3eff4a3-ad53-40d9-801c-0f71c0436638.png)\n\nНа изображении представлены все девять персонажей на фоне архипелага Земноморья:\n\n| Персонаж | Ключевые визуальные черты |\n|---|---|\n| **Аррен** | Юный смуглый принц в дорожном плаще, рука на мече |\n| **Тень Аррена** | Призрачный тёмный двойник из дыма и теней |\n| **Терру** | Девочка с ожоговыми рубцами на половине лица, в крестьянском платье…"
   },
   "provenance": {
-    "original_session_hash": "DBG.json::DBG1"
+    "original_session_hash": "v2.8-20260508-postsanitize.json::DBG1#2",
+    "review_signoff": "<draft: jay-canvas import; needs hand-extension + review>"
   }
 }

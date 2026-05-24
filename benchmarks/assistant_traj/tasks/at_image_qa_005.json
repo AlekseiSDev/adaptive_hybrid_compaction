@@ -1,59 +1,50 @@
 {
   "task_id": "at_image_qa_005",
   "category": "image_qa",
-  "source": "synthetic",
+  "source": "opensource",
   "turns": [
     {
       "role": "user",
       "content": [
-        { "type": "image", "path": "attachments/at_image_qa_005/1.svg", "alt": "Order Lifecycle FSM diagram with 8 states and labelled transitions" },
-        { "type": "text", "text": "На диаграмме — конечный автомат жизненного цикла заказа в нашей системе. Перечисли все состояния (ровно как они подписаны), и для каждого скажи: это normal / terminal / error-recovery (цвет на легенде)." }
-      ]
-    },
-    {
-      "role": "assistant",
-      "content": [
-        { "type": "text", "text": "Состояния (8 шт.) и их класс по легенде:\n\n1. **PENDING** — normal (голубой)\n2. **VALIDATED** — normal\n3. **CHARGED** — normal\n4. **SHIPPED** — terminal (зелёный)\n5. **REJECTED** — error/recovery (розовый)\n6. **REFUNDED** — error/recovery\n7. **RETURNED** — normal (на диаграмме раскрашен голубым, хотя семантически это recovery-like)\n8. **ORPHAN** — normal (с подписью «(no transitions)»)\n\nЗамечание: классификация на диаграмме базируется только на цвете заливки. RETURNED стилизован как normal, хотя обычно это recovery; ORPHAN — normal-окрашенный, но изолирован." }
-      ]
-    },
-    {
-      "role": "user",
-      "content": [
-        { "type": "text", "text": "Хорошо. Теперь перечисли все переходы в CSV: from,to,event. Каждый — отдельная строка. Header строкой. Только то что нарисовано (стрелки)." }
-      ]
-    },
-    {
-      "role": "assistant",
-      "content": [
-        { "type": "text", "text": "```\nfrom,to,event\nPENDING,VALIDATED,validate\nVALIDATED,CHARGED,charge\nCHARGED,SHIPPED,fulfil\nVALIDATED,REJECTED,decline\nCHARGED,REFUNDED,refund\nSHIPPED,RETURNED,return\nRETURNED,REFUNDED,refund\nREJECTED,PENDING,retry\n```\n\nИтого 8 переходов. ORPHAN не участвует ни в одном — изолированное состояние." }
-      ]
-    },
-    {
-      "role": "user",
-      "content": [
-        { "type": "text", "text": "Найди в диаграмме все «mertvye» / нездоровые места: (а) недостижимые состояния (нет ни одного входящего перехода извне initial), (б) состояния-тупики (нет выхода, но не помечены terminal — потенциальный stuck), (в) циклы (любые)." }
-      ]
-    },
-    {
-      "role": "assistant",
-      "content": [
-        { "type": "text", "text": "Принимаю PENDING за initial state (типичная конвенция для order-lifecycle).\n\n**(а) Недостижимые состояния** (нет входящих переходов):\n- **ORPHAN** — никаких входящих стрелок, явно отмечено «(no transitions)». Изолировано, мёртвый код в схеме.\n\n**(б) Тупики (нет исходящих, но не помечены terminal):**\n- **REJECTED** — единственный выход `retry → PENDING`. НЕ тупик.\n- **REFUNDED** — НЕТ исходящих переходов на диаграмме, и НЕ помечен terminal (стиль error/recovery, не зелёный). Это потенциальный stuck-state — нужно явно либо пометить terminal, либо добавить переход (например, archive). **Это bug-smell.**\n- **RETURNED** — есть выход (`refund → REFUNDED`), не тупик.\n- **ORPHAN** — тупик в смысле \"нет ни входа ни выхода\". Уже учтён в (а).\n\n**(в) Циклы:**\n- **VALIDATED → REJECTED → PENDING → VALIDATED** — цикл длины 3 через retry-петлю. По смыслу нормальный (multiple validation attempts), но требует counter/limit в реализации, иначе потенциальный infinite-retry storm." }
-      ]
-    },
-    {
-      "role": "user",
-      "content": [
-        { "type": "text", "text": "Хороший анализ. Финальный шаг: собери Markdown-отчёт по диаграмме для review-комментария в Jira. Структура: # FSM Review · ## States summary · ## Transitions (с встроенной CSV-таблицей) · ## Issues found · ## Recommendations. Issues — учитывая всё что мы выявили. Recommendations — 3-5 конкретных action items. Готов к копи-пасту." }
+        {
+          "type": "image",
+          "path": "attachments/at_image_qa_005/1.png"
+        },
+        {
+          "type": "image",
+          "path": "attachments/at_image_qa_005/2.png"
+        },
+        {
+          "type": "text",
+          "text": "Image #1: Бирка должна быть сзади на воротнике, как будто это новая вещь"
+        }
+      ],
+      "expected_tool_calls": [
+        {
+          "tool_name": "image_gen",
+          "required": true,
+          "args_match": "subset"
+        }
       ]
     }
   ],
-  "tools_available": [],
+  "tools_available": [
+    {
+      "name": "image_gen",
+      "description": "Generate an image from a text prompt. Returns image URL plus short caption.",
+      "input_schema": {
+        "type": "object",
+        "description": "Generate an image from a text prompt. Returns image URL plus short caption. (concrete shape: TOOL_INPUT_SCHEMAS.image_gen)"
+      }
+    }
+  ],
   "evaluation": {
     "strategy": "llm_judge",
     "rubric_id": "image_qa",
-    "expected_summary": "Single consolidated Markdown report ready to paste into a Jira comment. Required structure (H1 + 4 × H2 sections, in order): «# FSM Review» → «## States summary» (8 states listed: PENDING, VALIDATED, CHARGED, SHIPPED, REJECTED, REFUNDED, RETURNED, ORPHAN — with their normal/terminal/error classification per the diagram) → «## Transitions» (embedded CSV table with header from,to,event and exactly 8 transition rows matching the diagram: PENDING→VALIDATED validate, VALIDATED→CHARGED charge, CHARGED→SHIPPED fulfil, VALIDATED→REJECTED decline, CHARGED→REFUNDED refund, SHIPPED→RETURNED return, RETURNED→REFUNDED refund, REJECTED→PENDING retry) → «## Issues found» (must call out: ORPHAN unreachable, REFUNDED stuck-state / not marked terminal, REJECTED→PENDING retry loop without bounded counter) → «## Recommendations» (3–5 concrete actions: remove ORPHAN or wire it in; mark REFUNDED as terminal or add archive transition; add max-retry counter; possibly review RETURNED colour classification). Style formal, technical, Word/Markdown-ready, no introductory chatter."
+    "expected_summary": "Бирка из второго изображения добавлена на заднюю часть воротника, выглядит как новая вещь:\n\n![Отредактированное изображение с биркой на воротнике](https://fb2679aa-8d64-4a3c-8ef7-ba93abea130b.selstorage.ru/4136b9cb-4ac6-4d89-bcf6-caa3a75c7cc2_4b73a40f-6f1b-45f0-ab53-d9d4106fa96b.png)"
   },
   "provenance": {
-    "review_signoff": ""
+    "original_session_hash": "v2.8-20260508-postsanitize.json::IE6",
+    "review_signoff": "<draft: jay-canvas import; needs hand-extension + review>"
   }
 }

@@ -1,58 +1,42 @@
 {
   "task_id": "at_research_write_005",
   "category": "research_write",
-  "source": "synthetic",
+  "source": "opensource",
   "turns": [
     {
       "role": "user",
       "content": [
-        { "type": "text", "text": "Подготовь черновик технического RFC для нашей внутренней библиотеки логирования: предлагаем добавить structured-context propagation (request_id, user_id, tenant) через async_hooks в Node.js. Нужно: motivation, проблема которую решаем, предлагаемый API, обратная совместимость, рисует ли это перформанс-удар. Целевая аудитория — senior backend, формат — Markdown, ~600 слов." }
-      ]
-    },
-    {
-      "role": "assistant",
-      "content": [
-        { "type": "text", "text": "# RFC-0042: Structured-context propagation в @ourcorp/logger\n\n**Status:** Draft · **Author:** TBD · **Last updated:** TBD\n\n## 1. Motivation\nСейчас наши request-логи теряют trace-контекст при пересечении async-границ (setTimeout, Promise chains, event handlers). Команда SRE регулярно теряет 10–20 минут на каждый инцидент: восстанавливает request_id, user_id, tenant_id вручную по timestamp'ам. С ростом QPS (12k+/s) ручная сшивка стала невозможной.\n\n## 2. Проблема\n- AsyncLocalStorage (Node 14+) поддерживает context propagation, но мы его не используем.\n- Манulalная передача через function-параметры захламляет signatures.\n- Existing solution (request-context на cls-hooked) deprecated с Node 16, есть memory leak.\n\n## 3. Предлагаемый API\n```typescript\nimport { withContext, getContext, logger } from '@ourcorp/logger'\n\nawait withContext({ request_id, user_id, tenant }, async () => {\n  await handleRequest()  // все downstream logger.info() автоматически включат контекст\n})\n```\n\n## 4. Обратная совместимость\nNon-breaking: existing logger.info(msg, meta) работает unchanged. Context просто добавляется в JSON output если присутствует. Migration — opt-in.\n\n## 5. Performance\nAsyncLocalStorage в Node 22+ — overhead ~3% на async-heavy workload (Node TSC benchmark). Для нашего профиля (~95% I/O-bound) → ≤1%. Бенчмарк перед мерджем.\n\n## 6. Security\nКонтекст сериализуется в JSON-лог. PII (email/phone) в context — запрещено; добавим whitelisting middleware." }
-      ]
-    },
-    {
-      "role": "user",
-      "content": [
-        { "type": "text", "text": "Хороший каркас. Нужно расширить раздел 3 (API) — добавь contextual logger, sub-context (наследование от parent), и пример как это работает с Express middleware. Также добавь раздел «Alternatives considered» — почему async_hooks/ALS, а не explicit context-passing или OpenTelemetry-baggage." }
-      ]
-    },
-    {
-      "role": "assistant",
-      "content": [
-        { "type": "text", "text": "Хорошо, расширяю.\n\n## 3. Предлагаемый API (расширенный)\n\n### 3.1 Базовый\n```typescript\nimport { withContext, getContext, logger } from '@ourcorp/logger'\n\nawait withContext({ request_id, user_id }, async () => {\n  logger.info('handling request')\n  // → {\"msg\":\"handling request\",\"request_id\":\"abc\",\"user_id\":42,\"ts\":...}\n})\n```\n\n### 3.2 Sub-context (наследование)\n```typescript\nawait withContext({ request_id }, async () => {\n  await withContext({ user_id }, async () => {\n    logger.info('x')\n    // → {request_id, user_id, msg:'x'}\n    getContext()  // { request_id, user_id }\n  })\n})\n```\nSub-context shallow-merge'ит c parent; конфликт ключей → child wins.\n\n### 3.3 Express middleware\n```typescript\napp.use((req, res, next) => {\n  const ctx = { request_id: req.id, user_id: req.user?.id, route: req.path }\n  withContext(ctx, () => next())\n})\n```\nДальше любой logger.info() в handler'е downstream получит контекст без явной передачи.\n\n### 3.4 Contextual logger (alternative API)\n```typescript\nconst log = logger.child({ component: 'payment' })\nlog.info('processing')  // → {component:'payment', request_id:..., msg:'processing'}\n```\n\n## 7. Alternatives considered\n\n**(а) Explicit context-passing.** Каждый async fn принимает `ctx: Context` first arg. Pros: explicit, no magic. Cons: viral type change, легко забыть пробросить, тысячи строк boilerplate. Уже отвергнуто на ревью.\n\n**(б) OpenTelemetry baggage.** OTel propagates baggage через trace context. Pros: industry standard. Cons: OTel-stack — heavy dep, нужна полная OTel-инициализация SDK; мы не используем OTel в логах, только в metrics. Сейчас в pipeline'е добавлять OTel ради контекста — overhead не оправдан.\n\n**(в) Continuation-local storage (cls-hooked).** Pros: знакомая API. Cons: deprecated, memory leak в Node 16+. Уже горели.\n\n**(г) AsyncLocalStorage (наш выбор).** Built-in в Node 14+, stable, нет leak'ов в 22+, минимальный overhead, не требует доп. деп." }
-      ]
-    },
-    {
-      "role": "user",
-      "content": [
-        { "type": "text", "text": "Добавь раздел «Migration plan» — как раскатываем существующие сервисы (~30 шт), какие риски, есть ли feature flag, как откатывать. И раздел «Open questions» где честно перечислены вопросы которые ещё не решены." }
-      ]
-    },
-    {
-      "role": "assistant",
-      "content": [
-        { "type": "text", "text": "## 8. Migration plan\n\n**Phase 0 (week 1):** Релиз `@ourcorp/logger@2.0.0` с новыми API + `LOGGER_CONTEXT_ENABLED` env-флаг (default false → ничего не меняется). Все сервисы продолжают работать с текущим logger.\n\n**Phase 1 (weeks 2–3):** Pilot — 3 сервиса (payment-api, user-service, billing). Команды владельцев включают `LOGGER_CONTEXT_ENABLED=true` + добавляют Express middleware. Метрики:\n- p50/p99 latency до и после (ожидаем дельту ≤ 2%)\n- memory RSS (ожидаем рост ≤ 5%)\n- log volume (без изменений; добавляются поля, не записи)\n\n**Phase 2 (weeks 4–6):** Roll-out на все 30 сервисов batch'ами по 5. Owner каждого сервиса PR'ит middleware. SRE мониторит dashboards. Откат — `LOGGER_CONTEXT_ENABLED=false` + redeploy (≤ 5 минут).\n\n**Phase 3 (week 7):** Удаляем legacy cls-hooked зависимость из всех сервисов.\n\n### Риски\n- **R1: ALS overhead на CPU-bound сервисах.** Mitigation: pilot covers CPU-bound (billing). Если >2% — выводим из migration scope.\n- **R2: Случайный leak PII в context.** Mitigation: lint-rule в @ourcorp/eslint-plugin: запрещаем добавлять в `withContext({...})` поля из PII-list (email, phone, address).\n- **R3: Логи становятся «толще», storage растёт.** Mitigation: prelim измерение — добавляется ~80 bytes/log на средний запрос. Текущий storage 4TB/month → +0.6TB → ОК.\n\n## 9. Open questions\n\n1. **Async errors propagation.** Если throw в `withContext()`, контекст автоматически очищается? AsyncLocalStorage docs утверждают yes, но нужен интеграционный тест.\n2. **Worker threads.** Контекст НЕ пересекает worker boundary (это by-design ALS). Сервисы которые используют workers (image-processing, pdf-export) — как им быть? Один из вариантов — explicit passing через postMessage. Решить до Phase 1.\n3. **Зависимость от Node ≥ 22.** Сейчас 4 сервиса на Node 20 LTS. Bump'нуть до 22 — отдельный план; держим Node ≥ 18 как минимум для logger v2 (ALS stable с 14, но getStore performance улучшен в 22+).\n4. **Тестируемость.** Как mock'ать ALS в unit-тестах? Предлагаем `withContext.mockOnce()` helper в @ourcorp/logger-test. Пока не реализован.\n5. **Compatibility c bull/bullmq workers.** Job processors используют ALS внутри bullmq — конфликт namespace'ов? Нужен прототип." }
-      ]
-    },
-    {
-      "role": "user",
-      "content": [
-        { "type": "text", "text": "Хорошо. Соберём ФИНАЛЬНУЮ версию RFC одним документом, готовым к коммиту в repo/docs/rfcs/0042-logger-context.md: пронумеруй секции 1–9, добавь Table of Contents в начало, обнови Status на «Draft (RFC author: TBD)», убери все TBD-плейсхолдеры на «N/A — see RFC owner» где это уместно. Markdown, без лишней болтовни." }
+        {
+          "type": "text",
+          "text": "Последние новости про запуски SpaceX Starship — что там с апрельскими испытаниями?"
+        }
+      ],
+      "expected_tool_calls": [
+        {
+          "tool_name": "google_search",
+          "required": true,
+          "args_match": "subset"
+        }
       ]
     }
   ],
-  "tools_available": [],
+  "tools_available": [
+    {
+      "name": "google_search",
+      "description": "Web search via Google. Returns top-N results as title+snippet+URL list.",
+      "input_schema": {
+        "type": "object",
+        "description": "Web search via Google. Returns top-N results as title+snippet+URL list. (concrete shape: TOOL_INPUT_SCHEMAS.google_search)"
+      }
+    }
+  ],
   "evaluation": {
     "strategy": "llm_judge",
     "rubric_id": "research_write",
-    "expected_summary": "Финальный консолидированный RFC-документ в Markdown, готовый к коммиту в docs/rfcs/0042-logger-context.md. Обязательная структура: H1 заголовок «RFC-0042: Structured-context propagation в @ourcorp/logger», Status block (Draft / Author / Last updated), Table of Contents со ссылками на разделы, и 9 пронумерованных разделов в порядке: 1. Motivation, 2. Проблема, 3. Предлагаемый API (включая sub-secции 3.1 базовый / 3.2 sub-context / 3.3 Express middleware / 3.4 contextual logger), 4. Обратная совместимость, 5. Performance, 6. Security, 7. Alternatives considered (4 варианта: explicit / OpenTelemetry baggage / cls-hooked / AsyncLocalStorage), 8. Migration plan (Phases 0-3 + Risks R1-R3), 9. Open questions (≥5 пунктов). Все code blocks сохранены. Стиль формальный technical, ~800-1200 слов в финальной версии. Плейсхолдеры TBD заменены на «N/A — see RFC owner». Без вступительной болтовни перед документом."
+    "expected_summary": "Коротко — в апреле SpaceX проводила подготовку и наземные испытания следующего поколения Starship (V3) и его ускорителя Super Heavy: выводили на стартовый комплекс, делали криогенные тесты и статические огневые испытания двигателей. Орбитального полёта в апреле не было — запуск перенесли на май (в ряде источников называют 12 мая как ориентир). Ниже — ключевые моменты и ссылки.\n\nЧто сделали в апреле\n- Выкатили Starship V3 и Super Heavy на стартовый комплекс для предстартовой проверки (роллаут).  \n  https://www.ixbt.com/news/2026/04/12/spacex-starship-super-heavy.html\n- Провели криогенные испыта…"
   },
   "provenance": {
-    "review_signoff": ""
+    "original_session_hash": "v2.8-20260508-postsanitize.json::QA6",
+    "review_signoff": "<draft: jay-canvas import; needs hand-extension + review>"
   }
 }

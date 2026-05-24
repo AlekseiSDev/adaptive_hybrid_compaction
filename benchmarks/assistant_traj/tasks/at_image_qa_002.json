@@ -7,83 +7,36 @@
       "role": "user",
       "content": [
         {
-          "type": "image",
-          "path": "attachments/at_image_qa_002/1.png"
-        },
-        {
           "type": "text",
-          "text": "Создай видео из этого изображения. При наличии картинки видео должно начинаться с неё. Стиль — на твоё усмотрение, придумай подходящий сюжет. Используй функцию generate_video, не задавай уточняющих вопросов, выведи в ответе ссылку на получившееся видео."
+          "text": "Создай изображение .Вот требования к изображению:- что должно быть на изображении: I selected this file https:&#x2F;&#x2F;284baef4-3d14-4ca5-8247-4811f0d6b14b.selstorage.ru&#x2F;2cf34d6b-660c-4215-9527-6a2bfd012e5c_OHHIrgDCX6EsuC9hfcYhyXLEs0JzI7_1fCeDwffmbcSJLlTqUTIgzmDNng637ZC4QRYIRCinssZ_IhbhWKVqAfLm.jpg Image #1: https:&#x2F;&#x2F;284baef4-3d14-4ca5-8247-4811f0d6b14b.selstorage.ru&#x2F;8a6c4525-2208-4b8c-92bb-b7302df61ee7_429b3818-3eff-46b8-9ba7-46f647b853bf.png Photorealistic medium close-up portrait, use reference image as sole face reference and preserve exact facial geometry and proportions. Remove small facial mole on the cheek, make irises natural bright blue, subtly even out skin tone and color while preserving realistic skin pores, microtexture and natural stubble; avoid plastic smoothing or heavy airbrushing. Maintain neon magenta and cyan rim lighting, high contrast cinematic look, dark background, ultra-detailed, studio lighting, photoreal, 8k.\\. Твой промпт должен быть понятным и полным, но не слишком длинным, пиши его только на английском и используй синтаксис Stable Diffusion. Если нужно использовать изображения из контекста, то передай их URL в поле &#39;images&#39;Не задавай уточняющих вопросов, создай изображение с помощью функции create_image и выведи в ответе ссылку на изображение."
         }
-      ]
-    },
-    {
-      "role": "assistant",
-      "content": [
+      ],
+      "expected_tool_calls": [
         {
-          "type": "text",
-          "text": "Готово — сгенерировал короткое видео (5 секунд), стартует с присланного кадра.\n\n**Промпт для generate_video:**\n> Static frame slowly comes alive: soft cinematic camera dolly-in (~5% zoom), gentle ambient light shift from cool to warm, subtle particle drift in foreground, shallow depth of field, 24fps, photorealistic, cinematic colour grade.\n\n**Параметры:** длительность 5 с, aspect = исходный, motion intensity = low.\n\n**Результат:** https://ca793242-1d74-4b37-aeef-651589cfa28f.selstorage.ru/1777044243421-019dc015-9f34-7c61-a018-b7b11a839064.mp4"
-        }
-      ]
-    },
-    {
-      "role": "user",
-      "content": [
-        {
-          "type": "text",
-          "text": "Стиль слишком спокойный. Сделай драматичнее: добавь движение камеры (orbit вокруг центрального объекта), резкую смену освещения посередине, и финальный slow-motion на 1.5 сек. Длительность увеличь до 8 секунд."
-        }
-      ]
-    },
-    {
-      "role": "assistant",
-      "content": [
-        {
-          "type": "text",
-          "text": "Перегенерил с новыми параметрами.\n\n**Промпт:**\n> Cinematic 8-second sequence: starts on provided still frame; camera orbits 180° around central subject (medium speed); at t=4s sharp lighting shift from warm golden hour to cool moonlit blue with lens flare; final 1.5s in 0.4x slow-motion, deep contrast, anamorphic flare, 24fps, photorealistic.\n\n**Параметры:** duration=8, motion=high, camera_path=orbit, light_change=on (t=4s), slowmo_segment=[6.5s–8s].\n\n**Результат:** https://ca793242-1d74-4b37-aeef-651589cfa28f.selstorage.ru/1777044598221-019dc015-orbit-dramatic.mp4"
-        }
-      ]
-    },
-    {
-      "role": "user",
-      "content": [
-        {
-          "type": "text",
-          "text": "Хорошо. Теперь добавь звук: ambient soundscape — лёгкий ветер + один акцент (woosh) на моменте смены освещения. И титр в финальном кадре: \"AELINDOR\" по центру, белый sans-serif, fade-in за 0.5 с."
-        }
-      ]
-    },
-    {
-      "role": "assistant",
-      "content": [
-        {
-          "type": "text",
-          "text": "Добавил звук и титр.\n\n**Audio:** ambient wind (low rumble, –18dB) + woosh transient на t=4.0s (+2dB), fade-out последние 0.5 с.\n\n**Текстовый overlay:** «AELINDOR», шрифт Inter Bold, размер 72px, цвет #FFFFFF, позиция centered, появляется на t=6.5s с opacity 0→100 за 500ms, держится до конца.\n\n**Промпт обновлён** (добавлены: \"ambient wind soundscape, woosh accent at midpoint, AELINDOR title card fade-in at 6.5s\").\n\n**Результат:** https://ca793242-1d74-4b37-aeef-651589cfa28f.selstorage.ru/1777045012221-019dc015-aelindor-final.mp4"
-        }
-      ]
-    },
-    {
-      "role": "user",
-      "content": [
-        {
-          "type": "text",
-          "text": "Окей. Собери финальную спецификацию одним блоком: исходник, промпт, все параметры (длительность, движение, свет, slow-mo, audio, overlay), URL результата. Без вступительных фраз, только структурированная спецификация — как тех-задание на повторную генерацию."
+          "tool_name": "image_gen",
+          "required": true,
+          "args_match": "subset"
         }
       ]
     }
   ],
   "tools_available": [
     {
-      "name": "generate_video",
-      "description": "Generate a video clip from a prompt and optional starting image.",
-      "input_schema": {}
+      "name": "image_gen",
+      "description": "Generate an image from a text prompt. Returns image URL plus short caption.",
+      "input_schema": {
+        "type": "object",
+        "description": "Generate an image from a text prompt. Returns image URL plus short caption. (concrete shape: TOOL_INPUT_SCHEMAS.image_gen)"
+      }
     }
   ],
   "evaluation": {
     "strategy": "llm_judge",
     "rubric_id": "image_qa",
-    "expected_summary": "A single structured specification block (no preamble) covering: (1) source image reference (attachments/at_image_qa_002/1.png as starting frame); (2) full generate_video prompt — cinematic orbit camera, mid-sequence light shift cool→warm or warm→cool with lens flare, slow-motion tail segment; (3) duration = 8 seconds; (4) motion params (orbit camera path, motion=high); (5) lighting change marker at t≈4s; (6) slow-motion segment 6.5s–8s at ~0.4x; (7) audio: ambient wind bed + woosh accent at the light-change moment, fade-out at end; (8) text overlay: 'AELINDOR' white sans-serif, centered, fade-in 0.5s at t≈6.5s; (9) result URL. Format must be spec-like (key: value or bulleted), not conversational prose."
+    "expected_summary": "Готово! Вот результат:\n\n![Cinematic portrait with neon magenta and cyan rim lighting](https://fb2679aa-8d64-4a3c-8ef7-ba93abea130b.selstorage.ru/2f9aaa48-b441-47c1-be64-5f267433996d_5363150a-d0ca-4e76-8280-8bdf2e25d754.png)\n\nПрименено: голубые радужки, убрана родинка на щеке, выровнен тон кожи с сохранением текстуры и щетины, неоновая подсветка маджента/циан, тёмный фон, кинематографический контраст."
   },
   "provenance": {
-    "original_session_hash": "VG.json::VG2"
+    "original_session_hash": "v2.8-20260508-postsanitize.json::IE3",
+    "review_signoff": "<draft: jay-canvas import; needs hand-extension + review>"
   }
 }

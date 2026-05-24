@@ -8,70 +8,35 @@
       "content": [
         {
           "type": "text",
-          "text": "Есть ли CTE в postgres?"
+          "text": "Создай изображение .Вот требования к изображению:- что должно быть на изображении: Проанализируй следующих персонажей из цикла книг &quot;Сказания Земноморья&quot;: 1) Аррен 2) Тень Аррена 3) Терру 4) Тенар 5) Ястреб (Гёд) 6) Паук 7) Печварри 8) Харе 9) Калессин Ссылайся именно на книги. Выпиши подробное описание по каждому персонажу для создания промта на русском языке, для дальнейшей визуализации. Описывай: их внешность, повадки, одежду, стабильное настроение, черты лица, характер и прочее.. Твой промпт должен быть понятным и полным, но не слишком длинным, пиши его только на английском и используй синтаксис Stable Diffusion. Если нужно использовать изображения из контекста, то передай их URL в поле &#39;images&#39;Не задавай уточняющих вопросов, создай изображение с помощью функции create_image и выведи в ответе ссылку на изображение."
         }
-      ]
-    },
-    {
-      "role": "assistant",
-      "content": [
+      ],
+      "expected_tool_calls": [
         {
-          "type": "text",
-          "text": "Да, PostgreSQL полностью поддерживает CTE через `WITH`. Минимальный пример:\n\n```sql\nWITH recent_orders AS (\n  SELECT id, user_id, total\n  FROM orders\n  WHERE created_at > now() - interval '7 days'\n)\nSELECT user_id, sum(total)\nFROM recent_orders\nGROUP BY user_id;\n```\n\nС PG12+ оптимизатор inlin'ит CTE по умолчанию; явное управление — `MATERIALIZED` / `NOT MATERIALIZED`."
-        }
-      ]
-    },
-    {
-      "role": "user",
-      "content": [
-        {
-          "type": "text",
-          "text": "Нужен рекурсивный CTE — развернуть дерево сотрудников (employees: id, manager_id, name) от заданного root_id. Запрос должен возвращать ещё и depth (0 для root)."
-        }
-      ]
-    },
-    {
-      "role": "assistant",
-      "content": [
-        {
-          "type": "text",
-          "text": "```sql\nWITH RECURSIVE subordinates AS (\n  SELECT id, manager_id, name, 0 AS depth\n  FROM employees\n  WHERE id = :root_id\n  UNION ALL\n  SELECT e.id, e.manager_id, e.name, s.depth + 1\n  FROM employees e\n  JOIN subordinates s ON e.manager_id = s.id\n)\nSELECT id, manager_id, name, depth\nFROM subordinates\nORDER BY depth, id;\n```\n\nКорневой ряд depth=0, каждый дочерний — `parent.depth + 1`. Сортировка `depth, id` даёт стабильный обход по уровням."
-        }
-      ]
-    },
-    {
-      "role": "user",
-      "content": [
-        {
-          "type": "text",
-          "text": "Финал: собери одной SQL-командой, с параметром :root_id и защитой от циклов (если в графе есть кольцо — не уходи в бесконечность). Один sql-блок, без пояснений."
+          "tool_name": "image_gen",
+          "required": true,
+          "args_match": "subset"
         }
       ]
     }
   ],
-  "tools_available": [],
-  "evaluation": {
-    "strategy": "composite",
-    "aggregate": "all",
-    "rules": [
-      {
-        "strategy": "regex",
-        "pattern": "WITH\\s+RECURSIVE",
-        "flags": "i"
-      },
-      {
-        "strategy": "regex",
-        "pattern": ":root_id",
-        "flags": ""
-      },
-      {
-        "strategy": "llm_judge",
-        "rubric_id": "code_iter",
-        "expected_summary": "A single ```sql``` block containing a recursive CTE on employees(id, manager_id, name) starting from :root_id, returning id/manager_id/name/depth (depth=0 for root, parent.depth+1 for descendants), with cycle protection. Cycle protection must use one of: PostgreSQL's CYCLE clause (CYCLE id SET is_cycle USING path), an array path accumulator with NOT id = ANY(path) guard, or a depth limit (e.g. WHERE s.depth < some_max). Final SELECT orders by depth. No prose around the SQL block."
+  "tools_available": [
+    {
+      "name": "image_gen",
+      "description": "Generate an image from a text prompt. Returns image URL plus short caption.",
+      "input_schema": {
+        "type": "object",
+        "description": "Generate an image from a text prompt. Returns image URL plus short caption. (concrete shape: TOOL_INPUT_SCHEMAS.image_gen)"
       }
-    ]
+    }
+  ],
+  "evaluation": {
+    "strategy": "llm_judge",
+    "rubric_id": "code_iter",
+    "expected_summary": "Вот готовое изображение со всеми девятью персонажами из «Сказаний Земноморья»:\n\n![Персонажи Земноморья](https://fb2679aa-8d64-4a3c-8ef7-ba93abea130b.selstorage.ru/9e5a6739-906c-4c6e-a717-b82d1fd944b8_f3eff4a3-ad53-40d9-801c-0f71c0436638.png)\n\nНа иллюстрации изображены:\n\n| # | Персонаж | Ключевые визуальные черты |\n|---|----------|--------------------------|\n| 1 | **Аррен (Лебаннен)** | Юный смуглый принц с мечом, дорожная одежда |\n| 2 | **Тень Аррена** | Тёмный безликий силуэт из мрака за спиной Аррена |\n| 3 | **Терру (Техану)** | Маленькая девочка с ожогами на половине лица и теле |\n| 4 | **Т…"
   },
   "provenance": {
-    "original_session_hash": "MX.json::MX3"
+    "original_session_hash": "v2.8-20260508-postsanitize.json::DBG1#3",
+    "review_signoff": "<draft: jay-canvas import; needs hand-extension + review>"
   }
 }

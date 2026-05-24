@@ -7,106 +7,36 @@
       "role": "user",
       "content": [
         {
-          "type": "image",
-          "path": "attachments/at_image_qa_001/1.svg"
-        },
-        {
           "type": "text",
-          "text": "визуализируй полностью логику в Mermaid"
+          "text": "Создай изображение .Вот требования к изображению:- что должно быть на изображении: https:&#x2F;&#x2F;284baef4-3d14-4ca5-8247-4811f0d6b14b.selstorage.ru&#x2F;806548a2-ba8d-4d57-9c87-c09774554582_4141414.png Image #1: https:&#x2F;&#x2F;284baef4-3d14-4ca5-8247-4811f0d6b14b.selstorage.ru&#x2F;8c6e16b1-e578-41a3-89c1-a93f4bf48f50_8d421716-117e-4d03-b15e-5a8b84f8ed82.png Recognised content of image [https:&#x2F;&#x2F;284baef4-3d14-4ca5-8247-4811f0d6b14b.selstorage.ru&#x2F;8c6e16b1-e578-41a3-89c1-a93f4bf48f50_8d421716-117e-4d03-b15e-5a8b84f8ed82.png]: Certainly! Here’s a comprehensive and detailed description of the image: --- ### Central Composition - **Primary Object:** The main focus of the image is an abstract artistic representation of an eye. The eye is stylized rather than realistic, and its iris&#x2F;pupil is replaced by the face of a clock. - **Clock Details:** - The clock face is circular and positioned at the very center of the eye. - The numbers around the clock face are Roman numerals (I to XII) and are colored in a pale yellow-gold shade. - The background insid... (litellm_truncated skipped 1034 chars) ...(mainly pink and purple) as the eye outlines and lashes, enhancing its integration into the overall image. ### Background - **Background Color:** - The background is a solid, deep black, which makes the neon colors of the eye and clock pop prominently. - There is a faint glow or mist effect around the eye, especially where the colors are most concentrated, adding to the ethereal, luminous quality of the artwork. ### Spatial Arrangement - **Central Position:** - The entire composition (eye + clock + text) is centered within the black background. - The eyelashes (spikes) radiate equally on both sides, with the text &quot;ALARM&quot; positioned just beneath the lower right edge of the eye. - The colored drips extend from the lower edge of the eye, adding a vertical element and directing focus downward. --- **Overall Impression:** The image merges surreal, dreamy aesthetics (neon gradients, glowing effects) with bold, edgy street art influences (spiky lines, graffiti-style text). The blending of the clock within the eye and the dripping effects evoke a sense of urgency, time, and perhaps anxiety, underscored by the word &quot;ALARM.&quot; The luminescent colors contrast sharply with the deep black background, emphasizing the dramatic and eye-catching quality of the design. **Text in the Image:** **&quot;ALARM&quot;**. Твой промпт должен быть понятным и полным, но не слишком длинным, пиши его только на английском и используй синтаксис Stable Diffusion. Если нужно использовать изображения из контекста, то передай их URL в поле &#39;images&#39;Не задавай уточняющих вопросов, создай изображение с помощью функции create_image и выведи в ответе ссылку на изображение."
         }
-      ]
-    },
-    {
-      "role": "assistant",
-      "content": [
+      ],
+      "expected_tool_calls": [
         {
-          "type": "text",
-          "text": "Вот логика схемы оплаты виртуальной картой в виде Mermaid-диаграммы:\n\n```mermaid\nflowchart TD\n    Start([Начало: пользователь инициирует оплату]) --> Auth{Авторизован?}\n    Auth -- Нет --> Login[Перенаправить на авторизацию]\n    Login --> Auth\n    Auth -- Да --> HasCard{Есть активная виртуальная карта?}\n    HasCard -- Нет --> Issue[Выпустить виртуальную карту]\n    Issue --> SaveCard[Сохранить карту в профиле]\n    SaveCard --> SelectCard\n    HasCard -- Да --> SelectCard[Выбор карты как способа оплаты]\n    SelectCard --> EnterAmount[Ввод суммы и реквизитов получателя]\n    EnterAmount --> CheckBalance{Достаточно средств?}\n    CheckBalance -- Нет --> TopUp[Предложить пополнение]\n    TopUp --> CheckBalance\n    CheckBalance -- Да --> AntiFraud[Антифрод-проверка]\n    AntiFraud --> FraudOk{Проверка пройдена?}\n    FraudOk -- Нет --> Decline[Отклонить операцию, уведомить]\n    Decline --> End([Конец])\n    FraudOk -- Да --> ThreeDS[3-D Secure / OTP]\n    ThreeDS --> Confirmed{Подтверждение получено?}\n    Confirmed -- Нет --> Decline\n    Confirmed -- Да --> Charge[Списание средств]\n    Charge --> Success{Транзакция успешна?}\n    Success -- Нет --> ErrorLog[Логировать ошибку и вернуть результат]\n    ErrorLog --> End\n    Success -- Да --> Receipt[Чек и уведомление]\n    Receipt --> End\n```\n\nЕсли на исходной схеме есть специфика (лимиты, комиссия, особая ветка отказа) — пришлите уточнение, скорректирую диаграмму."
-        }
-      ]
-    },
-    {
-      "role": "user",
-      "content": [
-        {
-          "type": "text",
-          "text": "Добавь сценарий когда у пользователя не хватает средств И пополнение недоступно — нужна ветка \"оплата с другой карты\" через отдельный эндпойнт `/pay-with-alt-card`. Алгоритм: если TopUp вернулся неуспешным, предлагаем альтернативную карту, при выборе — уходим в отдельный flow."
-        }
-      ]
-    },
-    {
-      "role": "assistant",
-      "content": [
-        {
-          "type": "text",
-          "text": "Расширяю диаграмму — добавил ветку альтернативной карты через `/pay-with-alt-card`. Узлы `TopUp` и `TopUpFailed` теперь разделены, отказ на пополнении ведёт к выбору альтернативной карты:\n\n```mermaid\nflowchart TD\n    Start([Начало]) --> Auth{Авторизован?}\n    Auth -- Нет --> Login --> Auth\n    Auth -- Да --> HasCard{Есть активная карта?}\n    HasCard -- Нет --> Issue[Выпуск карты] --> SelectCard\n    HasCard -- Да --> SelectCard[Выбор карты]\n    SelectCard --> EnterAmount[Ввод суммы]\n    EnterAmount --> CheckBalance{Достаточно средств?}\n    CheckBalance -- Да --> AntiFraud\n    CheckBalance -- Нет --> TopUp[Предложить пополнение]\n    TopUp --> TopUpResult{Пополнение успешно?}\n    TopUpResult -- Да --> CheckBalance\n    TopUpResult -- Нет --> AltOffer[Предложить альтернативную карту]\n    AltOffer -- Согласен --> AltFlow[/pay-with-alt-card flow/]\n    AltOffer -- Отказ --> Decline\n    AltFlow --> End([Конец])\n    AntiFraud --> FraudOk{Проверка пройдена?}\n    FraudOk -- Нет --> Decline[Отклонить операцию]\n    FraudOk -- Да --> ThreeDS[3-D Secure]\n    ThreeDS --> Confirmed{Подтверждено?}\n    Confirmed -- Нет --> Decline\n    Confirmed -- Да --> Charge[Списание] --> Success{Успешно?}\n    Success -- Да --> Receipt[Чек]\n    Success -- Нет --> ErrorLog[Лог ошибки]\n    Receipt --> End\n    ErrorLog --> End\n    Decline --> End\n```"
-        }
-      ]
-    },
-    {
-      "role": "user",
-      "content": [
-        {
-          "type": "text",
-          "text": "А что если 3-D Secure не подтвердился из-за таймаута (не отказ пользователя, а нет ответа)? Нужен retry с лимитом 3 попытки, после третьего таймаута — отклоняем. И различай в логе causes: `user_rejected` vs `timeout_exhausted`."
-        }
-      ]
-    },
-    {
-      "role": "assistant",
-      "content": [
-        {
-          "type": "text",
-          "text": "Добавил retry-loop на 3DS с лимитом попыток и разграничением причин отказа в логе:\n\n```mermaid\nflowchart TD\n    ThreeDS[3-D Secure запрос] --> Wait{Получен ответ?}\n    Wait -- Подтверждено --> Charge\n    Wait -- Отказ пользователя --> LogReject[Лог: user_rejected] --> Decline\n    Wait -- Таймаут --> Retry{attempts < 3?}\n    Retry -- Да --> Increment[attempts += 1] --> ThreeDS\n    Retry -- Нет --> LogTimeout[Лог: timeout_exhausted] --> Decline\n```\n\nОстальные ветки диаграммы без изменений. Hint: счётчик `attempts` инициализируется при первом входе в `ThreeDS` (state на уровне session, не глобальный)."
-        }
-      ]
-    },
-    {
-      "role": "user",
-      "content": [
-        {
-          "type": "text",
-          "text": "Хорошо. И последнее: добавь явную ветку \"отмена операции пользователем\" — она должна быть доступна из ЛЮБОГО узла где есть Confirmation (включая EnterAmount, SelectCard, AltOffer, ThreeDS). При отмене — лог cause: `user_cancelled`, переход в End."
-        }
-      ]
-    },
-    {
-      "role": "assistant",
-      "content": [
-        {
-          "type": "text",
-          "text": "Чтобы не дублировать стрелки от каждого Confirmation-узла, использую агрегирующий узел `UserCancel` с входами от всех точек подтверждения. Это идиоматичный паттерн для Mermaid:\n\n```mermaid\nflowchart TD\n    EnterAmount -. Cancel .-> UserCancel\n    SelectCard -. Cancel .-> UserCancel\n    AltOffer -. Cancel .-> UserCancel\n    ThreeDS -. Cancel .-> UserCancel\n    UserCancel[Отмена пользователем] --> LogCancel[Лог: user_cancelled]\n    LogCancel --> End\n```\n\nПунктирные стрелки (`-. Cancel .->`) отделяют отмену от основного потока визуально. В финальной диаграмме все ветки сольются в единый блок."
-        }
-      ]
-    },
-    {
-      "role": "user",
-      "content": [
-        {
-          "type": "text",
-          "text": "Хорошо. Теперь собери финальную диаграмму как один Mermaid-блок `flowchart TD`, включающий все накопленные изменения: альтернативная карта, 3DS retry с разделением причин, user_cancel из всех Confirmation узлов. Без дополнительных комментариев и без частичных фрагментов — только один цельный валидный Mermaid блок."
+          "tool_name": "image_gen",
+          "required": true,
+          "args_match": "subset"
         }
       ]
     }
   ],
-  "tools_available": [],
-  "evaluation": {
-    "strategy": "composite",
-    "aggregate": "all",
-    "rules": [
-      {
-        "strategy": "regex",
-        "pattern": "^```mermaid\\s*\\nflowchart\\s+TD\\b[\\s\\S]+?```\\s*$",
-        "flags": "m"
-      },
-      {
-        "strategy": "llm_judge",
-        "rubric_id": "image_qa",
-        "expected_summary": "A single Mermaid `flowchart TD` block covering the full evolved payment-with-virtual-card flow. Must include: (1) baseline path auth → card-presence → amount → balance → anti-fraud → 3DS → charge → success → receipt → End; (2) alternative-card branch reached when top-up fails (TopUpResult=Нет → AltOffer → /pay-with-alt-card flow); (3) 3DS retry loop with attempts<3 counter, distinct log causes `user_rejected` vs `timeout_exhausted` on terminal failure; (4) user-cancel branch reachable from each Confirmation node (EnterAmount, SelectCard, AltOffer, ThreeDS), terminating with log cause `user_cancelled`. Single fenced Mermaid block, no prose before/after, valid Mermaid syntax."
+  "tools_available": [
+    {
+      "name": "image_gen",
+      "description": "Generate an image from a text prompt. Returns image URL plus short caption.",
+      "input_schema": {
+        "type": "object",
+        "description": "Generate an image from a text prompt. Returns image URL plus short caption. (concrete shape: TOOL_INPUT_SCHEMAS.image_gen)"
       }
-    ]
+    }
+  ],
+  "evaluation": {
+    "strategy": "llm_judge",
+    "rubric_id": "image_qa",
+    "expected_summary": "Вот новое изображение, созданное на основе ваших требований и стилистики:\n\n![Сюрреалистичное око-часы в стиле неонового стрит-арта с надписью ALARM](https://fb2679aa-8d64-4a3c-8ef7-ba93abea130b.selstorage.ru/3d027585-5569-40b3-b5a2-94c96a66712c_1d592d6f-8e12-4106-b052-3dedfbf27f01.png)"
   },
   "provenance": {
-    "original_session_hash": "A.json::A2"
+    "original_session_hash": "v2.8-20260508-postsanitize.json::IE1",
+    "review_signoff": "<draft: jay-canvas import; needs hand-extension + review>"
   }
 }

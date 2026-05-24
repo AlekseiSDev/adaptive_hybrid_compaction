@@ -1,0 +1,32 @@
+{
+  "task_id": "at_mixed_001",
+  "fixtures": [
+    {
+      "tool_name": "google_search",
+      "output_parts": [
+        {
+          "type": "text",
+          "text": "<placeholder output for google_search — to be filled by capture-at-fixture or manual edit>"
+        }
+      ]
+    },
+    {
+      "tool_name": "web_fetch",
+      "output_parts": [
+        {
+          "type": "text",
+          "text": "<placeholder output for web_fetch — to be filled by capture-at-fixture or manual edit>"
+        }
+      ]
+    },
+    {
+      "tool_name": "code_interpreter",
+      "output_parts": [
+        {
+          "type": "text",
+          "text": "<placeholder output for code_interpreter — to be filled by capture-at-fixture or manual edit>"
+        }
+      ]
+    }
+  ]
+}

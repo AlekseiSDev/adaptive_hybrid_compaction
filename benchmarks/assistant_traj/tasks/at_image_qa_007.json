@@ -1,82 +1,42 @@
 {
   "task_id": "at_image_qa_007",
   "category": "image_qa",
-  "source": "synthetic",
+  "source": "opensource",
   "turns": [
     {
       "role": "user",
       "content": [
-        { "type": "image", "path": "attachments/at_image_qa_007/1.svg", "alt": "Acme Corp Engineering org chart, Q2 2026, 5 levels deep" },
-        { "type": "text", "text": "На картинке — orgchart Acme Corp. Сколько уровней управления (включая CEO и нижний уровень IC)?" }
-      ]
-    },
-    {
-      "role": "assistant",
-      "content": [
-        { "type": "text", "text": "На orgchart'е **5 уровней**:\n\n- **Level 0:** CEO (Sarah Chen)\n- **Level 1:** C-level (CTO Mark Patel, COO Lena Vogt)\n- **Level 2:** VPs (5 шт.: Backend, Frontend, Data, People, Finance)\n- **Level 3:** Sr / Staff engineers / Lead'ы (8 чел.)\n- **Level 4:** Junior / mid IC (2 чел.: Ana Costa под Nina Park, Pedro Silva под Riya Joshi)" }
-      ]
-    },
-    {
-      "role": "user",
-      "content": [
-        { "type": "text", "text": "Кто из VP отчитывается CTO, и кто COO?" }
-      ]
-    },
-    {
-      "role": "assistant",
-      "content": [
-        { "type": "text", "text": "**Под CTO (Mark Patel):**\n- VP Backend — Diego Ortiz\n- VP Frontend — Aisha Khan\n- VP Data — Ben Yamada\n\n**Под COO (Lena Vogt):**\n- VP People — Priya Rao\n- VP Finance — Olaf Eriksson\n\n3 VP под CTO (вся engineering), 2 VP под COO (operations)." }
-      ]
-    },
-    {
-      "role": "user",
-      "content": [
-        { "type": "text", "text": "Найди VP, у которого ни одного IC под собой на картинке." }
-      ]
-    },
-    {
-      "role": "assistant",
-      "content": [
-        { "type": "text", "text": "Все 5 VP на картинке имеют хотя бы одного IC прямо под собой:\n\n- **VP Backend** (Diego Ortiz) → Nina Park (Sr Eng), Tom Mehta (Staff Eng)\n- **VP Frontend** (Aisha Khan) → Ivo Marek (Sr Eng)\n- **VP Data** (Ben Yamada) → Hugo Bay (Staff Eng), Riya Joshi (Sr Eng)\n- **VP People** (Priya Rao) → Jia Liu (People Lead)\n- **VP Finance** (Olaf Eriksson) → Sam Reed (FP&A Lead)\n\nВсе VP имеют ≥1 прямого подчинённого. Если уточнить «без IC именно в роли engineer» — тогда VP People и VP Finance, потому что под ними нон-инженерные Lead'ы (People Lead, FP&A Lead). Но в общем смысле — у всех есть direct reports." }
-      ]
-    },
-    {
-      "role": "user",
-      "content": [
-        { "type": "text", "text": "Перечисли всех людей у которых HАЕТ direct reports (т.е. они на дне иерархии)." }
-      ]
-    },
-    {
-      "role": "assistant",
-      "content": [
-        { "type": "text", "text": "**Люди без direct reports (leaf-узлы):**\n\nПод VP Backend → Nina Park → **Ana Costa** (leaf), Tom Mehta (leaf — нет видимых reports под ним).\n\nПод VP Frontend → Ivo Marek (leaf).\n\nПод VP Data → Hugo Bay (leaf), Riya Joshi → **Pedro Silva** (leaf).\n\nПод VP People → Jia Liu (leaf — нет видимых reports).\n\nПод VP Finance → Sam Reed (leaf — нет видимых reports).\n\n**Итого 8 leaf-узлов:** Tom Mehta, Ivo Marek, Hugo Bay, Jia Liu, Sam Reed, Ana Costa, Pedro Silva — это все IC на дне дерева (а также Sr/Staff Eng у которых ни одного report'а на этой картинке). Если строго «в самом низу дерева» = Level 4: Ana Costa + Pedro Silva (2 человека)." }
-      ]
-    },
-    {
-      "role": "user",
-      "content": [
-        { "type": "text", "text": "Финал: собери mini-CSV всех людей на картинке: name, role, manager (если есть; CEO — пусто). Header'ом строкой. 14 строк (15 если посчитать). Готовый CSV." }
+        {
+          "type": "text",
+          "text": "Создай изображение .Вот требования к изображению:- что должно быть на изображении: https:&#x2F;&#x2F;284baef4-3d14-4ca5-8247-4811f0d6b14b.selstorage.ru&#x2F;4b9dd4ec-b10b-41e8-bb04-a57c576ea694_IMG_3324.jpeg Сгенерируй мне фото на которой на белом столе изображены продукты: шпинат, мягкий творог, два яйца, лаваш, помидоры черри, твердый сыр. Твой промпт должен быть понятным и полным, но не слишком длинным, пиши его только на английском и используй синтаксис Stable Diffusion. Если нужно использовать изображения из контекста, то передай их URL в поле &#39;images&#39;Не задавай уточняющих вопросов, создай изображение с помощью функции create_image и выведи в ответе ссылку на изображение."
+        }
+      ],
+      "expected_tool_calls": [
+        {
+          "tool_name": "image_gen",
+          "required": true,
+          "args_match": "subset"
+        }
       ]
     }
   ],
-  "tools_available": [],
-  "evaluation": {
-    "strategy": "composite",
-    "aggregate": "all",
-    "rules": [
-      { "strategy": "regex", "pattern": "^name,role,manager", "flags": "im" },
-      { "strategy": "regex", "pattern": "Sarah Chen,CEO,", "flags": "" },
-      { "strategy": "regex", "pattern": "Mark Patel,CTO,Sarah Chen", "flags": "" },
-      { "strategy": "regex", "pattern": "Ana Costa,Eng II,Nina Park", "flags": "" },
-      { "strategy": "regex", "pattern": "Pedro Silva,Data Eng I,Riya Joshi", "flags": "" },
-      {
-        "strategy": "llm_judge",
-        "rubric_id": "image_qa",
-        "expected_summary": "Pure CSV export, no markdown fencing, no prose around it. Header line: «name,role,manager». Exactly 15 data rows (all 15 people in the org chart). CEO row has empty manager column. Each other person has correct manager per the diagram: CTO/COO report to Sarah Chen; 3 VPs (Backend/Frontend/Data) report to Mark Patel; 2 VPs (People/Finance) report to Lena Vogt; leaf-level ICs report to their respective Sr/Staff Eng. All names spelled as shown on the chart. Role field matches the role label on the diagram (CEO, CTO, COO, VP Backend, Sr Eng, Staff Eng, People Lead, FP&A Lead, Eng II, Data Eng I, etc.). Manager field uses full names not titles."
+  "tools_available": [
+    {
+      "name": "image_gen",
+      "description": "Generate an image from a text prompt. Returns image URL plus short caption.",
+      "input_schema": {
+        "type": "object",
+        "description": "Generate an image from a text prompt. Returns image URL plus short caption. (concrete shape: TOOL_INPUT_SCHEMAS.image_gen)"
       }
-    ]
+    }
+  ],
+  "evaluation": {
+    "strategy": "llm_judge",
+    "rubric_id": "image_qa",
+    "expected_summary": "Увеличил композицию и сгенерировал фотореалистичное изображение с ингредиентами на белом столе:  \n![Продукты на белом столе](https://fb2679aa-8d64-4a3c-8ef7-ba93abea130b.selstorage.ru/79f5fd0a-c6fc-425c-9b8b-4185f7338289_6a2dbbaa-01b8-4909-b1cb-9077bb0ca878.png)"
   },
   "provenance": {
-    "review_signoff": ""
+    "original_session_hash": "v2.8-20260508-postsanitize.json::IG1",
+    "review_signoff": "<draft: jay-canvas import; needs hand-extension + review>"
   }
 }

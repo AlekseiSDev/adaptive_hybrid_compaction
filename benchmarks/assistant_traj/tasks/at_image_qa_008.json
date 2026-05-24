@@ -1,83 +1,42 @@
 {
   "task_id": "at_image_qa_008",
   "category": "image_qa",
-  "source": "synthetic",
+  "source": "opensource",
   "turns": [
     {
       "role": "user",
       "content": [
-        { "type": "image", "path": "attachments/at_image_qa_008/1.svg", "alt": "E-commerce platform production architecture diagram with browser, mobile, CDN, API Gateway, 5 internal services, 5 stores, 2 external services, Datadog monitoring" },
-        { "type": "text", "text": "Это архитектура нашего e-commerce production. Перечисли все internal сервисы (зелёные прямоугольники на легенде) с их language stack — как подписано на диаграмме." }
-      ]
-    },
-    {
-      "role": "assistant",
-      "content": [
-        { "type": "text", "text": "Internal services (зелёные):\n\n1. **Auth Service** — Node + JWT\n2. **Cart Service** — Python\n3. **Order Service** — Go\n4. **Inventory Service** — Java\n5. **Notification Service** — Node\n\n5 internal сервисов с polyglot stack (Node ×2, Python, Go, Java)." }
-      ]
-    },
-    {
-      "role": "user",
-      "content": [
-        { "type": "text", "text": "Теперь — все data stores (фиолетовые на легенде). По каждому: что хранит, согласно подписи." }
-      ]
-    },
-    {
-      "role": "assistant",
-      "content": [
-        { "type": "text", "text": "Data stores / очереди (фиолетовые):\n\n1. **PostgreSQL #1** — users, sessions (используется Auth Service)\n2. **Redis** — cart cache, TTL (используется Cart Service)\n3. **PostgreSQL #2** — orders, history (используется Order Service)\n4. **PostgreSQL #3** — inventory, locks (используется Inventory Service)\n5. **Kafka** — events topic (Order Service публикует, Notification Service consume'ит)\n\nИтого 3 экземпляра PostgreSQL, 1 Redis, 1 Kafka." }
-      ]
-    },
-    {
-      "role": "user",
-      "content": [
-        { "type": "text", "text": "Какие external сервисы (красным dashed контуром)? И с каким internal сервисом каждый связан?" }
-      ]
-    },
-    {
-      "role": "assistant",
-      "content": [
-        { "type": "text", "text": "External (красный, dashed):\n\n1. **Stripe** — payments — связан с **Order Service** (синхронный вызов, dotted-line cross-trust-boundary edge)\n2. **SendGrid** — email — связан с **Notification Service** (dotted-line)\n\nИтого 2 external dependencies, оба за trust-boundary (отмечены особым типом edge на легенде)." }
-      ]
-    },
-    {
-      "role": "user",
-      "content": [
-        { "type": "text", "text": "Нарисованы ли edges от каждого internal service к Datadog? Если нет — какие пропущены/неоднозначны?" }
-      ]
-    },
-    {
-      "role": "assistant",
-      "content": [
-        { "type": "text", "text": "На диаграмме нарисована ОДНА edge — кривая от Notification Service вниз к Datadog. Из других internal сервисов (Auth, Cart, Order, Inventory) **edges к Datadog НЕ нарисованы**.\n\nЛогически monitoring должен покрывать все 5 сервисов (это написано «metrics, logs» в подписи Datadog), но визуально это implied через единственную кривую — типичный shortcut в архитектурных диаграммах когда все компоненты делают одно и то же. Если документация утверждает «все сервисы инструментированы Datadog» — это нужно либо подписать на стрелке (например «* all services →»), либо нарисовать каждую edge явно. Иначе reviewer не уверен — это design intent или oversight." }
-      ]
-    },
-    {
-      "role": "user",
-      "content": [
-        { "type": "text", "text": "Найди trust-boundary crossings на диаграмме (там где dotted-line edge). Сколько их? Перечисли source → destination." }
-      ]
-    },
-    {
-      "role": "assistant",
-      "content": [
-        { "type": "text", "text": "Trust-boundary crossings (dotted-line, согласно легенде):\n\n1. **Order Service → Stripe** (payment)\n2. **Notification Service → SendGrid** (email)\n\n**Итого 2 crossings**, оба от internal service к external dependency. Все остальные edges на диаграмме — сплошные (intra-trust intra-VPC traffic между сервисами и их хранилищами + gateway-fan-out)." }
-      ]
-    },
-    {
-      "role": "user",
-      "content": [
-        { "type": "text", "text": "Финал: собери Markdown-обзор архитектуры для onboarding нового инженера: # Architecture overview · ## Components (с табличкой services + stack + store) · ## External dependencies · ## Trust boundaries · ## Observability gap (упомяни Datadog edges). Готов к копи-пасту в Confluence." }
+        {
+          "type": "text",
+          "text": "Создай изображение .Вот требования к изображению:- что должно быть на изображении: Image #1: https:&#x2F;&#x2F;284baef4-3d14-4ca5-8247-4811f0d6b14b.selstorage.ru&#x2F;816ed909-a8f7-4eb9-beb0-2a97b83b108d_f212af56-c1ae-4610-b0dc-a3bf9194924b.png Image #1: https:&#x2F;&#x2F;284baef4-3d14-4ca5-8247-4811f0d6b14b.selstorage.ru&#x2F;7f5e3441-9d14-4805-a760-dc6ab9170b89_4ec0936a-4f97-4ecb-aa76-36452e0491a8.png Задача сделать такое же по стилю изображение с ВОСЕМЬЮ пунктами процессов 1. Ведение календаря 2. Организация мероприятий и выездов 3. Документооборот, контроль задач и поручений 4. Взаимодействие с ЦИО, Субъектами РФ, ФОИВами, Правительством 5. Работа с гражданами 6. Подготовка аналитических отчетов по курируемым направления 7. Оформление пропусков и командировок 8. Обеспечение работы секретариата ВАЖНО и обязательно учесть что тут 8мь пунктов НЕЛЬЗЯ ТЕРЯТЬ НИ ОДИН. Твой промпт должен быть понятным и полным, но не слишком длинным, пиши его только на английском и используй синтаксис Stable Diffusion. Если нужно использовать изображения из контекста, то передай их URL в поле &#39;images&#39;Не задавай уточняющих вопросов, создай изображение с помощью функции create_image и выведи в ответе ссылку на изображение."
+        }
+      ],
+      "expected_tool_calls": [
+        {
+          "tool_name": "image_gen",
+          "required": true,
+          "args_match": "subset"
+        }
       ]
     }
   ],
-  "tools_available": [],
+  "tools_available": [
+    {
+      "name": "image_gen",
+      "description": "Generate an image from a text prompt. Returns image URL plus short caption.",
+      "input_schema": {
+        "type": "object",
+        "description": "Generate an image from a text prompt. Returns image URL plus short caption. (concrete shape: TOOL_INPUT_SCHEMAS.image_gen)"
+      }
+    }
+  ],
   "evaluation": {
     "strategy": "llm_judge",
     "rubric_id": "image_qa",
-    "expected_summary": "Single Markdown architecture overview document ready to paste into Confluence. Structure: H1 «# Architecture overview», then 4 × H2 sections in order: «## Components» (Markdown table with columns Service / Language / Primary store — listing Auth Service / Node / PostgreSQL #1 (users); Cart Service / Python / Redis; Order Service / Go / PostgreSQL #2 (orders); Inventory Service / Java / PostgreSQL #3 (inventory); Notification Service / Node / Kafka); «## External dependencies» (lists Stripe payments via Order Service, SendGrid email via Notification Service, both marked as cross-trust-boundary); «## Trust boundaries» (states exactly 2 trust-boundary crossings: Order→Stripe, Notification→SendGrid, all other edges are intra-VPC); «## Observability gap» (calls out that only Notification Service has an explicit Datadog edge on the diagram; other 4 services rely on implied coverage; recommends explicit annotation or per-service edges). Style formal, technical, no introductory chatter. Russian or English consistent with conversation."
+    "expected_summary": "Увеличил и адаптировал стиль к референсам — создал изображение с восьмью карточками и подписи точно такими, как вы просили:\n\n![Инфографика процессов](https://fb2679aa-8d64-4a3c-8ef7-ba93abea130b.selstorage.ru/6f4942a0-efff-4a06-bde9-746c612c9e6c_9cf33624-807b-4892-9432-bc23fded1da1.png)\n\nФайл создан согласно вашему запросу: 8 пунктов с сохранёнными формулировками, аккуратные flat-иконки, мягкая палитра, заголовок «Процессы». Если нужно изменить размер, цвет акцента или получить PNG в другом разрешении — скажите параметры, и подготовлю новую версию."
   },
   "provenance": {
-    "review_signoff": ""
+    "original_session_hash": "v2.8-20260508-postsanitize.json::IG10",
+    "review_signoff": "<draft: jay-canvas import; needs hand-extension + review>"
   }
 }

@@ -8,42 +8,35 @@
       "content": [
         {
           "type": "text",
-          "text": "Нарисованная черника в минималистичном стиле на однотипном фоне."
+          "text": "Создай изображение .Вот требования к изображению:- что должно быть на изображении: I selected this file https:&#x2F;&#x2F;284baef4-3d14-4ca5-8247-4811f0d6b14b.selstorage.ru&#x2F;7651dbd6-7616-4979-b747-476286e7b680_S-.jpg Exact same camera angle, field of view, perspective and building geometry as the input photo. Keep the concrete slab, landscape, tools, and sky unchanged. Do not move or resize any openings. Material transformation only: Replace ALL wall surfaces with OSB (Oriented Strand Board) blocks — exterior facade, columns&amp;#x2F;pilasters, and ALL interior partition walls visible inside the rooms. Block course height is 400 mm. Exterior blocks width&amp;#x2F;thickness is 300 mm; interior partition blocks width&amp;#x2F;thickness is 150 mm. OSB texture must be realistic and continuous; seams between blocks are ultra-thin, barely visible and flush (almost seamless), avoid any pronounced grid. Openings must remain raw and EMPTY: no windows, no frames, no doors, no glass, no mullions. Keep interiors empty. Lighting and mood: warm golden hour sunset with orange‑pink sky and long soft shadows; natural color palette. Photorealistic architectural exterior photograph, high resolution, sharp focus. Do not add or remove objects, vegetation, or construction items. Do not change composition, proportions, or building configuration.. Твой промпт должен быть понятным и полным, но не слишком длинным, пиши его только на английском и используй синтаксис Stable Diffusion. Если нужно использовать изображения из контекста, то передай их URL в поле &#39;images&#39;Не задавай уточняющих вопросов, создай изображение с помощью функции create_image и выведи в ответе ссылку на изображение."
         }
-      ]
-    },
-    {
-      "role": "assistant",
-      "content": [
+      ],
+      "expected_tool_calls": [
         {
-          "type": "text",
-          "text": "Готово — минималистичная иллюстрация черники на однотонном фоне.\n\n**Промпт для create_image:**\n> Hand-drawn minimalist illustration of blueberries, 3-4 berries on a stem with two simple leaves, flat colour fill, no shading, thin clean outlines, isolated on a single uniform pastel background, vector-style, centered composition.\n\n**Параметры:** style=minimalist, aspect=1:1.\n\n![blueberries](https://fb2679aa-8d64-4a3c-8ef7-ba93abea130b.selstorage.ru/5d5983b9-e28f-4642-857d-d341747cbfa6_7753ffca-0c09-4be2-8f59-2d517c89675d.png)"
-        }
-      ]
-    },
-    {
-      "role": "user",
-      "content": [
-        {
-          "type": "text",
-          "text": "Окей. Финальное: выдай только итоговый промпт для create_image (на английском, синтаксис SD) — без картинки, без описания, без вступления. Чтобы я мог его скопировать и переиспользовать."
+          "tool_name": "image_gen",
+          "required": true,
+          "args_match": "subset"
         }
       ]
     }
   ],
   "tools_available": [
     {
-      "name": "create_image",
-      "description": "Generate an image from a text prompt.",
-      "input_schema": {}
+      "name": "image_gen",
+      "description": "Generate an image from a text prompt. Returns image URL plus short caption.",
+      "input_schema": {
+        "type": "object",
+        "description": "Generate an image from a text prompt. Returns image URL plus short caption. (concrete shape: TOOL_INPUT_SCHEMAS.image_gen)"
+      }
     }
   ],
   "evaluation": {
     "strategy": "llm_judge",
     "rubric_id": "image_qa",
-    "expected_summary": "A single English-language Stable-Diffusion-style prompt (comma-separated tokens or natural-language sentence) for generating a minimalist hand-drawn blueberry illustration on a uniform pastel background. Must mention: blueberries (the subject), minimalist / flat / hand-drawn style, uniform single-colour background, no shading or thin clean outlines, isolated/centered composition. No preamble, no markdown headers, no image URL, no commentary — only the reusable prompt text."
+    "expected_summary": "Вот архитектурная визуализация здания с отделкой из OSB-блоков в лучах закатного солнца:\n\n![Визуализация здания из OSB-блоков в стиле «золотой час»](https://fb2679aa-8d64-4a3c-8ef7-ba93abea130b.selstorage.ru/0bab7cc2-9c58-415b-9998-87765a9bb259_45f83d9d-26ac-4411-af2a-01c8d31d11be.png)"
   },
   "provenance": {
-    "original_session_hash": "MX.json::MX1"
+    "original_session_hash": "v2.8-20260508-postsanitize.json::IE5",
+    "review_signoff": "<draft: jay-canvas import; needs hand-extension + review>"
   }
 }

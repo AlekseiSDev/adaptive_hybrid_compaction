@@ -8,36 +8,35 @@
       "content": [
         {
           "type": "text",
-          "text": "Придумай звучные 2–4 строчки, которые будут припевом для песни про богатую, прекрасную, полную красок и урожая осень. Можно начать со строчки «Эта русская осень нравится нам очень»."
+          "text": "Нарисованная Черника в минималистичном стиле на однотипном фоне"
         }
-      ]
-    },
-    {
-      "role": "assistant",
-      "content": [
+      ],
+      "expected_tool_calls": [
         {
-          "type": "text",
-          "text": "**Припев**\n\nЭта русская осень нравится нам очень —\nЗолото берёзы, кумач рябиновых гроздей.\nЭта русская осень — щедрые деньки,\nДым костров под небом да улыбки земляков."
-        }
-      ]
-    },
-    {
-      "role": "user",
-      "content": [
-        {
-          "type": "text",
-          "text": "Хорошо, но третья строчка ритмически выпадает — короче остальных. Перепиши только её, чтобы по слогам совпадала с первой, и финальный припев выдай одним блоком без комментариев."
+          "tool_name": "image_gen",
+          "required": true,
+          "args_match": "subset"
         }
       ]
     }
   ],
-  "tools_available": [],
+  "tools_available": [
+    {
+      "name": "image_gen",
+      "description": "Generate an image from a text prompt. Returns image URL plus short caption.",
+      "input_schema": {
+        "type": "object",
+        "description": "Generate an image from a text prompt. Returns image URL plus short caption. (concrete shape: TOOL_INPUT_SCHEMAS.image_gen)"
+      }
+    }
+  ],
   "evaluation": {
     "strategy": "llm_judge",
     "rubric_id": "mixed",
-    "expected_summary": "A single chorus block in Russian, exactly 4 lines, opening with «Эта русская осень нравится нам очень». Theme: rich/beautiful/colourful/harvest Russian autumn. Lines 1 and 3 must have roughly matching syllable counts (line 3 rewritten to scan with line 1 — typically 12–13 syllables), lines 2 and 4 are longer descriptive lines. No preamble, no commentary, no labels other than perhaps a 'Припев' heading. Imagery should evoke autumn richness (берёзы / рябина / урожай / дым / краски etc.)."
+    "expected_summary": "Нарисована черёховая (черника) в минималистическом стиле на однотонном фоне:\n\n![Минимальный рисунок черники — минимализм](https://fb267b...?url = ?)"
   },
   "provenance": {
-    "original_session_hash": "A.json::A5"
+    "original_session_hash": "v2.8-20260508-postsanitize.json::MX1",
+    "review_signoff": "<draft: jay-canvas import; needs hand-extension + review>"
   }
 }
