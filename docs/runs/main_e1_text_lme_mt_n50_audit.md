@@ -1,12 +1,17 @@
 # main_e1_text_lme_mt_n50 — n=50 audit
 
-> Generated 2026-05-22. Companion sweeps `main_e1_text_lme_mt_n50` (4 cells)
+> Generated 2026-05-22, **post-fix update 2026-05-24** (см. `## Post-fix update`
+> в конце документа). Companion sweeps `main_e1_text_lme_mt_n50` (4 cells)
 > и `main_e1_text_lme_mt_n50_mastra_agent` (1 cell). Single seed=42, actor
 > `openai/gpt-5.4-mini`, bench `lme-multiturn` (Mode A replay, 41-63 turns).
 >
-> Repo state: commit `a10c4d2` + uncommitted Phase 8 WIP в `src/core/thresholds.ts`
-> (default OBSERVER_THRESHOLD 8000 → 30000), `src/eval/runner.ts` (mastra-agent
-> registration), `src/eval/baselines/mastra_agent.ts` (Track I phase I1 landed).
+> Repo state at original run: commit `a10c4d2` + uncommitted Phase 8 WIP в
+> `src/core/thresholds.ts` (default OBSERVER_THRESHOLD 8000 → 30000),
+> `src/eval/runner.ts` (mastra-agent registration),
+> `src/eval/baselines/mastra_agent.ts` (Track I phase I1 landed).
+> **The pre-fix Results table below is a historical baseline** documenting
+> the architectural defect that motivated H Phase 9 fix
+> (commits `fe10ed9` + `d4c2746`, 2026-05-22..24).
 >
 > Run command:
 > ```
@@ -151,10 +156,100 @@ retry-with-backoff или timeout bump в `src/eval/baselines/mastra_*.ts`.
 
 | field | value |
 |---|---|
-| Run dates | 2026-05-22 |
+| Run dates | 2026-05-22 (pre-fix), 2026-05-24 (post-fix AHC reruns) |
 | Bench | lme-multiturn (Mode A replay, 41-63 turns; 120 baked tasks subset, seed=42) |
 | Actor model | `openai/gpt-5.4-mini` (via OpenRouter) |
 | Judge model | `openai/gpt-5.4-mini` (sweep cost includes judge $0.28 total) |
 | Sweep YAMLs | `eval/sweeps/main_e1_text_lme_mt_n50.yaml`<br>`eval/sweeps/main_e1_text_lme_mt_n50_mastra_agent.yaml` |
-| Repo commit | `a10c4d2` + uncommitted WIP (Phase 8 + Track I I1) |
+| Repo commits | `a10c4d2` (pre-fix), `fe10ed9` + `d4c2746` (H Phase 9 fix + mirror coupling) |
 | Aggregator | `scripts/sanity-aggregate.ts` (per cell run dir argument) |
+
+---
+
+## Post-fix update (2026-05-24)
+
+After landing H Phase 9 (commits `fe10ed9` + `d4c2746`):
+- `fe10ed9` — Tier-2 cross-turn persistence (`Map<SessionId, Tier2>` в adapter)
+  + adaptive Tier-3 token budget (walk-to-budget instead of message-count cap).
+- `d4c2746` — adapter implicit coupling: `TIER3_TOKEN_BUDGET` mirrors
+  `OBSERVER_THRESHOLD` when caller overrides one without the other (caught
+  on `ahc_full_obs128k` cell where bug surfaced as Tier-3 frozen at 30k tail).
+
+Re-ran AHC cells only via `--force=ahc_full_obs30k,ahc_full_obs128k --max-tasks-per-cell=10`.
+`mastra_om` / `full_context` / `mastra-agent` cells unchanged (the fix touches
+only AHC pipeline; their NDJSON resume picked existing records).
+
+### Post-fix results
+
+| config | n | input_tok | cache_read | cache% | **acc** | cost ($) | err_rate | obs/off/rec |
+|---|---|---|---|---|---|---|---|---|
+| **full_context** (unchanged) | 50 | 143,495,377 | 125,941,504 | 87.8% | **0.540** | 109.74 | 0.0% | 0/0/0 |
+| **mastra_om** (unchanged) | 50 | 48,519,906 | 32,114,176 | 66.2% | **0.520** | 26.50 | 4.0% | 0/0/0 |
+| **mastra-agent** (unchanged) | 120 | 107,322,750 | 67,414,016 | 62.8% | **0.400** | 60.45 | 7.5% | 0/0/0 |
+| **ahc_full_obs30k** post-fix | 10 | 3,943,149 | 2,034,944 | 51.6% | **0.200** | 11.95 | 0.0% | **10/0/0** |
+| **ahc_full_obs128k** post-mirror | 10 | 25,443,464 | 21,677,056 | 85.2% | **0.200** | 22.15 | 0.0% | **9/0/0** |
+
+### Per-task comparison (first 10 tasks, apples-to-apples)
+
+| task | FC | mastra_om | AHC@30k | AHC@128k |
+|---|---|---|---|---|
+| 01493427 | 1 | 1 | 0 | 0 |
+| 07741c44 | 1 | 0 | 0 | 0 |
+| 07b6f563 | 0 | 1 | **1** | **1** |
+| 0862e8bf | 1 | 1 | 0 | 0 |
+| 0862e8bf_abs | 1 | 1 | **1** | **1** |
+| 099778bb | 0 | 1 | 0 | 0 |
+| 09d032c9 | 0 | 0 | 0 | 0 |
+| 0a34ad58 | 1 | 1 | 0 | 0 |
+| 0bc8ad93 | 0 | 0 | 0 | 0 |
+| 0db4c65d | 0 | 0 | 0 | 0 |
+| **Σ/10** | **5** | **6** | **2** | **2** |
+
+### Post-fix observations
+
+1. **Observer теперь fires** — 10/10 (AHC@30k) и 9/10 (AHC@128k) records имеют
+   `compaction_events.length > 0`. Pre-fix было 0/120 на обоих. Архитектурный
+   fix верифицирован: Tier-2 persists cross-turn, Tier-3 grows к budget,
+   observer срабатывает на overflow.
+
+2. **AHC acc улучшилась на subset**: AHC@30k 0.108→0.200, AHC@128k 0.120→0.200
+   на первых 10 задачах. Sample size мал (n=10), variance высокая.
+
+3. **AHC@128k input 25.4M ≈ 88% от FC (28.7M на эти 10 задач)**. Cache% 85.2%
+   ≈ FC's 87.8%. Структурно AHC@128k теперь близок к FC по объёму контекста,
+   но acc 0.20 vs FC 0.50. Разрыв 30pp **не объясняется** truncation — это
+   **lossy observer extraction**.
+
+4. **Confabulation example (task 01493427)**: ground truth = "user added
+   25 postcards". FC отвечает "25" ✓. Обе AHC отвечают "17" ✗. Observer
+   видимо вытянул "17" в observation на каком-то fire (возможно из старой
+   session где упоминалось "17") и потерял точный "25" при clipping Tier-3.
+   Это **отдельный workstream — calibration observer extraction prompt**
+   (не Tier-2 persistence fix).
+
+5. **Mirror fix critical**: до d4c2746 AHC@128k имел input 12.2M (Tier-3
+   capped at static 30k default) — выглядело "малый context = плохой acc".
+   После mirror input вырос до 25.4M (Tier-3 cap=128k), cache% с 23.9%→85.2%,
+   но acc остался 0.20. То есть архитектура исправлена, но **AHC observer
+   pipeline на lme-multiturn систематически проигрывает FC даже при близком
+   объёме контекста** — root cause = observation extraction lossy.
+
+### Decisions / TODO updated
+
+1. ~~**Investigate AHC observer fire mechanics при threshold=30000**~~ → fixed
+   in H Phase 9 (`fe10ed9`).
+2. ~~**TIER3_TOKEN_BUDGET implicit coupling bug**~~ → fixed in `d4c2746`.
+3. **NEW: Observer extraction quality on lme-multiturn**. Pre/post-fix AHC
+   loses precise facts (numeric answers, specific names) even при близком
+   context size к FC. Investigate observer prompt
+   (`src/core/observerPrompt.ts:OBSERVER_PROMPT_TEMPLATE`) — может нужны:
+   - Verbatim quote retention в observations (текущий format `- timestamp
+     (high|med|low) statement` lossy)
+   - Stricter "include exact numbers/names" instruction
+   - Recall_tool на observation lookup при answer-bearing query
+4. **Full n=50 re-run AHC** (~$60-100) — deferred. Current n=10 reruns
+   достаточны для architectural verification fix'а; precise acc delta vs
+   FC требует bigger sample, но качественный gap (lossy observer) already
+   видимо.
+5. **Backfill subset-aware aggregator** (carry-over from pre-fix).
+6. **Mastra connect-timeout mitigation** (carry-over from pre-fix).
