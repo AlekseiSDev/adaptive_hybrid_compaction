@@ -1,0 +1,21 @@
+{
+  "task_id": "at_research_write_003",
+  "category": "research_write",
+  "source": "opensource",
+  "turns": [
+    {
+      "role": "user",
+      "content": [{ "type": "text", "text": "Search and summarize." }],
+      "expected_tool_calls": [
+        { "tool_name": "google_search", "required": true }
+      ]
+    }
+  ],
+  "tools_available": [],
+  "evaluation": {
+    "strategy": "llm_judge",
+    "rubric_id": "research_write",
+    "expected_summary": "Search-grounded summary."
+  },
+  "provenance": {}
+}

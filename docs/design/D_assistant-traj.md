@@ -384,7 +384,7 @@ score на known-good response. Green = full per-bench round-trip.
 
 | Bench | Eval axis | Shape | Failure mode tested |
 |---|---|---|---|
-| **AssistantTraj** | trajectory coherence | multi-turn replay assistant trace | trajectory drift через compaction |
+| **AssistantTraj-v2** | trajectory coherence + tool-call coherence | multi-turn replay assistant trace **with mocked tools** (`image_gen`, `google_search`, `web_fetch`, `code_interpreter`); fixture-replay default | trajectory drift + **required tool-call drop** под compaction. **Stateless replay** (нет env-state, нет write-actions) — отличие от τ-bench. AT-v2 = "помнит ли агент что нужный tool *надо вызвать*", τ-bench = "корректное env-state mutation". См. `docs/design/J_at_tools.md`. |
 | **LongMemEval-med** | passive recall | 1-turn QA над ~16k history | fact loss из compaction |
 | **LoCoMo-med** | passive recall (dialog) | 1-turn QA над multi-session dialog | long-range reference / temporal anchor loss |
 | **τ-bench-retail-med** | agentic state | live tool loop + user-sim + env state | env-state knowledge loss + tool coherence через compaction |

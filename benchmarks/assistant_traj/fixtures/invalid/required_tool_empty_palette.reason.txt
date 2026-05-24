@@ -1,0 +1,1 @@
+tools_available must be non-empty when any turn declares a required tool

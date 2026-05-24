@@ -1,8 +1,10 @@
 import type {
   Baseline,
+  BaselineStepOptions,
   ErrorRecord,
   Message,
   Runner,
+  RunnerResponse,
   TokenUsage,
   TurnRecord,
 } from './types.js'
@@ -28,14 +30,15 @@ export function buildRunnerFromBaseline(baseline: Baseline): Runner {
       let lastResponse: Message | null = null
 
       let state = baseline.prepare(ctx.task)
+      const collectedToolCalls: { name: string; args: unknown }[] = []
 
       try {
         for (const msg of conv.messages) {
           if (msg.role !== 'user') continue
           try {
-            const stepOpts = ctx.instrumentation
-              ? { instrumentation: ctx.instrumentation }
-              : undefined
+            const stepOpts: BaselineStepOptions = {}
+            if (ctx.instrumentation) stepOpts.instrumentation = ctx.instrumentation
+            if (conv.tools) stepOpts.tools = conv.tools
             const result = await baseline.step(state, msg, stepOpts)
             state = result.state
             turns.push(result.telemetry)
@@ -45,6 +48,7 @@ export function buildRunnerFromBaseline(baseline: Baseline): Runner {
             totalCacheRead += result.telemetry.cache_read_input_tokens ?? 0
             totalCacheCreate += result.telemetry.cache_creation_input_tokens ?? 0
             totalCost += result.cost_usd
+            if (result.toolCalls) collectedToolCalls.push(...result.toolCalls)
           } catch (err) {
             errors.push({
               turn_index: turns.length,
@@ -75,13 +79,17 @@ export function buildRunnerFromBaseline(baseline: Baseline): Runner {
         ...(totalCacheCreate > 0 ? { cache_creation: totalCacheCreate } : {}),
       }
 
-      return {
+      const response: RunnerResponse = {
         text: lastResponse ? extractText(lastResponse) : '',
         turns,
         errors,
         totals,
         cost_usd: totalCost,
       }
+      if (collectedToolCalls.length > 0) {
+        response.toolCalls = collectedToolCalls
+      }
+      return response
     },
   }
 }

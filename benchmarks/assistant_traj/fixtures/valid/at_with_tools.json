@@ -1,0 +1,36 @@
+{
+  "task_id": "at_research_write_001",
+  "category": "research_write",
+  "source": "opensource",
+  "turns": [
+    {
+      "role": "user",
+      "content": [
+        { "type": "text", "text": "Find recent news on TypeScript 5.5 release and summarize." }
+      ],
+      "expected_tool_calls": [
+        { "tool_name": "google_search", "required": true }
+      ]
+    }
+  ],
+  "tools_available": [
+    {
+      "name": "google_search",
+      "description": "Web search via Google.",
+      "input_schema": {
+        "type": "object",
+        "properties": { "q": { "type": "string" } },
+        "required": ["q"]
+      }
+    }
+  ],
+  "evaluation": {
+    "strategy": "llm_judge",
+    "rubric_id": "research_write",
+    "expected_summary": "Provides a search-grounded summary citing the TypeScript 5.5 release."
+  },
+  "provenance": {
+    "review_signoff": "AS 2026-05-22"
+  },
+  "tool_fixtures_ref": "benchmarks/assistant_traj/tool_fixtures/at_research_write_001.json"
+}

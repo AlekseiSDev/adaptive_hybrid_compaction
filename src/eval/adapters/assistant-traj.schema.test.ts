@@ -152,6 +152,95 @@ describe('AssistantTrajTaskSchema — cross-field invariants', () => {
   })
 })
 
+// Track J1 — tool-grounded tasks. Cross-field rule: if any turn has
+// expected_tool_calls with required:true, then tools_available must be non-empty
+// AND every required tool_name must appear in tools_available[].name. See
+// docs/design/J_at_tools.md §10.3.
+describe('AssistantTrajTaskSchema — Track J tool-grounded cross-field rules', () => {
+  const toolGroundedTask = {
+    task_id: 'at_research_write_001',
+    category: 'research_write',
+    source: 'opensource',
+    turns: [
+      {
+        role: 'user',
+        content: [{ type: 'text', text: 'Find recent news on TypeScript 5.5 release.' }],
+        expected_tool_calls: [{ tool_name: 'google_search', required: true }],
+      },
+    ],
+    tools_available: [
+      {
+        name: 'google_search',
+        description: 'Web search',
+        input_schema: { type: 'object', properties: { q: { type: 'string' } }, required: ['q'] },
+      },
+    ],
+    evaluation: {
+      strategy: 'llm_judge',
+      rubric_id: 'research_write',
+      expected_summary: 'Answers based on web search.',
+    },
+    provenance: {},
+  }
+
+  test('required tool present in tools_available → parses', () => {
+    expect(() => AssistantTrajTaskSchema.parse(toolGroundedTask)).not.toThrow()
+  })
+
+  test('required:true with empty tools_available → rejects', () => {
+    const bad = { ...toolGroundedTask, tools_available: [] }
+    const result = AssistantTrajTaskSchema.safeParse(bad)
+    expect(result.success).toBe(false)
+    if (!result.success) {
+      expect(result.error.message).toMatch(/required tool/i)
+    }
+  })
+
+  test('required tool_name not in tools_available[].name → rejects', () => {
+    const bad = {
+      ...toolGroundedTask,
+      tools_available: [
+        {
+          name: 'web_fetch',
+          description: 'Fetch a URL',
+          input_schema: { type: 'object' },
+        },
+      ],
+    }
+    const result = AssistantTrajTaskSchema.safeParse(bad)
+    expect(result.success).toBe(false)
+    if (!result.success) {
+      expect(result.error.message).toMatch(/google_search/)
+    }
+  })
+
+  test('expected_tool_calls without required (or required:false) does NOT enforce palette match', () => {
+    const ok = {
+      ...toolGroundedTask,
+      turns: [
+        {
+          ...toolGroundedTask.turns[0],
+          expected_tool_calls: [{ tool_name: 'whatever_optional', required: false }],
+        },
+      ],
+    }
+    expect(() => AssistantTrajTaskSchema.parse(ok)).not.toThrow()
+  })
+
+  test('legacy AT-v1 task with empty expected_tool_calls + empty tools_available still parses', () => {
+    expect(() => AssistantTrajTaskSchema.parse(minimalValidImageQa)).not.toThrow()
+  })
+
+  test('optional tool_fixtures_ref accepted', () => {
+    const withRef = {
+      ...toolGroundedTask,
+      tool_fixtures_ref:
+        'benchmarks/assistant_traj/tool_fixtures/at_research_write_001.json',
+    }
+    expect(() => AssistantTrajTaskSchema.parse(withRef)).not.toThrow()
+  })
+})
+
 describe('AssistantTrajTaskSchema — round-trip identity', () => {
   test('JSON.stringify → JSON.parse → schema.parse for image_qa', () => {
     const json = JSON.stringify(minimalValidImageQa)

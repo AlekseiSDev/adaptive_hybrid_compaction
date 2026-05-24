@@ -1,0 +1,27 @@
+{
+  "task_id": "at_research_write_002",
+  "category": "research_write",
+  "source": "opensource",
+  "turns": [
+    {
+      "role": "user",
+      "content": [{ "type": "text", "text": "Search recent TypeScript news." }],
+      "expected_tool_calls": [
+        { "tool_name": "google_search", "required": true }
+      ]
+    }
+  ],
+  "tools_available": [
+    {
+      "name": "web_fetch",
+      "description": "Fetch a URL.",
+      "input_schema": { "type": "object" }
+    }
+  ],
+  "evaluation": {
+    "strategy": "llm_judge",
+    "rubric_id": "research_write",
+    "expected_summary": "Cites a search result."
+  },
+  "provenance": {}
+}

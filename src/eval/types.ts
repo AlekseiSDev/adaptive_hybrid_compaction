@@ -29,6 +29,15 @@ export type Score = {
   // before CostTracker.observe(). Separate field so test/eval can distinguish
   // baseline cost from judge cost.
   judge_cost_usd?: number
+  // Track J — AssistantTraj v2 tool-call coherence (J §6). AT-only field;
+  // other benches leave it undefined. Always populated by AT grader (even when
+  // pass:true) so RunRecord-level audit can see required_called / required_total
+  // without re-running.
+  tool_coherence?: {
+    required_called: number
+    required_total: number
+    pass: boolean
+  }
 }
 
 export type TokenUsage = {
@@ -105,7 +114,30 @@ export type Task = {
 
 export type Conversation = {
   messages: Message[]
+  // Track J — optional bench-provided tool palette. AT-v2 adapter populates
+  // it from `tools_available[]` + per-task replay dispatcher. Baselines that
+  // don't consume tools must tolerate undefined. Shape kept loose at the type
+  // boundary (provider-specific shapes diverge); concrete contract lives in
+  // src/eval/adapters/assistant-traj.tools.ts (J2).
+  tools?: Record<string, ToolHandle>
 }
+
+// Provider-neutral tool handle. AI SDK v6 `tool({...})` instances satisfy this
+// shape via duck-typing (description + inputSchema + execute). Baselines may
+// pass the object through to provider SDKs that understand richer shape.
+export type ToolHandle = {
+  description?: string
+  inputSchema: unknown
+  execute: (input: unknown) => Promise<{
+    content: ToolHandleContentPart[]
+    isError?: boolean
+  }>
+}
+
+export type ToolHandleContentPart =
+  | { type: 'text'; text: string }
+  | { type: 'image'; path: string; alt?: string | undefined }
+  | { type: 'file'; path: string; mime?: string | undefined }
 
 export type RunnerResponse = {
   text: string
@@ -116,6 +148,10 @@ export type RunnerResponse = {
   // Side-channel for bench-specific payloads (e.g. tau-bench env state + reward).
   // Transient — not persisted to RunRecord; only used grader↔runner. D5 Step 4.
   bench_extras?: unknown
+  // Track J — tool-calls emitted by the baseline during execution. AT grader
+  // (J5) consumes this to compute tool_coherence. Optional because non-AT
+  // benches don't populate it; baselines that don't see tools leave it undefined.
+  toolCalls?: { name: string; args: unknown }[]
 }
 
 export type ConfigDef = {
@@ -135,8 +171,10 @@ export type ConfigDef = {
   /**
    * Optional threshold overrides for `ahc_core` baseline. Track H P1 added
    * for the lme-multiturn sweep where natural Tier-3 size (~7.8K tok with
-   * Mode A replay) is borderline at default OBSERVER_THRESHOLD=8000 — lowering
-   * to 4000 makes observer fire reliably (per H_ablations_and_TODOs §12.2).
+   * Mode A replay) sat below the then-default OBSERVER_THRESHOLD=8000 —
+   * sweep lowered to 4000 so observer fired (per H_ablations_and_TODOs §12.2).
+   * Default has since been raised to 30000 (H Phase 8); the sweep YAML
+   * keeps 4000 as a historical artefact of that run.
    * Ignored for non-AHC baselines.
    */
   thresholds?: Partial<Thresholds>
@@ -177,6 +215,11 @@ export type BaselineState = {
 
 export type BaselineStepOptions = {
   instrumentation?: Instrumentation
+  // Track J — optional tool palette forwarded from `Conversation.tools`. AT-v2
+  // adapter populates it from the task's `tools_available[]` + sidecar fixture.
+  // Tools-aware baselines (`mastra-agent`, future ahc_core) pass it to their
+  // provider call (`agent.generate({tools})`). Text-only baselines ignore it.
+  tools?: Record<string, ToolHandle>
 }
 
 export type BaselineStepResult = {
@@ -184,6 +227,10 @@ export type BaselineStepResult = {
   state: BaselineState
   telemetry: TurnRecord
   cost_usd: number
+  // Track J — tool-calls emitted by the baseline during this step. Optional;
+  // text-only baselines leave it undefined. Aggregated across step()s by the
+  // runner into `RunnerResponse.toolCalls`.
+  toolCalls?: { name: string; args: unknown }[]
 }
 
 export type Baseline = {

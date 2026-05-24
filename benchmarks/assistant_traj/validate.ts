@@ -7,10 +7,14 @@
 //
 // Exit 0 on success. Exit 1 with a per-file failure summary otherwise.
 
-import { readFile, readdir } from 'node:fs/promises'
+import { readFile, readdir, stat } from 'node:fs/promises'
 import { resolve, dirname, basename, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { AssistantTrajTaskSchema } from '../../src/eval/adapters/assistant-traj.schema.js'
+import {
+  AssistantTrajTaskSchema,
+  type AssistantTrajTask,
+} from '../../src/eval/adapters/assistant-traj.schema.js'
+import { ToolFixtureFileSchema } from '../../src/eval/adapters/assistant-traj.tool-fixtures.schema.js'
 
 type Args = { mode: 'all' | 'fixtures' | 'one'; taskId?: string }
 
@@ -80,6 +84,69 @@ async function parseFile(path: string): Promise<{ ok: true } | { ok: false; reas
   return { ok: false, reason: result.error.message }
 }
 
+// Track J — Sidecar fixture cross-check. Only runs for tasks that declare at
+// least one required tool. Verifies: (a) sidecar file exists at expected path,
+// (b) sidecar parses against ToolFixtureFileSchema, (c) sidecar's task_id
+// matches the task. Default sidecar location is
+// benchmarks/assistant_traj/tool_fixtures/<task_id>.json — overridable per task
+// via the optional tool_fixtures_ref pointer (repo-relative).
+async function parseFixturePair(
+  taskPath: string,
+): Promise<{ ok: true } | { ok: false; reason: string } | { skip: true }> {
+  const rawTask = await readFile(taskPath, 'utf8')
+  const taskJson = JSON.parse(rawTask) as unknown
+  const taskResult = AssistantTrajTaskSchema.safeParse(taskJson)
+  if (!taskResult.success) {
+    return { skip: true } // task itself invalid — parseFile already surfaces the error
+  }
+  const task: AssistantTrajTask = taskResult.data
+  const hasRequiredTool = task.turns.some(
+    (turn) => (turn.expected_tool_calls ?? []).some((c) => c.required === true),
+  )
+  if (!hasRequiredTool) return { skip: true }
+
+  const repoRoot = resolve(rootDir(), '..', '..')
+  const fixturePath = task.tool_fixtures_ref
+    ? resolve(repoRoot, task.tool_fixtures_ref)
+    : join(rootDir(), 'tool_fixtures', `${task.task_id}.json`)
+
+  try {
+    await stat(fixturePath)
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+      return {
+        ok: false,
+        reason: `missing sidecar tool_fixtures file: ${fixturePath} (task declares required tool)`,
+      }
+    }
+    return { ok: false, reason: `fixture stat error: ${(err as Error).message}` }
+  }
+
+  let fixtureRaw: string
+  try {
+    fixtureRaw = await readFile(fixturePath, 'utf8')
+  } catch (err) {
+    return { ok: false, reason: `fixture read error: ${(err as Error).message}` }
+  }
+  let fixtureJson: unknown
+  try {
+    fixtureJson = JSON.parse(fixtureRaw)
+  } catch (err) {
+    return { ok: false, reason: `fixture JSON parse error: ${(err as Error).message}` }
+  }
+  const fixtureResult = ToolFixtureFileSchema.safeParse(fixtureJson)
+  if (!fixtureResult.success) {
+    return { ok: false, reason: `fixture schema: ${fixtureResult.error.message}` }
+  }
+  if (fixtureResult.data.task_id !== task.task_id) {
+    return {
+      ok: false,
+      reason: `fixture task_id '${fixtureResult.data.task_id}' does not match task '${task.task_id}'`,
+    }
+  }
+  return { ok: true }
+}
+
 async function readReason(jsonPath: string): Promise<string | null> {
   const reasonPath = jsonPath.replace(/\.json$/, '.reason.txt')
   try {
@@ -93,17 +160,33 @@ async function readReason(jsonPath: string): Promise<string | null> {
 
 type Failure = { file: string; detail: string }
 
+async function validateTaskWithFixture(path: string): Promise<{
+  schemaOk: boolean
+  failure?: Failure
+}> {
+  const schemaResult = await parseFile(path)
+  if (!schemaResult.ok) {
+    return { schemaOk: false, failure: { file: path, detail: schemaResult.reason } }
+  }
+  const pairResult = await parseFixturePair(path)
+  if ('skip' in pairResult) return { schemaOk: true }
+  if (!pairResult.ok) {
+    return { schemaOk: true, failure: { file: path, detail: pairResult.reason } }
+  }
+  return { schemaOk: true }
+}
+
 async function runAll(): Promise<Failure[]> {
   const tasksDir = resolve(rootDir(), 'tasks')
   const files = await listJson(tasksDir)
   const failures: Failure[] = []
   for (const f of files) {
-    const result = await parseFile(f)
-    if (result.ok) {
-      console.log(`✓ ${basename(f)}`)
-    } else {
+    const { failure } = await validateTaskWithFixture(f)
+    if (failure) {
       console.log(`✗ ${basename(f)}`)
-      failures.push({ file: f, detail: result.reason })
+      failures.push(failure)
+    } else {
+      console.log(`✓ ${basename(f)}`)
     }
   }
   if (files.length === 0) {
@@ -115,13 +198,13 @@ async function runAll(): Promise<Failure[]> {
 async function runOne(taskId: string): Promise<Failure[]> {
   const tasksDir = resolve(rootDir(), 'tasks')
   const path = join(tasksDir, `${taskId}.json`)
-  const result = await parseFile(path)
-  if (result.ok) {
-    console.log(`✓ ${basename(path)}`)
-    return []
+  const { failure } = await validateTaskWithFixture(path)
+  if (failure) {
+    console.log(`✗ ${basename(path)}`)
+    return [failure]
   }
-  console.log(`✗ ${basename(path)}`)
-  return [{ file: path, detail: result.reason }]
+  console.log(`✓ ${basename(path)}`)
+  return []
 }
 
 async function runFixtures(): Promise<Failure[]> {

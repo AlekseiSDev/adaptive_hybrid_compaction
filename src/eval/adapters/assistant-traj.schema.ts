@@ -114,13 +114,20 @@ const AssistantTrajTaskBaseSchema = z.object({
   tools_available: z.array(ToolDefinitionSchema),
   evaluation: EvaluationSpecSchema,
   provenance: ProvenanceSchema,
+  // Track J — optional pointer to sidecar fixture file. Absent ⇒ default
+  // lookup `benchmarks/assistant_traj/tool_fixtures/<task_id>.json`.
+  tool_fixtures_ref: z.string().min(1).optional(),
 })
 
-// Cross-field invariants (§2 + §4):
+// Cross-field invariants (§2 + §4 + J §10.3):
 //  1. task_id prefix must match the declared category.
 //  2. source='real' requires non-empty provenance.anonymized_at (§4 final paragraph).
 //  3. composite evaluation must have at least one rule (otherwise aggregate is vacuous).
 //     Recurses into nested composite rules.
+//  4. (Track J) if any turn has expected_tool_calls with required:true, then
+//     tools_available must be non-empty AND every required tool_name must
+//     appear in tools_available[].name. AT-v1 tasks (empty expected_tool_calls)
+//     are unaffected — rule only activates when a required tool is declared.
 export const AssistantTrajTaskSchema = AssistantTrajTaskBaseSchema.superRefine((task, ctx) => {
   const match = TaskIdRegex.exec(task.task_id)
   const idCategory = match?.groups?.['category']
@@ -144,7 +151,45 @@ export const AssistantTrajTaskSchema = AssistantTrajTaskBaseSchema.superRefine((
   }
 
   checkComposite(task.evaluation, ['evaluation'], ctx)
+  checkToolPalette(task, ctx)
 })
+
+function checkToolPalette(
+  task: z.infer<typeof AssistantTrajTaskBaseSchema>,
+  ctx: z.RefinementCtx,
+): void {
+  const requiredNames: { turnIdx: number; callIdx: number; name: string }[] = []
+  task.turns.forEach((turn, turnIdx) => {
+    const calls = turn.expected_tool_calls ?? []
+    calls.forEach((call, callIdx) => {
+      if (call.required === true) {
+        requiredNames.push({ turnIdx, callIdx, name: call.tool_name })
+      }
+    })
+  })
+  if (requiredNames.length === 0) return
+
+  if (task.tools_available.length === 0) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['tools_available'],
+      message:
+        'tools_available must be non-empty when any turn declares a required tool in expected_tool_calls',
+    })
+    return
+  }
+
+  const available = new Set(task.tools_available.map((t) => t.name))
+  for (const req of requiredNames) {
+    if (!available.has(req.name)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['turns', req.turnIdx, 'expected_tool_calls', req.callIdx, 'tool_name'],
+        message: `required tool '${req.name}' not present in tools_available[].name`,
+      })
+    }
+  }
+}
 
 function checkComposite(
   evaluation: unknown,
