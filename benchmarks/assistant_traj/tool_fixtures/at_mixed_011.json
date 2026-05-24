@@ -1,0 +1,14 @@
+{
+  "task_id": "at_mixed_011",
+  "fixtures": [
+    {
+      "tool_name": "image_gen",
+      "output_parts": [
+        {
+          "type": "text",
+          "text": "<placeholder output for image_gen — synthetic draft; replace via capture-at-fixture (J4 helper) or manual edit before merge>"
+        }
+      ]
+    }
+  ]
+}

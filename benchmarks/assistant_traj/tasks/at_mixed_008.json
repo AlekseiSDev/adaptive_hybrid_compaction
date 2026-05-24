@@ -1,5 +1,5 @@
 {
-  "task_id": "at_mixed_005",
+  "task_id": "at_mixed_008",
   "category": "mixed",
   "source": "synthetic",
   "turns": [
@@ -8,7 +8,7 @@
       "content": [
         {
           "type": "text",
-          "text": "Find a public dataset of monthly average temperatures for Berlin (2020–2023) via google_search, fetch one source, then plot the trend with Python."
+          "text": "Find the Wikipedia article on the Fibonacci sequence, summarize Binet's formula, and verify F(20) using Python."
         }
       ],
       "expected_tool_calls": [

@@ -1,5 +1,5 @@
 {
-  "task_id": "at_code_iter_008",
+  "task_id": "at_code_iter_011",
   "category": "code_iter",
   "source": "synthetic",
   "turns": [
@@ -8,7 +8,7 @@
       "content": [
         {
           "type": "text",
-          "text": "Write a recursive function to compute the Fibonacci sequence up to F(15). Print all values."
+          "text": "Plot a sine wave from 0 to 2π with 100 points using matplotlib. Save to /tmp/sine.png and confirm."
         }
       ],
       "expected_tool_calls": [

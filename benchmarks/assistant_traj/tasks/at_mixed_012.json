@@ -1,5 +1,5 @@
 {
-  "task_id": "at_mixed_005",
+  "task_id": "at_mixed_012",
   "category": "mixed",
   "source": "synthetic",
   "turns": [
@@ -8,7 +8,7 @@
       "content": [
         {
           "type": "text",
-          "text": "Find a public dataset of monthly average temperatures for Berlin (2020–2023) via google_search, fetch one source, then plot the trend with Python."
+          "text": "Look up the WHATWG Fetch spec section on CORS, fetch the live spec, then write Python that demonstrates a simple CORS preflight check."
         }
       ],
       "expected_tool_calls": [

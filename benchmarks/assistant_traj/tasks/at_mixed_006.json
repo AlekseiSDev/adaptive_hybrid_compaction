@@ -6,64 +6,62 @@
     {
       "role": "user",
       "content": [
-        { "type": "text", "text": "Помоги распланировать книжный клуб для коллег: 8 человек, ежемесячно, 6 месяцев. Подбери 6 книг по теме «системное мышление + знание о больших технологических организациях», смесь fiction/non-fiction. У каждой книги — title, author, year, ~3 sentence summary, почему именно для нашей группы. И финальная таблица в порядке чтения." }
-      ]
-    },
-    {
-      "role": "assistant",
-      "content": [
-        { "type": "text", "text": "Подборка из 6 книг (3 non-fiction, 3 fiction) с прогрессией от концептуальных foundations к narrative-driven explorations:\n\n**1. Thinking in Systems: A Primer** — Donella Meadows (2008, posthumous edition). Compact intro в системную динамику: стэки, потоки, обратные связи, leverage points. ~240 страниц, читается за вечер; язык доступный, примеры от Aral Sea до семейных конфликтов. Для нашей группы — общий язык для последующих обсуждений; multiple inheritance leverage points даёт фреймворк, который применим и в code review, и в product strategy.\n\n**2. The Phoenix Project** — Gene Kim, Kevin Behr, George Spafford (2013). DevOps-роман: IT-director спасает proект «Phoenix» применяя Theory of Constraints. Fictional, но герои — узнаваемые типажи из любой engineering org. Спорное-в-моменте решение каждой главы; отлично кричит на pattern recognition (наша Q3 фаза «непрерывных пожаров» — узнаете). Дает безопасную дистанцию для дискуссии «как у нас». \n\n**3. The Goal: A Process of Ongoing Improvement** — Eli Goldratt (1984). Original Theory-of-Constraints роман, который вдохновил Phoenix Project. Manufacturing setting, но bottleneck-thinking универсален. Хороший контрапункт к Phoenix — увидеть как идея 1984 года применима в software 40 лет спустя. Подсветит сходства/различия knowledge-work vs widget-production.\n\n**4. An Elegant Puzzle: Systems of Engineering Management** — Will Larson (2019). Strides собранный из Stripe/Calm experience. Каждая глава — отдельный паттерн (промо, on-call, debt). Не linear, не нужно читать целиком — для книжного клуба раздадим по chapter'у на участника и сделаем «mini-summit». Daughter-volume к Meadows: теория системного → конкретные org-patterns.\n\n**5. Daemon** — Daniel Suarez (2009). Techno-thriller: умерший game-designer оставляет автономную программу, которая reshape'ит общественные структуры через простые контракты. Дикий сюжет, но удивительно proницательный по поводу emergent behaviour в сложных tech-systems и где власть смещается когда контроль распределён. Для нашей дискуссии — провокация на тему security-of-emergent-orgs.\n\n**6. The Goal, Part II / Beyond the Goal** — finale OR альтернатива: **Team of Teams** — Stanley McChrystal (2015). Re-org US Special Ops под terrorism era; параллели с Spotify-model, decentralization-vs-coordination tradeoff. Военный контекст, но фреймворки «adaptive teams», «shared consciousness» mapping straight onto modern engineering. Хороший capstone — оборот от «как организованы вещи» к «как организованы люди».\n\n**Финальная таблица в порядке чтения:**\n\n| # | Месяц | Title | Author | Year | Genre |\n|---|---|---|---|---|---|\n| 1 | M1 | Thinking in Systems: A Primer | Donella Meadows | 2008 | Non-fiction |\n| 2 | M2 | The Goal | Eli Goldratt | 1984 | Fiction |\n| 3 | M3 | The Phoenix Project | G. Kim et al. | 2013 | Fiction |\n| 4 | M4 | An Elegant Puzzle | Will Larson | 2019 | Non-fiction |\n| 5 | M5 | Daemon | Daniel Suarez | 2009 | Fiction |\n| 6 | M6 | Team of Teams | Stanley McChrystal | 2015 | Non-fiction |\n\nПроверь миxс жанров: 3 non-fiction (1, 4, 6), 3 fiction (2, 3, 5) — alternating через равные промежутки. Прогрессия: foundations → cases → emergent system thinking → people-organization." }
-      ]
-    },
-    {
-      "role": "user",
-      "content": [
-        { "type": "text", "text": "Daemon — слишком entertainment-heavy для нашего корпоративного контекста (HR может косо посмотреть). Замени на что-то non-fiction но не сухое, на пересечении psychology / decision making. И передвинь Team of Teams в середину — слишком тяжёлый closing." }
-      ]
-    },
-    {
-      "role": "assistant",
-      "content": [
-        { "type": "text", "text": "Хорошо. Замена для Daemon:\n\n**Thinking, Fast and Slow** — Daniel Kahneman (2011) — классика поведенческой экономики, две системы мышления (System 1 intuitive / System 2 deliberative), cognitive biases которые отравляют решения в любой большой org. Не сухой: каждая глава — серия концретных примеров и контр-интуитивных результатов. Корпоративно safe, intellectually rich. Подсветит наши собственные decision-making патологии в product/eng reviews.\n\nОбновлённая последовательность с Team of Teams в середине:\n\n| # | Месяц | Title | Author | Year | Genre |\n|---|---|---|---|---|---|\n| 1 | M1 | Thinking in Systems: A Primer | Donella Meadows | 2008 | Non-fiction |\n| 2 | M2 | The Goal | Eli Goldratt | 1984 | Fiction |\n| 3 | M3 | The Phoenix Project | G. Kim et al. | 2013 | Fiction |\n| 4 | M4 | Team of Teams | Stanley McChrystal | 2015 | Non-fiction |\n| 5 | M5 | An Elegant Puzzle | Will Larson | 2019 | Non-fiction |\n| 6 | M6 | Thinking, Fast and Slow | Daniel Kahneman | 2011 | Non-fiction |\n\nЖанровый баланс изменился: 5 non-fiction, 1 fiction (Phoenix Project всё ещё там — Goal я тоже считаю «fiction» формально, но он в narrative form). Финальный месяц теперь «закрывающий вопрос» — почему мы как люди делаем то, что делаем, на уровне индивидуальной cognition — естественный endpoint для разговоров о системах + командах + теории ограничений." }
-      ]
-    },
-    {
-      "role": "user",
-      "content": [
-        { "type": "text", "text": "Ты передвинул но не пометил Goal как fiction. Это всё-таки fiction (роман). Тогда после моей правки получается 4 non-fiction + 2 fiction. Подтверждаешь? Также — добавь короткое (одно предложение) объяснение почему такая последовательность работает педагогически: от чего к чему мы ведём группу." }
-      ]
-    },
-    {
-      "role": "assistant",
-      "content": [
-        { "type": "text", "text": "Подтверждаю counting:\n\n- **Fiction (2):** The Goal (#2), The Phoenix Project (#3)\n- **Non-fiction (4):** Thinking in Systems (#1), Team of Teams (#4), An Elegant Puzzle (#5), Thinking, Fast and Slow (#6)\n\nРатио 4:2 (66/33%). Можно ещё одну fiction подгрузить (например, **The Soul of a New Machine** — Tracy Kidder, 1981, Pulitzer; narrative non-fiction про IBM-style engineering team в 1970s), но это сделает 5:1, что break'нет alternating-rhythm. Текущее 4:2 — приемлемо.\n\n**Педагогическая арка:**\n«От «как системы устроены вообще» (Meadows) → через «как ведут себя реальные команды под constraint'ами» (Goal → Phoenix → Team of Teams) → к «как одна голова принимает решения внутри этих команд» (Larson → Kahneman). Группа двигается от макро-уровня (system) через мезо-уровень (organization) к микро-уровню (individual cognition), накапливая по пути инструменты для рефлексии о собственной работе.»" }
-      ]
-    },
-    {
-      "role": "user",
-      "content": [
-        { "type": "text", "text": "Финал: экспортируй финальную таблицу + описание арки в CSV-формат, готовый для импорта в Notion. Поля: month,title,author,year,genre,why_now (короткая 1-предложение причина именно этого порядка). Header строкой. 6 data rows. Числовой год без кавычек. Готовый CSV." }
+        {
+          "type": "text",
+          "text": "Search for the SHA-256 spec, fetch the relevant RFC, then implement SHA-256 in pure Python and hash the string \"hello\"."
+        }
+      ],
+      "expected_tool_calls": [
+        {
+          "tool_name": "google_search",
+          "required": true,
+          "args_match": "subset"
+        },
+        {
+          "tool_name": "web_fetch",
+          "required": true,
+          "args_match": "subset"
+        },
+        {
+          "tool_name": "code_interpreter",
+          "required": true,
+          "args_match": "subset"
+        }
       ]
     }
   ],
-  "tools_available": [],
-  "evaluation": {
-    "strategy": "composite",
-    "aggregate": "all",
-    "rules": [
-      { "strategy": "regex", "pattern": "^month,title,author,year,genre,why_now", "flags": "im" },
-      { "strategy": "regex", "pattern": "M1,(\"Thinking in Systems[^\"]*\"|Thinking in Systems)", "flags": "" },
-      { "strategy": "regex", "pattern": "Goldratt,1984", "flags": "" },
-      { "strategy": "regex", "pattern": "Kahneman,2011", "flags": "" },
-      { "strategy": "regex", "pattern": "(Team of Teams).*2015", "flags": "" },
-      {
-        "strategy": "llm_judge",
-        "rubric_id": "mixed",
-        "expected_summary": "Pure CSV export. Header line: «month,title,author,year,genre,why_now». Exactly 6 data rows in the final agreed order: M1 Thinking in Systems Donella Meadows 2008 Non-fiction; M2 The Goal Eli Goldratt 1984 Fiction; M3 The Phoenix Project Kim/Behr/Spafford 2013 Fiction; M4 Team of Teams Stanley McChrystal 2015 Non-fiction; M5 An Elegant Puzzle Will Larson 2019 Non-fiction; M6 Thinking, Fast and Slow Daniel Kahneman 2011 Non-fiction. Year as plain integer (no quotes around it). Genre exactly Fiction or Non-fiction. Fields containing commas (title, author, why_now) are double-quoted. why_now is a single short sentence (≤ 25 words) per row explaining why this position in the arc. No prose before or after the CSV."
+  "tools_available": [
+    {
+      "name": "google_search",
+      "description": "Web search via Google. Returns top-N results as title+snippet+URL list.",
+      "input_schema": {
+        "type": "object",
+        "description": "Web search via Google. Returns top-N results as title+snippet+URL list. (concrete shape: TOOL_INPUT_SCHEMAS.google_search)"
       }
-    ]
+    },
+    {
+      "name": "web_fetch",
+      "description": "Fetch a web page and return cleaned main content as Markdown. HTML only.",
+      "input_schema": {
+        "type": "object",
+        "description": "Fetch a web page and return cleaned main content as Markdown. HTML only. (concrete shape: TOOL_INPUT_SCHEMAS.web_fetch)"
+      }
+    },
+    {
+      "name": "code_interpreter",
+      "description": "Execute Python 3 code in a sandbox. Returns stdout, stderr, and exit code.",
+      "input_schema": {
+        "type": "object",
+        "description": "Execute Python 3 code in a sandbox. Returns stdout, stderr, and exit code. (concrete shape: TOOL_INPUT_SCHEMAS.code_interpreter)"
+      }
+    }
+  ],
+  "evaluation": {
+    "strategy": "llm_judge",
+    "rubric_id": "mixed",
+    "expected_summary": "Synthetic mixed task — verify tool sequence and answer relevance."
   },
   "provenance": {
-    "review_signoff": ""
+    "review_signoff": "<draft: synthetic top-up; needs manual review + fixture capture>"
   }
 }

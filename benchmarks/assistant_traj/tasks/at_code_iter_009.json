@@ -1,5 +1,5 @@
 {
-  "task_id": "at_code_iter_008",
+  "task_id": "at_code_iter_009",
   "category": "code_iter",
   "source": "synthetic",
   "turns": [
@@ -8,7 +8,7 @@
       "content": [
         {
           "type": "text",
-          "text": "Write a recursive function to compute the Fibonacci sequence up to F(15). Print all values."
+          "text": "Given the polynomial p(x) = 2x^3 - 5x + 1, evaluate at x=2.5 and find its roots numerically using numpy."
         }
       ],
       "expected_tool_calls": [

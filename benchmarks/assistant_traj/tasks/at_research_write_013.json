@@ -1,6 +1,6 @@
 {
-  "task_id": "at_mixed_005",
-  "category": "mixed",
+  "task_id": "at_research_write_013",
+  "category": "research_write",
   "source": "synthetic",
   "turns": [
     {
@@ -8,7 +8,7 @@
       "content": [
         {
           "type": "text",
-          "text": "Find a public dataset of monthly average temperatures for Berlin (2020–2023) via google_search, fetch one source, then plot the trend with Python."
+          "text": "Look up the τ-bench retail benchmark — what tools does it ship and how is success measured?"
         }
       ],
       "expected_tool_calls": [
@@ -19,11 +19,6 @@
         },
         {
           "tool_name": "web_fetch",
-          "required": true,
-          "args_match": "subset"
-        },
-        {
-          "tool_name": "code_interpreter",
           "required": true,
           "args_match": "subset"
         }
@@ -46,20 +41,12 @@
         "type": "object",
         "description": "Fetch a web page and return cleaned main content as Markdown. HTML only. (concrete shape: TOOL_INPUT_SCHEMAS.web_fetch)"
       }
-    },
-    {
-      "name": "code_interpreter",
-      "description": "Execute Python 3 code in a sandbox. Returns stdout, stderr, and exit code.",
-      "input_schema": {
-        "type": "object",
-        "description": "Execute Python 3 code in a sandbox. Returns stdout, stderr, and exit code. (concrete shape: TOOL_INPUT_SCHEMAS.code_interpreter)"
-      }
     }
   ],
   "evaluation": {
     "strategy": "llm_judge",
-    "rubric_id": "mixed",
-    "expected_summary": "Synthetic mixed task — verify tool sequence and answer relevance."
+    "rubric_id": "research_write",
+    "expected_summary": "Synthetic research_write task — verify tool sequence and answer relevance."
   },
   "provenance": {
     "review_signoff": "<draft: synthetic top-up; needs manual review + fixture capture>"

@@ -6,65 +6,36 @@
     {
       "role": "user",
       "content": [
-        { "type": "text", "text": "Нужен TypeScript-тип `DeepReadonly<T>`, который рекурсивно делает все вложенные объекты/массивы readonly. Должен корректно работать на: примитивах, Array<T>, Tuple, Record, обычных объектах, nested. На функциях оставляет тип как есть (функция — не плэйн-объект)." }
-      ]
-    },
-    {
-      "role": "assistant",
-      "content": [
-        { "type": "text", "text": "```typescript\ntype DeepReadonly<T> =\n  T extends (...args: never[]) => unknown\n    ? T\n    : T extends readonly (infer U)[]\n      ? readonly DeepReadonly<U>[]\n      : T extends object\n        ? { readonly [K in keyof T]: DeepReadonly<T[K]> }\n        : T\n```\n\nКак работает:\n1. Функции (`(...args) => ...`) проходят без изменений — это сужение через `extends`.\n2. Массивы и tuple'ы — `readonly (infer U)[]` ловит и обычные `T[]`, и `readonly T[]`, и tuple — даёт `readonly` массив рекурсивно по элементу.\n3. Объекты — mapped type с `readonly` модификатором, рекурсивно по значениям.\n4. Примитивы (string, number, boolean, null, undefined, symbol, bigint) — финальный fallback `: T`." }
-      ]
-    },
-    {
-      "role": "user",
-      "content": [
-        { "type": "text", "text": "Прогнал на tuple — превратился в `readonly DeepReadonly<element>[]` (массив), а должен остаться tuple. Например `[number, string]` стал `readonly (number | string)[]`. Поправь чтобы tuple'ы сохраняли позиционность." }
-      ]
-    },
-    {
-      "role": "assistant",
-      "content": [
-        { "type": "text", "text": "Да, `readonly (infer U)[]` flatten'ит tuple до union'а элементов и теряет позиционность. Чтобы сохранить tuple-структуру, нужно проверить tuple отдельно через `length: number` / индексированную mapped:\n\n```typescript\ntype DeepReadonly<T> =\n  T extends (...args: never[]) => unknown\n    ? T\n    : T extends readonly [unknown, ...unknown[]] | readonly []\n      ? { readonly [K in keyof T]: DeepReadonly<T[K]> }\n      : T extends readonly (infer U)[]\n        ? readonly DeepReadonly<U>[]\n        : T extends object\n          ? { readonly [K in keyof T]: DeepReadonly<T[K]> }\n          : T\n```\n\nПорядок веток важен:\n1. Функция — пропускаем.\n2. **Tuple** (`readonly [unknown, ...unknown[]] | readonly []`) — ловим И не-пустые, И пустые tuple'ы; обрабатываем mapped'ом, сохраняя позиции.\n3. Array (общий случай) — даёт `readonly DeepReadonly<U>[]`.\n4. Object — mapped.\n5. Primitive — fallback.\n\nПроверка: `DeepReadonly<[number, string]>` → `readonly [number, string]` (с позициями). `DeepReadonly<{ a: { b: number[] } }>` → `{ readonly a: { readonly b: readonly number[] } }`." }
-      ]
-    },
-    {
-      "role": "user",
-      "content": [
-        { "type": "text", "text": "Edge case: `Map<K, V>` и `Set<T>`. По умолчанию они попадают в ветку object'ов и mapped по их методам — что нелепо, потому что .set() сам по себе не делает Map readonly. Нужно: для Map → ReadonlyMap<K, DeepReadonly<V>>; для Set → ReadonlySet<DeepReadonly<T>>. Поправь тип." }
-      ]
-    },
-    {
-      "role": "assistant",
-      "content": [
-        { "type": "text", "text": "Добавляем явные ветки для Map / Set ДО object-ветки:\n\n```typescript\ntype DeepReadonly<T> =\n  T extends (...args: never[]) => unknown\n    ? T\n    : T extends Map<infer K, infer V>\n      ? ReadonlyMap<K, DeepReadonly<V>>\n      : T extends Set<infer U>\n        ? ReadonlySet<DeepReadonly<U>>\n        : T extends readonly [unknown, ...unknown[]] | readonly []\n          ? { readonly [K in keyof T]: DeepReadonly<T[K]> }\n          : T extends readonly (infer U)[]\n            ? readonly DeepReadonly<U>[]\n            : T extends object\n              ? { readonly [K in keyof T]: DeepReadonly<T[K]> }\n              : T\n```\n\nПорядок (Map → Set → tuple → array → object) важен: Map/Set extends object, поэтому без explicit checks они уйдут в object-ветку и потеряют семантику.\n\n**Заметка про ключи Map:** `ReadonlyMap<K, DeepReadonly<V>>` оставляет ключ `K` неизменным — это пo-дизайну, потому что ключи Map по контракту immutable (key referenced by identity). Если требуется и K сделать readonly, замени на `ReadonlyMap<DeepReadonly<K>, DeepReadonly<V>>`." }
-      ]
-    },
-    {
-      "role": "user",
-      "content": [
-        { "type": "text", "text": "Финал: оформи в готовый `src/utils/deep-readonly.ts` модуль — экспорт типа `DeepReadonly`, два utility-типа `DeepReadonlyMap<K,V> = ReadonlyMap<K, DeepReadonly<V>>` и `DeepReadonlySet<T> = ReadonlySet<DeepReadonly<T>>`, и JSDoc-описание с одним examples. Готовый файл, готовый коммитить." }
+        {
+          "type": "text",
+          "text": "Parse this CSV with pandas: `name,score\\nalice,90\\nbob,75\\ncarol,82`. Compute mean score and print rows above mean."
+        }
+      ],
+      "expected_tool_calls": [
+        {
+          "tool_name": "code_interpreter",
+          "required": true,
+          "args_match": "subset"
+        }
       ]
     }
   ],
-  "tools_available": [],
-  "evaluation": {
-    "strategy": "composite",
-    "aggregate": "all",
-    "rules": [
-      { "strategy": "regex", "pattern": "export type DeepReadonly", "flags": "" },
-      { "strategy": "regex", "pattern": "ReadonlyMap<infer K, DeepReadonly<infer V>>|Map<infer K, infer V>", "flags": "" },
-      { "strategy": "regex", "pattern": "ReadonlySet", "flags": "" },
-      { "strategy": "regex", "pattern": "DeepReadonlyMap", "flags": "" },
-      { "strategy": "regex", "pattern": "DeepReadonlySet", "flags": "" },
-      { "strategy": "regex", "pattern": "\\*\\s*@example|/\\*\\*", "flags": "" },
-      {
-        "strategy": "llm_judge",
-        "rubric_id": "code_iter",
-        "expected_summary": "Single TypeScript module file (src/utils/deep-readonly.ts content) containing: JSDoc comment block at top with at least one @example illustrating DeepReadonly on a nested type; exported type DeepReadonly<T> that handles in order — functions (passthrough), Map (→ ReadonlyMap with DeepReadonly value), Set (→ ReadonlySet with DeepReadonly element), tuples (preserves positionality via readonly [unknown, ...unknown[]] | readonly [] mapped check), regular arrays (readonly DeepReadonly<U>[]), objects (mapped with readonly modifier), primitives (passthrough); exported helper types DeepReadonlyMap<K,V> = ReadonlyMap<K, DeepReadonly<V>> and DeepReadonlySet<T> = ReadonlySet<DeepReadonly<T>>. Pure TypeScript, no prose around it, no markdown fencing, file is paste-ready for commit."
+  "tools_available": [
+    {
+      "name": "code_interpreter",
+      "description": "Execute Python 3 code in a sandbox. Returns stdout, stderr, and exit code.",
+      "input_schema": {
+        "type": "object",
+        "description": "Execute Python 3 code in a sandbox. Returns stdout, stderr, and exit code. (concrete shape: TOOL_INPUT_SCHEMAS.code_interpreter)"
       }
-    ]
+    }
+  ],
+  "evaluation": {
+    "strategy": "llm_judge",
+    "rubric_id": "code_iter",
+    "expected_summary": "Synthetic code_iter task — verify tool sequence and answer relevance."
   },
   "provenance": {
-    "review_signoff": ""
+    "review_signoff": "<draft: synthetic top-up; needs manual review + fixture capture>"
   }
 }

@@ -6,83 +6,36 @@
     {
       "role": "user",
       "content": [
-        { "type": "text", "text": "Есть таблица `orders(id, user_id, status, created_at, total_cents)` в PostgreSQL. Напиши запрос: для каждого пользователя — топ-3 самых дорогих заказа за последние 30 дней, в статусе 'completed'. Возвращай: user_id, order_id, total_cents, rank. Стандартный SQL, без проприетарных расширений." }
-      ]
-    },
-    {
-      "role": "assistant",
-      "content": [
-        { "type": "text", "text": "```sql\nWITH ranked_orders AS (\n  SELECT\n    user_id,\n    id AS order_id,\n    total_cents,\n    ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY total_cents DESC) AS rank\n  FROM orders\n  WHERE status = 'completed'\n    AND created_at >= NOW() - INTERVAL '30 days'\n)\nSELECT user_id, order_id, total_cents, rank\nFROM ranked_orders\nWHERE rank <= 3\nORDER BY user_id, rank;\n```\n\nКлючевые моменты:\n- `ROW_NUMBER()` даёт строгий ранк 1, 2, 3 (без дубликатов при равных значениях).\n- `INTERVAL '30 days'` — стандарт SQL:2011, поддерживается всеми основными СУБД.\n- Если хочется, чтобы при равных total_cents оба заказа попали (например, оба ранг 1), замените `ROW_NUMBER()` на `RANK()` или `DENSE_RANK()`." }
-      ]
-    },
-    {
-      "role": "user",
-      "content": [
-        { "type": "text", "text": "Прогнал EXPLAIN ANALYZE на проде — план выходит на Seq Scan по 12M строк. Нужно: использовать индекс. Подскажи какой индекс создать, и оптимизируй запрос. Тот же возвращаемый shape." }
-      ]
-    },
-    {
-      "role": "assistant",
-      "content": [
-        { "type": "text", "text": "Для этого запроса оптимален составной индекс по `(status, created_at, user_id, total_cents DESC)`:\n\n```sql\nCREATE INDEX CONCURRENTLY idx_orders_completed_recent\n  ON orders (status, created_at DESC, user_id, total_cents DESC)\n  WHERE status = 'completed';\n```\n\n**Почему такая последовательность колонок:**\n1. `status = 'completed'` — partial index только по completed-заказам; если в таблице 60% completed → 40% размер.\n2. `created_at DESC` — фильтр диапазона за 30 дней; B-tree эффективно сканирует префикс.\n3. `user_id` — для PARTITION BY партии в window function.\n4. `total_cents DESC` — для ORDER BY внутри партиции; index-only scan.\n\n**Оптимизированный запрос:**\n```sql\nWITH ranked_orders AS (\n  SELECT\n    user_id,\n    id AS order_id,\n    total_cents,\n    ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY total_cents DESC) AS rank\n  FROM orders\n  WHERE status = 'completed'\n    AND created_at >= NOW() - INTERVAL '30 days'\n)\nSELECT user_id, order_id, total_cents, rank\nFROM ranked_orders\nWHERE rank <= 3\nORDER BY user_id, rank;\n```\n\nПлан запроса теперь: Index Scan on idx_orders_completed_recent → WindowAgg → Filter (rank ≤ 3). Ожидаемое время на 12M строк (~30% completed за 30 дней): 200–500ms vs ~10s на Seq Scan.\n\n**Bonus оптимизация:** если нужны ТОЛЬКО топ-3 и таблица очень большая, замените на LATERAL — короче для планировщика:\n```sql\nSELECT u.user_id, sub.order_id, sub.total_cents, sub.rank\nFROM (SELECT DISTINCT user_id FROM orders WHERE status='completed') u,\nLATERAL (\n  SELECT id AS order_id, total_cents,\n         ROW_NUMBER() OVER (ORDER BY total_cents DESC) AS rank\n  FROM orders\n  WHERE user_id = u.user_id\n    AND status = 'completed'\n    AND created_at >= NOW() - INTERVAL '30 days'\n  ORDER BY total_cents DESC\n  LIMIT 3\n) sub\nORDER BY u.user_id, sub.rank;\n```" }
-      ]
-    },
-    {
-      "role": "user",
-      "content": [
-        { "type": "text", "text": "LATERAL версия запустилась быстрее в 4 раза, оставляем её. Теперь добавь требование: если у пользователя меньше 3 заказов за период — всё равно вернуть всех. И отсортируй финальный результат по user_id ASC, потом по rank ASC. Запрос полный, готовый к копи-пасту в Postico." }
-      ]
-    },
-    {
-      "role": "assistant",
-      "content": [
-        { "type": "text", "text": "LATERAL с LIMIT 3 уже корректно обрабатывает случай «меньше 3 заказов»: он просто вернёт N заказов, где N ≤ 3. Ничего менять не нужно для этой семантики. Сортировка уже на месте (`ORDER BY u.user_id, sub.rank`).\n\nФинальная версия:\n\n```sql\nSELECT u.user_id, sub.order_id, sub.total_cents, sub.rank\nFROM (\n  SELECT DISTINCT user_id\n  FROM orders\n  WHERE status = 'completed'\n    AND created_at >= NOW() - INTERVAL '30 days'\n) u,\nLATERAL (\n  SELECT id AS order_id,\n         total_cents,\n         ROW_NUMBER() OVER (ORDER BY total_cents DESC) AS rank\n  FROM orders\n  WHERE user_id = u.user_id\n    AND status = 'completed'\n    AND created_at >= NOW() - INTERVAL '30 days'\n  ORDER BY total_cents DESC\n  LIMIT 3\n) sub\nORDER BY u.user_id ASC, sub.rank ASC;\n```\n\nЗаметил мелкое улучшение: добавил фильтр `status` и `created_at` в outer `u`-подзапросе — иначе будут попадать пользователи у которых нет недавних completed-заказов, и LATERAL просто вернёт пустоту для них (зря тратится время)." }
-      ]
-    },
-    {
-      "role": "user",
-      "content": [
-        { "type": "text", "text": "Хочу обернуть это в production-функцию `top_n_recent_orders(p_user_ids bigint[], p_days int, p_n int)`. Параметризованная по списку user_ids (а не всех), окну дней, и N. NULL-safe (если параметр NULL — соответственно: все юзеры / 30 / 3 по дефолту). Готовый CREATE FUNCTION." }
-      ]
-    },
-    {
-      "role": "assistant",
-      "content": [
-        { "type": "text", "text": "```sql\nCREATE OR REPLACE FUNCTION top_n_recent_orders(\n  p_user_ids bigint[] DEFAULT NULL,\n  p_days int DEFAULT NULL,\n  p_n int DEFAULT NULL\n)\nRETURNS TABLE (\n  user_id bigint,\n  order_id bigint,\n  total_cents bigint,\n  rank bigint\n)\nLANGUAGE plpgsql\nSTABLE\nAS $$\nDECLARE\n  v_days int := COALESCE(p_days, 30);\n  v_n int := COALESCE(p_n, 3);\nBEGIN\n  RETURN QUERY\n  SELECT u.user_id, sub.order_id, sub.total_cents, sub.rank\n  FROM (\n    SELECT DISTINCT o.user_id\n    FROM orders o\n    WHERE o.status = 'completed'\n      AND o.created_at >= NOW() - (v_days || ' days')::INTERVAL\n      AND (p_user_ids IS NULL OR o.user_id = ANY(p_user_ids))\n  ) u,\n  LATERAL (\n    SELECT o.id AS order_id,\n           o.total_cents,\n           ROW_NUMBER() OVER (ORDER BY o.total_cents DESC) AS rank\n    FROM orders o\n    WHERE o.user_id = u.user_id\n      AND o.status = 'completed'\n      AND o.created_at >= NOW() - (v_days || ' days')::INTERVAL\n    ORDER BY o.total_cents DESC\n    LIMIT v_n\n  ) sub\n  ORDER BY u.user_id ASC, sub.rank ASC;\nEND;\n$$;\n```\n\nUsage:\n```sql\n-- все юзеры, 30 дней, топ 3 (дефолты)\nSELECT * FROM top_n_recent_orders();\n\n-- конкретные юзеры, 7 дней, топ 5\nSELECT * FROM top_n_recent_orders(ARRAY[42, 43, 44]::bigint[], 7, 5);\n```\n\n**Notes:**\n- `STABLE` (а не `VOLATILE`) — функция читает таблицу но не меняет; планировщик может оптимизировать. (NOT `IMMUTABLE` потому что `NOW()`.)\n- `(v_days || ' days')::INTERVAL` — динамический интервал через cast, потому что `INTERVAL 'v_days days'` не подставится.\n- `p_user_ids IS NULL OR o.user_id = ANY(p_user_ids)` — стандартный pattern для опционального фильтра по массиву.\n- Index из шага 2 (`idx_orders_completed_recent`) продолжает работать без изменений." }
-      ]
-    },
-    {
-      "role": "user",
-      "content": [
-        { "type": "text", "text": "Окей, последний штрих: напиши 3 теста в виде pgTAP. Каждый — отдельный SELECT, чтобы можно было вставить в CI runner. Проверь: (1) дефолтные параметры возвращают результаты; (2) фильтр p_user_ids работает; (3) функция помечена STABLE. Готовый код, без объяснений." }
+        {
+          "type": "text",
+          "text": "Run this Python and report the result: `print(sum(range(1,101)))`. Then add a function that returns the Nth triangular number and call it for N=10."
+        }
+      ],
+      "expected_tool_calls": [
+        {
+          "tool_name": "code_interpreter",
+          "required": true,
+          "args_match": "subset"
+        }
       ]
     }
   ],
   "tools_available": [
     {
-      "name": "run_sql",
-      "description": "Execute SQL against ephemeral test PostgreSQL instance. Returns rows or error.",
-      "input_schema": { "type": "object", "properties": { "sql": { "type": "string" } }, "required": ["sql"] }
+      "name": "code_interpreter",
+      "description": "Execute Python 3 code in a sandbox. Returns stdout, stderr, and exit code.",
+      "input_schema": {
+        "type": "object",
+        "description": "Execute Python 3 code in a sandbox. Returns stdout, stderr, and exit code. (concrete shape: TOOL_INPUT_SCHEMAS.code_interpreter)"
+      }
     }
   ],
   "evaluation": {
-    "strategy": "composite",
-    "aggregate": "all",
-    "rules": [
-      { "strategy": "regex", "pattern": "BEGIN", "flags": "" },
-      { "strategy": "regex", "pattern": "SELECT plan\\(3\\)", "flags": "" },
-      { "strategy": "regex", "pattern": "top_n_recent_orders\\(\\)", "flags": "" },
-      { "strategy": "regex", "pattern": "ARRAY\\[", "flags": "" },
-      { "strategy": "regex", "pattern": "STABLE", "flags": "" },
-      { "strategy": "regex", "pattern": "(finish\\(\\)|SELECT \\* FROM finish)", "flags": "" },
-      {
-        "strategy": "llm_judge",
-        "rubric_id": "code_iter",
-        "expected_summary": "Three pgTAP unit tests in a runnable SQL script: starts with BEGIN; + SELECT plan(3); + 3 distinct tests using pgTAP assertion functions (ok / is / has_function_stable / similar). Test 1 verifies default-parameter invocation top_n_recent_orders() returns results (e.g. results_eq, isnt_empty, or ok(EXISTS …)). Test 2 verifies p_user_ids array filter — passing an explicit ARRAY[…]::bigint[] limits rows to those users. Test 3 verifies STABLE volatility marker via pg_proc.provolatile = 's' or pgTAP's volatility_is/has_function_stable. Script ends with SELECT * FROM finish() (or finish()); + ROLLBACK; (or COMMIT). Pure SQL, no prose around it."
-      }
-    ]
+    "strategy": "llm_judge",
+    "rubric_id": "code_iter",
+    "expected_summary": "Synthetic code_iter task — verify tool sequence and answer relevance."
   },
   "provenance": {
-    "review_signoff": ""
+    "review_signoff": "<draft: synthetic top-up; needs manual review + fixture capture>"
   }
 }

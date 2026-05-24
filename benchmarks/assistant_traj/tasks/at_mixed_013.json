@@ -1,5 +1,5 @@
 {
-  "task_id": "at_mixed_005",
+  "task_id": "at_mixed_013",
   "category": "mixed",
   "source": "synthetic",
   "turns": [
@@ -8,7 +8,7 @@
       "content": [
         {
           "type": "text",
-          "text": "Find a public dataset of monthly average temperatures for Berlin (2020–2023) via google_search, fetch one source, then plot the trend with Python."
+          "text": "Find the OpenAI Whisper paper, fetch the abstract, then write Python that loads a small audio file path and prints first 10 seconds duration."
         }
       ],
       "expected_tool_calls": [

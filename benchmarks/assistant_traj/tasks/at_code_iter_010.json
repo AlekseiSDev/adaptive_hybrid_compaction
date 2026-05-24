@@ -1,5 +1,5 @@
 {
-  "task_id": "at_code_iter_008",
+  "task_id": "at_code_iter_010",
   "category": "code_iter",
   "source": "synthetic",
   "turns": [
@@ -8,7 +8,7 @@
       "content": [
         {
           "type": "text",
-          "text": "Write a recursive function to compute the Fibonacci sequence up to F(15). Print all values."
+          "text": "Read this JSON: `{\"users\":[{\"id\":1,\"score\":95},{\"id\":2,\"score\":72},{\"id\":3,\"score\":88}]}` and output a sorted descending list of users by score."
         }
       ],
       "expected_tool_calls": [

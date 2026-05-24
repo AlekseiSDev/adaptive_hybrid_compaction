@@ -1,5 +1,5 @@
 {
-  "task_id": "at_code_iter_008",
+  "task_id": "at_code_iter_012",
   "category": "code_iter",
   "source": "synthetic",
   "turns": [
@@ -8,7 +8,7 @@
       "content": [
         {
           "type": "text",
-          "text": "Write a recursive function to compute the Fibonacci sequence up to F(15). Print all values."
+          "text": "Write a unit test for this function: `def is_prime(n): return n > 1 and all(n%i for i in range(2,int(n**0.5)+1))`. Run it."
         }
       ],
       "expected_tool_calls": [

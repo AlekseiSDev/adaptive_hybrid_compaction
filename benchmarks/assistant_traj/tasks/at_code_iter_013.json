@@ -1,5 +1,5 @@
 {
-  "task_id": "at_code_iter_008",
+  "task_id": "at_code_iter_013",
   "category": "code_iter",
   "source": "synthetic",
   "turns": [
@@ -8,7 +8,7 @@
       "content": [
         {
           "type": "text",
-          "text": "Write a recursive function to compute the Fibonacci sequence up to F(15). Print all values."
+          "text": "Given matrix A=[[1,2],[3,4]] and B=[[5,6],[7,8]], compute A·B using numpy. Print result."
         }
       ],
       "expected_tool_calls": [
