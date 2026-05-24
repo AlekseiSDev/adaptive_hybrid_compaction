@@ -1,12 +1,17 @@
 # AssistantTraj benchmark
 
 Multimodal medium-trajectory (5–15 turns) assistant benchmark used by the AHC eval
-harness. 30–40 anonymized tasks across four categories (image_qa, code_iter,
-research_write, mixed).
+harness. **AT-v2 (Track J): 50 tool-grounded tasks** across four categories
+(image_qa: 8, code_iter: 14, research_write: 14, mixed: 14). Each task declares
+≥1 required tool call (palette: `image_gen`, `google_search`, `web_fetch`,
+`code_interpreter`). Replay-default runtime (deterministic, CI-safe), live mode
+opt-in via `AT_TOOL_MODE=live`.
 
-Source-of-truth design: [`docs/design/D_assistant-traj.md`](../../docs/design/D_assistant-traj.md).
-Phase D1 ships the JSON schema, storage layout, and a validator. D2/D3 populate
-`tasks/` (real + open-source + synthetic). D4 wires the eval adapter + LLM-judge.
+Source-of-truth design: [`docs/design/D_assistant-traj.md`](../../docs/design/D_assistant-traj.md) (schema, layout, grader) +
+[`docs/design/J_at_tools.md`](../../docs/design/J_at_tools.md) (tool palette, replay/live runtime, corpus migration).
+Phase D1 shipped the JSON schema, storage layout, validator. D2/D3 populated
+the initial `tasks/`. D4 wired the eval adapter + LLM-judge. Track J (J1–J6,
+2026-05-22) introduced tool-grounded corpus + replay dispatcher.
 
 ## Schema
 
@@ -28,16 +33,52 @@ for the authoritative Zod definition. Top-level shape (verbatim from design §2)
 
 ```
 benchmarks/assistant_traj/
-  tasks/             # .json — one task per file (populated D2/D3)
+  tasks/             # .json — one task per file (50 AT-v2 drafts)
+  tool_fixtures/     # .json — sidecar replay output per task (Track J)
   attachments/       # per-task images/files: attachments/<task_id>/...
   rubrics/           # rubrics/<category>.md (populated D4)
   calibration/       # human_scores.json (populated D4)
   fixtures/
-    valid/           # D1 smoke fixtures — must parse OK
-    invalid/         # D1 smoke fixtures — must fail with sidecar .reason.txt
+    valid/           # D1 + J1 smoke fixtures — must parse OK
+    invalid/         # D1 + J1 smoke fixtures — must fail with sidecar .reason.txt
   validate.ts        # CLI — see below
   README.md
 ```
+
+### Sidecar tool fixtures (Track J)
+
+Each task with at least one `required:true` entry in `expected_tool_calls`
+must have a paired `tool_fixtures/<task_id>.json` sidecar:
+
+```jsonc
+{
+  "task_id": "at_research_write_001",
+  "fixtures": [
+    { "tool_name": "google_search",
+      "output_parts": [{ "type": "text", "text": "Top 3 results: ..." }] }
+  ]
+}
+```
+
+The replay dispatcher
+([`src/eval/adapters/assistant-traj.tools.ts`](../../src/eval/adapters/assistant-traj.tools.ts))
+consumes these on each tool call. Default matcher = `first` (order-based),
+optional `args_exact` / `args_subset` per fixture entry. Missing fixture on a
+required-tool call surfaces as `ToolReplayMissError` → `RunRecord.error =
+'tool_replay_miss'`, not a silent pass.
+
+### Replay vs Live
+
+| Mode | Trigger | Determinism | Use case |
+|---|---|---|---|
+| **replay** (default) | none — default in every context | bit-stable | all sweeps, CI, eval A/B |
+| **live** | `AT_TOOL_MODE=live` env | non-deterministic | local debug, fixture capture |
+
+CI guard: `AT_TOOL_MODE=live` + `CI=true` → throws at adapter init (no silent
+live runs during automated eval).
+
+Live impls (OpenAI Images / Brave / fetch+readability / pyodide) are stubbed
+out of MVP; capture-at-fixture helper lands as a J2/J4 stretch.
 
 ## Validator CLI
 
