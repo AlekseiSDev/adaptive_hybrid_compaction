@@ -34,12 +34,25 @@ cache_hit_e3}/` (gitignored). Actor = `gpt-5.4-mini` через OpenRouter ес�
 (`main_e1_mastra_agent.yaml budget_usd=35`). Tau cell split в отдельный
 `main_e1_mastra_agent_tau.yaml` — см. tau-bench retail table ниже.
 
-### gaia-med (Track K, 2026-05-26)
+### gaia-med (Track K + K-tail, 2026-05-26)
 
-| bench | baseline | n | acc | cost_$ | notes |
-|---|---|---|---|---|---|
-| gaia-med | gaia_bench_agent | — | — | — | K4 main sweep DEFERRED — blocked on web_search provider (`SEARXNG_URL` / `TAVILY_API_KEY` / `BRAVE_API_KEY`). Pipeline validated в smoke (n=1, status=complete, $0.0073). См. `docs/runs/k_gaia_audit.md`. |
-| gaia-med | gaia_bench_agent_ahc | — | — | — | Same blocker. AHC variant — full feature flags + middleware wrap actor. |
+`main_e1_gaia_competitors.yaml` × n=25 × seed=42 × `gpt-5.4-mini` (OpenRouter),
+SearXNG via `observability/searxng-docker-compose.yml`. Source:
+`docs/runs/k_gaia_audit.md`.
+
+| bench | baseline | n | input_tok | acc | cost_$ | $/task |
+|---|---|---|---|---|---|---|
+| gaia-med | gaia_bench_agent | 25 | 1 715 589 | **0.320** | 1.347 | 0.054 |
+| gaia-med | mastra-agent ✠ | 25 | 587 895 | 0.160 | 0.525 | 0.021 |
+| gaia-med | gaia_bench_agent_ahc | — | — | — | — | — (deferred, отдельный run) |
+
+✠ Track K-tail (2026-05-26): Mastra Agent + Memory + LibSQL + GAIA tools;
+opaque to Langfuse (Mastra не emit AI SDK auto-spans для internal ReACT —
+`@mastra/core` lacks `experimental_telemetry` option). NDJSON cost
+authoritative; per-tool distribution unavailable.
+
+Per-level (1/2/3): vanilla 4/7 + 4/14 + 0/4; mastra 1/7 + 3/14 + 0/4.
+Both fail level-3 (gpt-5.4-mini capability ceiling).
 
 Effective n=25 (5/30 attachment tasks filtered at bake — xlsx/pdf/pdb/jsonld/docx
 not vendored).

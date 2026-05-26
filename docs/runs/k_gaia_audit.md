@@ -9,12 +9,12 @@
 > `i_mastra_agent_audit.md`. F-report consumes this audit для cross-bench
 > Pareto plot (5-я точка).
 >
-> **Status (2026-05-26):** K1–K3 complete. K4 smoke validated **с
-> live SearXNG**: 5-task smoke прошёл **acc=0.80** (4/5 correct) на
-> ~$0.19. K4 main sweep (n=25 × 2 baselines) — ready to run; deferred
-> только по бюджету. SearXNG infra committed: `observability/searxng-
-> docker-compose.yml`. `web_search` default-strict (2026-05-26): chain
-> требует `WEB_SEARCH_AUTOSELECT=true` opt-in (honest experiments).
+> **Status (2026-05-26):** K1–K3 + SearXNG + K-tail competitor sweep
+> complete. **K-tail run**: 2 baselines × n=25 × seed=42, $1.87 total
+> spend, status=complete, err_rate=0%. `gaia_bench_agent` (FC analog)
+> acc=**0.32**; `mastra-agent` (Mastra Memory) acc=**0.16**. K-tail
+> integration added `mastra-agent` × `gaia-med` dispatch (Track K
+> §5.2 — был text-fallback без tools раньше).
 
 ---
 
@@ -22,12 +22,20 @@
 
 1 bench (`gaia-med`), n=25 effective (5/30 attachment tasks filtered at
 bake — xlsx/pdf/pdb/jsonld/docx not vendored; Medium scope per design
-§7 Q5). 2 baseline configs planned:
+§7 Q5).
 
-- `gaia_bench_agent` — vanilla agent (no AHC middleware)
-- `gaia_bench_agent_ahc` — AHC-wrapped actor (full feature flags)
+**K-tail competitor sweep** (`main_e1_gaia_competitors.yaml`, executed
+2026-05-26):
+- `gaia_bench_agent` (config_id `1dcd84ecc73b608c`) — vanilla agent с
+  GAIA tools, no AHC. FC analog для agentic bench.
+- `mastra-agent` (config_id `e55d32e046e6b5cc`) — Mastra Agent +
+  Memory + LibSQL + GAIA tools. Framework competitor.
 
-Seeds: 42. Budget cap: $50 (`main_e1_gaia.yaml`).
+**Other planned configs** (not in this run, deferred):
+- `gaia_bench_agent_ahc` — AHC variant (`main_e1_gaia.yaml`, отдельный
+  run).
+
+Seeds: 42. Budget cap: $30 (`main_e1_gaia_competitors.yaml`).
 
 ---
 
@@ -80,46 +88,108 @@ WEB_SEARCH_AUTOSELECT=true SEARXNG_URL=http://localhost:8080 \
 
 ---
 
-## Main sweep — READY (deferred only by budget)
+## Headline numbers (K-tail competitor sweep, n=25, seed=42)
 
-После 2026-05-26 SearXNG commit (observability/searxng-docker-compose.yml)
-+ probe + 5-task smoke pass — K4 main sweep полностью разблокирован.
-Spend estimate: n=25 × 2 baselines × ~$0.04-0.10/task ≈ $5-10 (well
-below `budget_usd: 50` cap в YAML).
-
-**Run command:**
-```bash
+```
 docker compose -f observability/searxng-docker-compose.yml up -d
+docker compose -f observability/docker-compose.yml up -d  # langfuse
 set -a && . ./.env && set +a
-WEB_SEARCH_AUTOSELECT=true SEARXNG_URL=http://localhost:8080 \
-  pnpm tsx scripts/eval.ts --sweep eval/sweeps/main_e1_gaia.yaml \
-  --concurrency=4
-pnpm tsx scripts/sanity-aggregate.ts benchmarks/runs/main_e1_gaia/
+LANGFUSE_ENABLED=true WEB_SEARCH_AUTOSELECT=true \
+  SEARXNG_URL=http://localhost:8080 \
+  pnpm tsx scripts/eval.ts \
+  --sweep eval/sweeps/main_e1_gaia_competitors.yaml --concurrency=4
 ```
 
-**TODO post-sweep:**
-1. Re-aggregate per-level (1/2/3) acc breakdown.
-2. Update `## Headline numbers` table с реальными цифрами для
-   `gaia_bench_agent` + `gaia_bench_agent_ahc`.
-3. Update `baselines_frozen.md` rows.
-4. Add per-tool usage distribution (count tool_calls per tool name).
+| baseline | n | acc | cost_$ | $/task | input_tok | output_tok | err_rate |
+|---|---|---|---|---|---|---|---|
+| `gaia_bench_agent` | 25 | **0.320** | 1.347 | 0.054 | 1 715 589 | 13 450 | 0% |
+| `mastra-agent` | 25 | 0.160 | 0.525 | 0.021 | 587 895 | 18 694 | 0% |
+
+Total sweep: $1.87, wall-clock ≈ 17 min (concurrency=4).
+
+### Per-level breakdown
+
+| level | n | gaia_bench_agent acc | mastra-agent acc |
+|---|---|---|---|
+| 1 (easy) | 7 | **4/7 = 0.57** | 1/7 = 0.14 |
+| 2 (medium) | 14 | 4/14 = 0.29 | 3/14 = 0.21 |
+| 3 (hard) | 4 | 0/4 = 0.00 | 0/4 = 0.00 |
+
+Findings:
+- **Vanilla 2× over Mastra on acc** (0.32 vs 0.16). Mastra Memory
+  compaction trades accuracy for cost.
+- **Mastra 2.57× cheaper per-task** ($0.021 vs $0.054). Memory
+  drastically reduces input-tokens read (587K vs 1.7M → 2.9× fewer)
+  but doesn't translate to better accuracy на single-shot GAIA.
+- **Both fail level-3 completely** (0/4). gpt-5.4-mini capability
+  ceiling, not pipeline limitation. Hard tasks need multi-step
+  research chains that exceed actor's depth.
+- **Mastra weakest on level-1** (1/7) — counterintuitive. Memory
+  injection ломает short ReACT chains для simple lookups.
+
+### Per-tool usage distribution
+
+Across 25 vanilla traces (from Langfuse, B6 telemetry):
+
+| tool | calls | % |
+|---|---|---|
+| `web_search` | 307 | 86% |
+| `visit_webpage` | 36 | 10% |
+| `python_exec` | 15 | 4% |
+| `text_editor` | 0 | 0% |
+| `describe_image` | 0 | 0% |
+
+Total 358 tool_calls across 25 tasks (mean 14.3 calls/task). Heavy
+search reliance; `text_editor` + `describe_image` unused — no preloaded
+files, no images in n=25 subset.
+
+Mastra session: 0 tool_calls visible через Langfuse (см. §Langfuse
+verification — Mastra opaque limitation).
 
 ---
 
-## Headline numbers (PENDING K4 main sweep)
+## Langfuse verification (B6 traces, lf-traces skill)
 
-> Placeholder table — fills when main sweep executes. Format mirrors
-> `i_mastra_agent_audit.md §Headline numbers`.
+Per `.claude/skills/lf-traces/SKILL.md`. Both sweep sessions persisted
+с B6 hierarchy (eval.task root + AI SDK auto-spans).
 
-| bench | baseline | n | input_tok | cache_read | cache% | acc | total_$ |
-|---|---|---|---|---|---|---|---|
-| gaia-med | gaia_bench_agent | — | — | — | — | — | — |
-| gaia-med | gaia_bench_agent_ahc | — | — | — | — | — | — |
+| session | traces | total observations | type breakdown |
+|---|---|---|---|
+| `gaia-med-1dcd84ecc73b608c-42` (vanilla) | 34* | 787 | 65 SPAN + 358 TOOL + 364 GENERATION |
+| `gaia-med-e55d32e046e6b5cc-42` (mastra-agent) | 25 | 25 | 25 SPAN only |
 
-Per-level breakdown (level 1 / 2 / 3) — populated post-sweep via
-`pnpm tsx scripts/per-class-report.ts` (extended to support `level` as
-class key; current pattern uses `class_signal` but `Score.secondary.level`
-is the GAIA-native split).
+\*Vanilla session has 34 traces vs 25 records — includes 9 traces from
+smoke runs in prior sessions (same config_id → same session ID, append
+across runs). Не bug, history artefact.
+
+**Limitation: Mastra opaque to Langfuse.** `mastra-agent` traces show
+only the eval.task root — Mastra's internal ReACT loop (model →
+tool_call → execute → tool_result) НЕ emit AI SDK auto-spans because
+`@mastra/core` doesn't expose `experimental_telemetry` option (only
+generic `modelSettings`). Tool calls happen — visible через NDJSON
+totals — but не attributable per-tool in Langfuse без custom Mastra
+instrumentation. **Action for F-report**: cite Mastra tool counts
+from NDJSON, not Langfuse.
+
+**Cost rollup in Langfuse = $0** на trace-level: AI SDK auto-spans
+не set `cost_details` attribute by default (OpenRouter model prefixes
+не в Langfuse built-in pricing table). NDJSON cost authoritative
+($1.87 sum). Future polish: thread cost через OTel attribute (B6+).
+
+Reproduction:
+```bash
+pnpm tsx scripts/check-langfuse-hierarchy.ts \
+  --bench=gaia-med --since-seconds=1800 --expected-tool-calls-min=1
+# expect FAIL on Mastra config (no ai.toolCall); PASS on vanilla.
+
+AUTH=$(echo -n "$LANGFUSE_PUBLIC_KEY:$LANGFUSE_SECRET_KEY" | base64)
+curl -s -H "Authorization: Basic $AUTH" \
+  "$LANGFUSE_BASE_URL/api/public/traces?sessionId=gaia-med-1dcd84ecc73b608c-42&limit=100"
+```
+
+UI links (local Langfuse):
+- vanilla: `http://localhost:3001/project/ahc/sessions/gaia-med-1dcd84ecc73b608c-42`
+- mastra: `http://localhost:3001/project/ahc/sessions/gaia-med-e55d32e046e6b5cc-42`
 
 ---
 
