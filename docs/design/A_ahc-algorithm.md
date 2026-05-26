@@ -290,10 +290,10 @@ type Thresholds = {
   OBSERVER_THRESHOLD: number        // default 30000 (raised from 8000 — H8 calibration)
   T_SIZE: number                    // default 4096
   T_CUM: number                     // default 24000
-  K_RECENT: number                  // default 6
   BUFFER_TOKENS: number             // default 0.2
   BUFFER_ACTIVATION: number         // default 0.8
-  REFLECTION_THRESHOLD: number      // default 40000
+  REFLECTION_THRESHOLD: number      // default 100000 (raised from 40000 — see decisions.md 2026-05-26)
+  TIER3_TOKEN_BUDGET: number        // default 30000 (coupled to OBSERVER_THRESHOLD)
 }
 ```
 
@@ -655,11 +655,12 @@ Reasonable defaults из литературы (Mastra OM defaults, codex#14589 m
 - `OBSERVER_THRESHOLD = 30000` (raised from 8000 in H Phase 8 — at 8K observer fired on every turn ≥2 in lme-multiturn, erasing answer-bearing details. Mastra OM runs with working window ≈25K before its own compact; 30K places AHC in the same envelope. See `decisions.md`.)
 - `T_SIZE = 4096`
 - `T_CUM = 24000`
-- `K_RECENT = 6` — **lower bound** on Tier-3 message count (minimum keep-raw on short tasks). Upper bound is `TIER3_TOKEN_BUDGET` — Tier-3 grows past K_RECENT messages up to the token budget; observer clips when it crosses OBSERVER_THRESHOLD. See `decisions.md` 2026-05-22.
 - `BUFFER_TOKENS = 0.2`
 - `BUFFER_ACTIVATION = 0.8`
-- `REFLECTION_THRESHOLD = 40000`
-- `TIER3_TOKEN_BUDGET = 30000` (default coupled to `OBSERVER_THRESHOLD` — observer fires exactly when Tier-3 overflows the budget, target clip = 0.2 × OBSERVER_THRESHOLD leaves predictable residue. Decoupled in sweeps via threshold override. See `decisions.md` 2026-05-22.)
+- `REFLECTION_THRESHOLD = 100000` (raised from 40000 — 2026-05-26. Pre-raise threshold collapsed Tier-2 into a reflector summary too eagerly, losing factual specifics before they could be useful. 100K matches Mastra OM's reflection envelope (default `reflection.observationTokens=40000` but per-batch cap 10000 → effectively never fires on med tasks). See `decisions.md` 2026-05-26.)
+- `TIER3_TOKEN_BUDGET = 30000` (default coupled to `OBSERVER_THRESHOLD` — observer fires exactly when Tier-3 overflows the budget, target clip = 0.2 × OBSERVER_THRESHOLD leaves predictable residue. Decoupled in sweeps via threshold override. See `decisions.md` 2026-05-22 / 2026-05-26.)
+
+**Removed 2026-05-26:** `K_RECENT` (default 6) was the lower bound on Tier-3 message count. After `TIER3_TOKEN_BUDGET` landed in H Phase 9, K_RECENT became redundant — token budget alone is the single Tier-3 sizing knob. UI path (no `llmCaller` wired) now uses the same token-budget walk: oldest messages FIFO-drop when budget is exceeded, instead of separate K_RECENT message-count cap. See `decisions.md` 2026-05-26.
 
 Эти числа — стартовая точка; пилотный run (~10 трасс из target domain) корректирует
 с минимальным эффортом.

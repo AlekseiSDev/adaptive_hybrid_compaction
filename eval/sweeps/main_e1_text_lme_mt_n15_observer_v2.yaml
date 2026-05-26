@@ -1,0 +1,61 @@
+name: main_e1_text_lme_mt_n15_observer_v2
+# 2026-05-26 — verification sweep for AHC_drop_K-recent_fixed_observations.
+#
+# Why this sweep:
+# After commit AHC_drop_K-recent_fixed_observations dropped K_RECENT, raised
+# REFLECTION_THRESHOLD 40k → 100k, and rewrote observer/reflector prompts
+# (Mastra-style detail-preservation framing), we need to verify the change
+# beats the pre-fix AHC@128k acc=0.200 baseline on lme-multiturn.
+#
+# n=15, single seed=42, three cells:
+#   - full_context     — upper bound, no compaction
+#   - mastra_om        — competitor reference (0.520 at n=50 baseline)
+#   - ahc_full_obs128k — the post-fix AHC; new observer/reflector prompts,
+#                        no K_RECENT, TIER3_TOKEN_BUDGET=OBSERVER_THRESHOLD
+#                        via mirror coupling. 128k threshold matches the
+#                        pre-fix n=50 baseline cell so deltas are clean.
+#
+# Acceptance gate:
+#   ahc_full_obs128k acc ≥ 0.30 → merge prompt rewrite + K_RECENT drop.
+#   ahc_full_obs128k acc ≥ 0.50 → claim parity with Mastra/FC.
+#   ahc_full_obs128k acc < 0.30 → roll back observer/reflector prompts,
+#                                 keep structural changes (Steps 0/1/2 of
+#                                 plan), document need for paradigm-shift
+#                                 (retrieval / lazy compaction).
+#
+# Post-sweep qualitative analysis:
+# records.ndjson now carries observation text per compaction event (Step 0
+# of the plan). Dump observations on 3 failing + 3 passing tasks; eyeball
+# whether observations contain the specific numbers / proper nouns the
+# ground-truth answers reference.
+#
+# Cost ballpark (extrapolated from main_e1_text_lme_mt_n50 per-task cost):
+#   full_context      × 15 ≈ $33
+#   mastra_om         × 15 ≈ $8
+#   ahc_full_obs128k  × 15 ≈ $33
+#   total ≈ $74 → budget_usd=100 для буфера.
+#
+# Cell ordering: ahc first so we get observer-rewrite data even on early halt.
+#
+# Run:
+#   set -a && . ./.env && set +a
+#   pnpm tsx scripts/eval.ts --sweep eval/sweeps/main_e1_text_lme_mt_n15_observer_v2.yaml \
+#     --concurrency=4 --max-tasks-per-cell=15
+
+benches:
+  - lme-multiturn
+configs:
+  - id: ahc_full_obs128k
+    ahc_flags:
+      TASK_AWARE_EXTRACTION: true
+      TYPE_AWARE_OFFLOAD: true
+      TRAJECTORY_CLASSIFIER: true
+      RECALL_TOOL: true
+    thresholds:
+      OBSERVER_THRESHOLD: 128000
+  - id: mastra_om
+    baseline: mastra_om
+  - id: full_context
+    baseline: full_context
+seeds: [42]
+budget_usd: 100

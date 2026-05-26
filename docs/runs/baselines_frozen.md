@@ -25,6 +25,9 @@ cache_hit_e3}/` (gitignored). Actor = `gpt-5.4-mini` через OpenRouter ес�
 | locomo-med | mastra_om | 20 | 1 119 349 | 93.6% | 0.600 | 0.011 |
 | lme-multiturn | full_context | 10 | 28 376 258 | 90.2% | 0.500 | 21.718 |
 | lme-multiturn | mastra_om | 10 | 9 344 594 | 77.4% | 0.500 | 4.746 |
+| lme-multiturn | full_context (n=15, 2026-05-26) | 15 | — | — | 0.467 | 32.362 |
+| lme-multiturn | mastra_om (n=15, 2026-05-26) | 15 | — | — | 0.467 | 7.159 |
+| lme-multiturn | ahc_full_obs128k (post-K_RECENT-drop) ✸ | 15 | — | — | 0.333 | 33.311 |
 | lme-multiturn | anthropic_compact | — | — | — | — | — (not run) |
 | assistant-traj | mastra-agent ✠ | 30 | 164 005 | 42.8% | 0.283 | 0.580 |
 | lme-multiturn | mastra-agent ✠ | 40 ⚠ | 37 859 704 | 70.7% | 0.475 | 20.174 |
@@ -119,6 +122,18 @@ Caveats:
   (ground truth "user added 25 postcards") — full_context отвечает "25" ✓,
   AHC отвечает "17" ✗ (observer вытянул "17" из старшей session). Это
   отдельный workstream (tracked в `current.md` Track H).
+- ✸ `ahc_full_obs128k (post-K_RECENT-drop)` row — `main_e1_text_lme_mt_n15_observer_v2.yaml`,
+  commit `AHC_drop_K-recent_fixed_observations` (`decisions.md 2026-05-26`).
+  Acc 0.200 → 0.333 (+13pp absolute, +66% relative) vs pre-fix n=10
+  baseline. **Same n=15 subset** для FC/Mastra → 0.467 (drop from 0.540/0.520
+  объясняется sample selection — n=15 vs n=10). Cost $33.31 ≈ FC $32.36
+  (observer на 128k threshold почти не fire'ит). Honest caveat: 43 из 48
+  observer fires вернули **пустые** observations array (parse-failure на
+  новом Mastra-style prompt — output больше не матчит strict line-based
+  parser). Killer task `01493427` всё ещё confabulating "17 postcards"
+  (FC/Mastra "25"). Net acc gain в основном механический — без
+  observations модель отвечает на raw Tier-3 tail вместо абстрактных
+  summaries. Workstream tracked в `current.md` Track H.
 
 ## AT corpus version note (Track J — 2026-05-22)
 
