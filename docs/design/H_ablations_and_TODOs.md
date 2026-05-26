@@ -528,21 +528,306 @@ Add «Mastra OM execution depth» row в `h_followup_audit.md`. Если case (i
 
 ---
 
-## 11. Инварианты
+## 11. H6.5 — Observer execution depth audit (diagnosis + probe)
 
-### 11.1 Cross-model honesty
+### 11.1 Why
+
+Phase D sweep audit (`docs/runs/e_sweep_audit.md`) reports cache-rate as
+the headline AHC win, **but says nothing about how often the Task-Aware
+Observer (§A §4) actually fires**. Across all 240 NDJSON records of
+`main_e1_text`, `compaction_events` of `type:'observer'` count is **0**
+in every cell — including `ahc_full`. Tooling for this measurement
+already exists (records carry `compaction_events[]`); finding was
+hidden because no audit step counted them.
+
+Diagnosis (2026-05-13, this commit):
+
+1. **Global gate (root cause):** `defaultFeatureFlags.TASK_AWARE_EXTRACTION = false`
+   (`src/core/featureFlags.ts:13`). Sweep YAMLs ship `ahc_full: ahc_flags: {}`
+   — empty, so observer is dispatch-skipped before reaching its
+   threshold check. The YAML comment «all AHC defaults ON» is
+   misleading; defaults are mostly OFF.
+2. **Single-turn passive recall (LME / LoCoMo):** `tierize` puts
+   `system + first user` into Tier-1; the observer reads Tier-3
+   (`recent`). In single-turn benches Tier-3 is **empty** by
+   construction — there is no second-or-later user message to live
+   there. Even with the flag flipped, `tokens(0) < OBSERVER_THRESHOLD`
+   short-circuits.
+3. **AT multi-turn but short:** avg 4.35 turns × ~3.9K total input
+   tokens (max 13.7K). With `K_RECENT=6` all turns sit in Tier-3, but
+   accumulated Tier-3 size **rarely reaches `OBSERVER_THRESHOLD=8000`**.
+   AT trajectories were designed for cache-rate measurement, not
+   observer-triggering depth.
+
+Reproduction (live, ~$0.03 spend, `scripts/probe-observer.ts`,
+2026-05-13):
+
+| Turn | input_tok | output_tok | events | class | cost |
+|---|---|---|---|---|---|
+| 1 | 1460 | 243 | — | mixed | $0.0022 |
+| 2 | 2897 | 263 | — | mixed | $0.0034 |
+| 3 | 4356 | 227 | — | mixed | $0.0043 |
+| 4 | 2655 | 245 | **observer** | mixed | $0.0086 |
+| 5 | 2643 | 173 | **observer** | mixed | $0.0084 |
+
+Observer fires on turn 4 once Tier-3 crosses 8K tokens; the drop
+`turn3.input=4356 → turn4.input=2655` is the post-extract clip
+(`tier3.clip_keeping_tail(0.2 * OBSERVER_THRESHOLD)` per `§A §4.3`).
+
+### 11.2 Decisions surfaced
+
+- **All cross-model + multi-seed sweeps (H3, H4, H5)** should explicitly
+  set `ahc_full: ahc_flags: { TASK_AWARE_EXTRACTION: true, TYPE_AWARE_OFFLOAD: true }`
+  in YAML — otherwise observer remains dormant and H delivers the same
+  «cache-rate only» story Phase D already has.
+- Alternative: flip `defaultFeatureFlags.TASK_AWARE_EXTRACTION` to
+  `true` core-side. Lower-risk path is YAML override (no behavior
+  change for callers who haven't opted in).
+- Even with both flags ON, current benches won't fire observer on
+  >5–10% of records — see H6.6 for the missing dataset.
+
+### 11.3 One-line audit step (cheap)
+
+Add to `scripts/sanity-aggregate.ts` or `check-run.ts` a per-cell
+counter: `n_records_with_observer_event = sum(record has any
+compaction_events.type=='observer')`. Surface alongside cache-rate.
+For any sweep that markets observer as active, expected ≥30% of
+records carry ≥1 observer event; <5% is a smoke alarm. (Not
+implemented yet; ~10 LOC in `check-run.ts`.)
+
+### 11.4 Cost
+
+$0.03 (probe spent). Subsequent audit pass on H3/H4 sweep records:
+$0 (analysis-only NDJSON grep).
+
+---
+
+## 12. H6.6 — LME multi-turn replay (observer-activating trajectories) *(TODO)*
+
+### 12.1 Why this exists
+
+H6.5 establishes that **no current sweep cell triggers Task-Aware
+Observer** — even with the flag flipped, single-turn benches (LME /
+LoCoMo) leave Tier-3 empty and AT trajectories are too short.
+
+We don't need a brand-new dataset. **LongMemEval already ships with
+multi-session structure** that today we flatten into one `user` message
+("here's the haystack: ..."). Replaying sessions as actual conversation
+turns turns LME into the long-memory benchmark its authors actually
+designed it as — and fills Tier-3 above `OBSERVER_THRESHOLD` naturally
+on real-world content.
+
+**Bonus:** this reframes LME away from «long haystack QA» (where
+AHC ties full_context on accuracy) toward «incremental long-memory
+benchmark» (where Tier-2 observations matter). Closer to the
+LongMemEval paper's stated intent (`references/lme/README`).
+
+### 12.2 Replay arithmetic (measured on one baked LME task)
+
+Sample: `lme_01493427.json`. Schema fields: `haystack_sessions:
+Array[47]`, `haystack_session_ids: Array[47]`, `haystack_dates:
+Array[47]`, `question`, `answer`, `answer_session_ids`.
+
+| Stat | Value |
+|---|---|
+| Sessions per task | 47 (matches upstream LongMemEval-S «medium» difficulty) |
+| Messages per session | avg 10.4, min 2, max 16 |
+| Tokens per session (est: chars/4) | avg ~2,597, p10 720, p50 2752, p90 4049, max 5607 |
+| Total tokens per task | ~122K (≈ measured 208K input incl. system + framing) |
+
+With `K_RECENT=6` (last 6 messages in Tier-3) and
+`OBSERVER_THRESHOLD=8000`:
+
+| Replay mode | Tier-3 size (last 6 msgs) | Observer fires? |
+|---|---|---|
+| **Mode A — 1 session = 1 user turn + 1 asst ack** | last 3 user × 2.6K = **~7.8K** | **borderline** — fires on ~40-50% turns, depending on session-size variance |
+| **Mode B — 3 sessions = 1 user turn (concat)** | last 3 user × 7.8K = **~23K** | **fires every turn after turn 3** ✓ |
+| **Mode C — 1 inner message = 1 turn** | 6 × 260 toks ≈ **~1.6K** | does **not** fire ✗ |
+| **Mode A + lowered `OBSERVER_THRESHOLD=4000`** | ~7.8K | **fires consistently** ✓ |
+
+**Recommendation: Mode A with `OBSERVER_THRESHOLD=4000` sweep override.**
+Natural session-per-turn replay, no concatenation artefact, observer
+fires reliably. The threshold is a tunable per `A_ahc-algorithm §10.2`
+(«sweep candidate»); H6.6 surfaces it as a calibrated value.
+
+### 12.3 Scope: observer-only OR cross-feature?
+
+Mode A replays LME as `class=conversational/mixed`, **no tools**. So
+this activates:
+- **Observer** ✓ (via §H6.5 mechanism)
+- **Reflection** ✓ (Tier-2 observations log grows past
+  `REFLECTION_THRESHOLD` after ~10-15 sessions → reflect collapses
+  duplicates)
+- **Cache-rate** ✓ (Tier-1 stays stable: system + first user; subsequent
+  sessions flow through Tier-3 → Tier-2)
+- **Offloader** ✗ (no tools in LME)
+- **Recall tool** ✓ (Tier-2 pointers don't accumulate, but observations
+  do; recall tool reads from Tier-2 observations too)
+
+For offloader coverage see §H6.7 (tau-bench, separate path).
+
+### 12.4 Implementation sketch
+
+**Adapter changes** (~150 LOC, ~1 day):
+
+1. New `Task` variant in `src/eval/types.ts`:
+   ```ts
+   export type LmeMultiturnTask = {
+     id: string
+     bench: 'lme-multiturn'
+     sessions: Array<{ session_id: string; date: string; messages: ContentPart[] }>
+     question: string
+     answer: string
+     answer_session_ids: string[]
+   }
+   ```
+2. New baseline-adapter helper in `src/eval/baselines/lme_multiturn_runner.ts`:
+   replays each session as `baseline.step(state, sessionAsUserMsg, ...)`,
+   then final question on session-47 as terminal step. All 4 baselines
+   inherit (fair comparison guaranteed).
+3. Bake script: `scripts/bake-longmemeval-multiturn.ts` — reuses upstream
+   `longmemeval_s.json`; just rewires the Task schema. Same 120 tasks,
+   same seed=42 stratification.
+4. New sweep YAML: `eval/sweeps/main_e1_text_lme_mt.yaml` — clone of
+   `main_e1_text.yaml` but bench `lme-multiturn` instead of `lme-med`,
+   plus `ahc_full: ahc_flags: { TASK_AWARE_EXTRACTION: true, OBSERVER_THRESHOLD: 4000 }`.
+5. (Optional) Replace `lme-med` with `lme-multiturn` in main sweep, or
+   keep both for honest «single-shot vs incremental» framing.
+
+**Cost:**
+- Sweep: 4 baselines × 20 tasks × ~$0.15/task (47 step()s per task,
+  each ~3K tokens) = **~$12**. Per-task cost higher than single-shot
+  LME because of N actor invocations.
+- Wall-clock: ~30–40 min at conc=10.
+
+### 12.5 Acceptance gate
+
+- `ahc_full × lme-multiturn` records carry ≥1 observer event on **≥80%
+  of records** (vs 0% current).
+- E2 ablation `ahc_no_observer × lme-multiturn` shows measurable Δ
+  accuracy vs `ahc_full × lme-multiturn` (currently 0, because there
+  was nothing to disable).
+- AHC cache-rate on lme-multiturn ≥ 60% per §2.1 (Tier-1 prefix
+  stability preserved through 47-step replay).
+
+### 12.6 Decision gate
+
+- **Skip if:** F-report happy with «cache-rate only» AHC story + honest
+  «observer measured dormant on these benches» caveat. Saves 1 day +
+  $12.
+- **Build if:** reviewer pushes back on observer-as-feature claim; OR
+  if H5 E2 ablation results need observer-Δ for narrative; OR if F1
+  outline includes a «Tier-2 observations» figure.
+
+### 12.7 Alternative paths (rejected for v1 but kept for context)
+
+- **Synthetic interview corpus.** Pre-2026-05-14 version of this section
+  proposed generating 30 personas × 8 turns from scratch (~$2 + 2 days).
+  Rejected because LME replay reuses an external corpus reviewers
+  already trust.
+- **MultiWOZ / DSTC dialogues.** Public task-oriented dialogues, but
+  turns are 50-token «book a restaurant» short — wrong shape for
+  observer. Considered for AT continuation, not H6.6.
+- **Reddit AMA / Stack Exchange long-form.** Natural multi-turn but
+  licensing + manual cleaning friction > LME replay engineering cost.
+
+---
+
+## 13. H6.7 — Tau-bench offloader activation *(TODO)*
+
+### 13.1 Why this exists
+
+Same root cause as H6.5: `defaultFeatureFlags.TYPE_AWARE_OFFLOAD = false`
++ sweep YAML `ahc_flags: {}` → offloader never reaches Tier-3 even on
+the one bench we have where it could fire (tau-bench retail). Records
+in `benchmarks/runs/main_e1_tau/**/42/records.ndjson` show
+`compaction_events=0` and (worse) `input_tokens=0` across all 5
+turns × 10 episodes — a second telemetry bug stacked on the flag-gate.
+
+Probe (live, 2026-05-14, `scripts/probe-offloader.ts`, $0.01 spent):
+synthetic Tier-3 with 5 atomic groups × 6280 bytes each →
+`TYPE_AWARE_OFFLOAD=true` → 3 of 5 groups offloaded (last 2 kept per
+`ALWAYS_KEEP_LAST_GROUPS=2`), real digests generated by gpt-5.4-mini,
+pointers written to Tier-2, stub messages written back to Tier-3. **End-
+to-end mechanism works; missing input has been the only blocker.**
+
+Tau-bench retail tool-result sizes (measured from
+`benchmarks/tau-bench/data/{users,orders,products}.json` entries —
+proxy for what `get_*` tools return):
+
+| Entity type | Avg bytes | Max bytes | T_SIZE_MIXED=2KB? |
+|---|---|---|---|
+| Users | ~417 | ~474 | below |
+| Orders | ~1067 | ~1244 | mostly below |
+| Products | ~1894 | **~3060** | **above on long-variant products** |
+
+`get_product_details` reliably crosses 2KB on multi-variant SKUs.
+Even when individual results stay under 2KB, `T_CUM=24000` triggers
+offload once cumulative kept results pass that bound — typical
+tau-bench retail episode has 8-15 tool calls = ~10-18KB cumulative
+on the floor, hits ceiling on long episodes.
+
+### 13.2 What needs to land
+
+| Step | LOC | Why |
+|---|---|---|
+| **1. Flag flip in tau YAML** | 3 | `eval/sweeps/main_e1_tau.yaml` → `tau_bench_agent_ahc: ahc_flags: { TYPE_AWARE_OFFLOAD: true, TRAJECTORY_CLASSIFIER: true }`. Without this, dispatch skips offloader. |
+| **2. Tau runner telemetry fix** | ~20 | `src/eval/adapters/tau-bench-retail/agent-runner.ts` — currently `input_tokens=0` / `output_tokens=0` on all turns. Suspected: AI-SDK `generateText` `usage` field not propagated into `TurnRecord` for the retail runner's per-step path. Without this, even successful offloads aren't visible in NDJSON. |
+| **3. Compaction events plumb-through verification** | 0 | Same path AHC core uses already exposes `compaction_events: []` per turn — verify the wiring on the runner side (S4 of the original E1 plan flagged this but may not have shipped). |
+| **4. Single-task live mini-smoke** | 0 | After steps 1-3: `pnpm tsx scripts/eval.ts --sweep eval/sweeps/main_e1_tau.yaml --concurrency=1 --max-tasks-per-cell=1`. Expected output: `compaction_events` includes ≥1 entry with `type:'offload'`, `input_tokens > 0`, scratchpad recall_id populated. |
+
+### 13.3 Scope
+
+| Activates | Status after H6.7 |
+|---|---|
+| **Offloader** | ✓ fires on `get_product_details` results and cumulative-budget hits |
+| **Recall tool** | ✓ exercised once scratchpad has pointers (agent can call recall to expand stubs) |
+| **Schema-aware digest** | ✓ if `SCHEMA_AWARE_DIGEST=true` flag set; digest receives JSON schema of `get_order_details` etc. |
+| **Cache-rate** | partial — tau-bench retail prompt prefix is short (~1K tokens of agent instructions), below 1024-token cache floor of OpenAI auto-cache. Independent of H6.7. |
+
+### 13.4 Cost
+
+- Mini-smoke 1 task: ~$0.02.
+- Full re-run 2 baselines × 10 episodes × 2 seeds: ~$1.50 (matches H6.1
+  budget; H6.7 effectively rolls into H6.1's re-run after the flag flip
+  + telemetry fix).
+
+### 13.5 Acceptance gate
+
+- `tau_bench_agent_ahc × tau-bench-retail-med` records carry:
+  - `input_tokens > 0` on ≥1 turn per episode (telemetry sanity)
+  - ≥1 `compaction.offload` event on ≥30% of episodes (offloader active)
+  - `recall_events.length ≥ 1` on ≥10% of episodes (agent reads back a
+    pointer, exercising the recall tool round-trip §A §6)
+- `scripts/check-run.ts` extension (~10 LOC): per-cell offload-event
+  density counter, mirrors observer-density check from §11.3.
+
+### 13.6 Decision gate
+
+- **Always do this if H6.1 (tau scale-up) runs.** Without flag flip,
+  H6.1 just produces more «offloader dormant» records. Combined cost
+  remains $1.50.
+- **Skip if H6.1 is skipped.** Tau scale-up + offloader activation
+  stand or fall together — without scale-up the n=10 power problem
+  swamps any offloader-Δ signal.
+
+---
+
+## 14. Инварианты
+
+### 13.1 Cross-model honesty
 
 **Invariant:** Any sweep marketed as «cross-model» runs ALL baselines on the same target model. No asymmetric mix.
 
 **How checked:** Pre-sweep cost-math probe (sample 1 record post-sweep across all baselines; assert `actor_cost / predicted_<target_model> ≈ 1.0` для каждого baseline'а). Sub-agent verification pattern from this conversation — standard recipe (see `memory/feedback_verify_code_state_before_sweep.md`).
 
-### 11.2 Auto-resume safety
+### 14.2 Auto-resume safety
 
 **Invariant:** Re-running a sweep после partial-halt не дублирует и не теряет records.
 
 **How checked:** Existing `persist.ts:readCompletedTaskIds` test coverage; `design/E_main-runs.md §6` resume logic. Track H sweeps inherit this — no new mechanism.
 
-### 11.3 Cache invariance preserved across env switches
+### 14.3 Cache invariance preserved across env switches
 
 **Invariant:** `pnpm test:cache-invariance` остаётся зелёным на любом значении `AHC_ACTOR_MODEL`.
 
@@ -550,17 +835,21 @@ Add «Mastra OM execution depth» row в `h_followup_audit.md`. Если case (i
 
 ---
 
-## 12. Open questions
+## 15. Open questions
 
 1. **`system_design §7` Track H scope row** — not yet added. Per `memory/feedback_phase_intro_doc_update.md`, when a plan introduces a new phase by name, the doc row lands as Step 0 of the same plan. Recommend: small PR (5-LOC system_design edit + this design doc) before launching H1. **Resolves when:** user approves H1 launch.
 2. **Anthropic Cookbook memory tool vs LangChain SummaryBufferMemory** (§3.1) — pick which 2nd Anthropic competitor (if any). **Resolves when:** user picks or defers H2.
 3. **Cross-model E2 ablations** — defer or include? Default deferred (cost ~$3 extra, may not be illustrative if H3 already shows cross-model delta dominates ablation effect). **Resolves when:** H3 cross-model headline numbers come in.
 4. **AT n=30→60 via synthetic generation** (cf. old TODO #7, Phase D follow-up) — orthogonal to H but ablation power scales with n_AT. Track D continuation, not Track H. **Resolves when:** D3 design owner reactivates.
 5. **Per-cell `actor_model` field in sweep YAML** — currently model resolved via env (global). Per-cell field would let one sweep mix models. Add only if cross-model interleaving becomes a recurring pattern. **Resolves when:** 2nd cross-model use-case emerges.
+6. **H6.5 observer flag-flip strategy** — flip `defaultFeatureFlags.TASK_AWARE_EXTRACTION` + `TYPE_AWARE_OFFLOAD` core-side (one-line, all sweeps inherit) vs override per-YAML in `ahc_full: ahc_flags`. Core flip is cleaner but changes a public default; recommend YAML override path for H3/H4/H5/H6.6/H6.7. **Resolves when:** H1 PR drafted.
+7. **H6.6 LME multi-turn replay — build or skip?** Decision pivots on whether F-report needs observer Δ accuracy story or can ship with «cache-rate only + honest dormant-observer caveat». Replay path is cheaper than originally-proposed synthetic dataset ($12 vs $12, 1 day vs 2) AND reuses external corpus. **Resolves when:** F1 outline drafted (Track F).
+8. **H6.6 replay-mode + threshold trade-off.** Mode A (1 session/turn) is most natural but observer borderline at default `OBSERVER_THRESHOLD=8000`; either drop threshold to 4000 (sweep override, no code change) or use Mode B (3 sessions/turn, concat artefact). Recommend Mode A + threshold=4000 — natural shape, reliable firing, no concat. **Resolves when:** H6.6 PR drafted; both modes can be A/B'd at <$5 each if uncertain.
+9. **H6.7 tau telemetry fix scope.** `input_tokens=0` on tau records — is it AI-SDK usage not propagating, the per-step record-builder dropping it, or the cost-aware-LLMCaller wrapper not recording? Quick investigation needed before H6.1 re-run. **Resolves when:** S22-style grep on `tau-bench-retail/agent-runner.ts` per-turn telemetry path.
 
 ---
 
-## 13. Spend budget summary
+## 16. Spend budget summary
 
 | Phase | Cost (USD) | Wall-clock |
 |---|---|---|
@@ -574,6 +863,9 @@ Add «Mastra OM execution depth» row в `h_followup_audit.md`. Если case (i
 | H6.2 E3 real LME | $5 | ~10 мин |
 | H6.3 AT per-class | $0 | ~30 мин (analysis) |
 | H6.4 mastra OM depth | $0.50 | ~30 мин (code + run) |
-| **Total** | **$39.50–47.50** (+$8 if cross-model seed=43) | ~3 ч live; ~1.5 дня wall incl. analysis |
+| H6.5 observer audit | $0.03 (probe spent) | ~30 мин (analysis + audit-step LOC) |
+| H6.6 LME multi-turn replay *(opt)* | $12 (adapter+sweep) | ~1 день (adapter + bake + sweep) |
+| H6.7 tau offloader activation | $0.01 (probe spent) + $1.50 (rolled into H6.1) | ~1 ч (YAML flip + telemetry fix + mini-smoke) |
+| **Total** | **$41.00–49.00** (+$8 if cross-model seed=43, +$12 if H6.6) | ~3 ч live; ~1.5 дня wall incl. analysis; +1 день if H6.6 |
 
 OpenRouter remaining ~$90 — comfortable headroom.

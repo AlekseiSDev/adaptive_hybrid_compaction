@@ -9,6 +9,12 @@
 
 > Replaces partially the role of the F-track numeric source — F reads
 > tables here for claims that require beyond-single-seed evidence.
+>
+> **Competitor baseline numbers** (`full_context`, `anthropic_compact`,
+> `mastra_om`, `tau_bench_agent` vanilla) — canonical в
+> [`baselines_frozen.md`](baselines_frozen.md). Cross-provider variants
+> (e.g. `anthropic_compact` × Sonnet/LITELLM) тоже frozen. AHC-числа
+> остаются здесь — итеративные per-sweep.
 
 ---
 

@@ -185,7 +185,9 @@ All `summary.json.status == 'complete'`, no `ErrorRecord` rate > 0%.
    rate × cost frontier, not raw accuracy.
 5. **Tau-bench** — NOT included in this sweep (separate `main_e1_tau`
    dir, grader was fixed `d9d1424` but n=10 still too small for
-   discrimination → see H6.1).
+   discrimination → see H6.1). Update Track I (2026-05-22): cross-framework
+   competitor `mastra-agent` теперь runs на tau-bench-retail-med — see
+   `docs/runs/i_mastra_agent_audit.md`.
 
 ## Reproduction
 
