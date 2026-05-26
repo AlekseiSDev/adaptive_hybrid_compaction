@@ -8,8 +8,10 @@ import type {
 } from '@anthropic-ai/sdk/resources/beta/messages/messages.js'
 import type { Model as AnthropicModel } from '@anthropic-ai/sdk/resources/messages/messages.js'
 import { DEFAULT_AGENT_SYSTEM_PROMPT } from '../../core/prompts.js'
+import { anthropicCostFromUsageWithCache } from '../llm.js'
 import { composeTurnRecord, mapAnthropicUsage } from '../telemetry.js'
 import type {
+  AnthropicUsage,
   Baseline,
   CompactionEvent,
   Instrumentation,
@@ -245,20 +247,26 @@ export function anthropicCompactBaseline(deps: AnthropicCompactDeps): Baseline {
         }
       }
 
-      const usagePart = mapAnthropicUsage(
-        {
-          input_tokens: response.usage.input_tokens,
-          output_tokens: response.usage.output_tokens,
-          ...(response.usage.cache_read_input_tokens !== null
-            ? { cache_read_input_tokens: response.usage.cache_read_input_tokens }
-            : {}),
-          ...(response.usage.cache_creation_input_tokens !== null
-            ? { cache_creation_input_tokens: response.usage.cache_creation_input_tokens }
-            : {}),
-        },
-        { wall_clock_ms, turn_index },
-      )
+      const anthropicUsage: AnthropicUsage = {
+        input_tokens: response.usage.input_tokens,
+        output_tokens: response.usage.output_tokens,
+        ...(response.usage.cache_read_input_tokens !== null
+          ? { cache_read_input_tokens: response.usage.cache_read_input_tokens }
+          : {}),
+        ...(response.usage.cache_creation_input_tokens !== null
+          ? { cache_creation_input_tokens: response.usage.cache_creation_input_tokens }
+          : {}),
+      }
+      const usagePart = mapAnthropicUsage(anthropicUsage, { wall_clock_ms, turn_index })
       const telemetry: TurnRecord = composeTurnRecord(usagePart, {})
+
+      // Back-fill actor cost: SDK doesn't return $, but `response.usage`
+      // gives input + output + cache_read + cache_creation counts. Apply
+      // ANTHROPIC_DIRECT_PRICING entry for the configured model, with
+      // cache_read_factor (0.1) / cache_write_factor (1.25) for Sonnet.
+      // Model lookup goes through the dash/dot-form table; unknown models
+      // (e.g. preview snapshots without pricing) yield $0 silent fallback.
+      const cost_usd = anthropicCostFromUsageWithCache(scratch.model, anthropicUsage)
 
       const nextScratch: AnthropicScratch = {
         model: scratch.model,
@@ -276,7 +284,7 @@ export function anthropicCompactBaseline(deps: AnthropicCompactDeps): Baseline {
           scratch: { ...nextScratch },
         },
         telemetry,
-        cost_usd: 0,
+        cost_usd,
       }
     },
   }

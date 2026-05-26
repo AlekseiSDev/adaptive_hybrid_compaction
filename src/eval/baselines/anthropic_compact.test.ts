@@ -147,7 +147,11 @@ describe('anthropicCompactBaseline.step — no compaction triggered', () => {
     expect(result.telemetry.output_tokens).toBe(5)
     expect(result.telemetry.turn_index).toBe(0)
     expect(result.telemetry.compaction_events).toEqual([])
-    expect(result.cost_usd).toBe(0)
+    // Cost back-filled via anthropicCostFromUsageWithCache:
+    // input_tokens = 100 (uncached, non-cached), output_tokens = 5,
+    // model = claude-sonnet-4-6 ($3/$15 per 1M, cache factors irrelevant here).
+    // Expected = (100 * 3 + 5 * 15) / 1e6 = 0.000375
+    expect(result.cost_usd).toBeCloseTo((100 * 3 + 5 * 15) / 1e6, 9)
   })
 
   test('step passes context_management.edits[compact_20260112] in request body', async () => {
@@ -198,6 +202,25 @@ describe('anthropicCompactBaseline.step — no compaction triggered', () => {
     const result = await baseline.step(state, makeUser('q'))
     expect(result.telemetry.cache_read_input_tokens).toBe(800)
     expect(result.telemetry.cache_creation_input_tokens).toBe(0)
+  })
+
+  test('cost_usd back-filled with cache_read discount (claude-sonnet-4-6: 10%)', async () => {
+    // input_tokens = 1200 uncached + cache_read = 800 at 10% + cache_creation = 400 at 125%.
+    // Effective input = 1200 + 80 + 500 = 1780. Cost = 1780 * $3/M + 25 * $15/M.
+    mockCreate = vi.fn().mockResolvedValue({
+      ...fakeMessage('ok'),
+      usage: {
+        input_tokens: 1200,
+        output_tokens: 25,
+        cache_read_input_tokens: 800,
+        cache_creation_input_tokens: 400,
+      },
+    })
+    const baseline = anthropicCompactBaseline({ apiKey: 'sk-fake' })
+    const state = baseline.prepare(makeTask())
+    const result = await baseline.step(state, makeUser('q'))
+    const expected = ((1200 + 800 * 0.1 + 400 * 1.25) * 3 + 25 * 15) / 1e6
+    expect(result.cost_usd).toBeCloseTo(expected, 9)
   })
 
   test('multi-step: history accumulates 2 per step + scratch.compaction_blocks stays empty when not triggered', async () => {

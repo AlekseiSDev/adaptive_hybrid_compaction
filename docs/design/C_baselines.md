@@ -2,6 +2,11 @@
 
 > Track-level design для трёх baseline wrappers, гоняющихся в общем eval harness.
 > Реализуется в `src/eval/baselines/`. Phase plan — `system_design §7.2 Track C`.
+>
+> **Связанный baseline (Track I):** `mastra-agent` — второй Mastra-based baseline,
+> полный Agent + tools (vs `mastra_om` Memory-only). Closes tau-bench
+> framework-native competitor gap. Design — `docs/design/I_mastra_agent.md`,
+> phase plan — `system_design §7.2 Track I`.
 
 ---
 

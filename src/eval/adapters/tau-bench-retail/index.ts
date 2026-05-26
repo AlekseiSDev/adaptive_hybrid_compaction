@@ -33,6 +33,7 @@ import {
   TAU_USER_SIM_DEFAULT_MODEL,
   type EpisodeResult,
 } from './agent-runner.js'
+import { runTauEpisodeMastra } from './mastra-agent-runner.js'
 import type { Episode } from './types.js'
 
 function tasksDir(): string {
@@ -147,6 +148,71 @@ export function makeTauBenchRunner(opts: MakeTauBenchRunnerOpts): Runner {
         userSimModelId,
         ...(opts.ahcFlags !== undefined ? { ahcFlags: opts.ahcFlags } : {}),
         ...(ahcInternalLlmClient !== undefined ? { ahcInternalLlmClient } : {}),
+        ...(opts.maxSteps !== undefined ? { maxSteps: opts.maxSteps } : {}),
+        ...(ctx.instrumentation !== undefined ? { emit: ctx.instrumentation } : {}),
+      })
+      return {
+        text: result.finalText,
+        turns: buildEpisodeTurns(result.events),
+        errors: result.errors.map((e) => ({
+          turn_index: e.turn_index,
+          kind: e.kind,
+          message: e.message,
+        })),
+        totals: result.totals,
+        cost_usd: result.cost_usd,
+        bench_extras: {
+          reward: result.reward,
+          envState: result.envState,
+          n_steps: result.n_steps,
+          n_tool_calls: result.n_tool_calls,
+        } satisfies TauBenchExtras,
+      }
+    },
+  }
+}
+
+export type MakeTauBenchMastraAgentRunnerOpts = {
+  apiKey: string
+  baseURL?: string
+  actorModelId?: string
+  userSimModelId?: string
+  maxSteps?: number
+}
+
+// Track I (I2): `mastra-agent` baseline × tau-bench-retail-med dispatcher.
+// Parallel to makeTauBenchRunner (vanilla / AHC) — separate factory keeps the
+// AHC wiring path clean.
+export function makeTauBenchMastraAgentRunner(
+  opts: MakeTauBenchMastraAgentRunnerOpts,
+): Runner {
+  const baseURL = opts.baseURL ?? 'https://openrouter.ai/api/v1'
+  const openai = createOpenAI({ apiKey: opts.apiKey, baseURL })
+  const envActor = process.env['AHC_ACTOR_MODEL']
+  const actorModelId =
+    opts.actorModelId ??
+    (envActor && envActor.length > 0 ? envActor : TAU_ACTOR_DEFAULT_MODEL)
+  const userSimModelId = opts.userSimModelId ?? TAU_USER_SIM_DEFAULT_MODEL
+  // user-sim runs через AI SDK provider (vanilla — matching tau_bench_agent).
+  const userSimModel = openai.chat(userSimModelId)
+
+  return {
+    name: 'mastra-agent',
+    async execute(_conv: Conversation, ctx: RunnerContext): Promise<RunnerResponse> {
+      const episode = ctx.task.input as Episode
+      const wiki = await loadWiki()
+      const actorSystem = buildSystemPrompt({ benchContext: wiki })
+      const result = await runTauEpisodeMastra(episode, {
+        actorModel: {
+          apiKey: opts.apiKey,
+          providerId: 'openrouter',
+          modelId: actorModelId,
+          url: baseURL,
+        },
+        userSimModel,
+        actorSystem,
+        actorModelId,
+        userSimModelId,
         ...(opts.maxSteps !== undefined ? { maxSteps: opts.maxSteps } : {}),
         ...(ctx.instrumentation !== undefined ? { emit: ctx.instrumentation } : {}),
       })

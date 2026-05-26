@@ -28,6 +28,7 @@ import { defaultLmeJudge } from './adapters/longmemeval-med.judge.js'
 import { longmemevalMultiturnAdapter } from './adapters/longmemeval-multiturn.js'
 import { syntheticAdapter, syntheticGrader } from './adapters/synthetic.js'
 import {
+  makeTauBenchMastraAgentRunner,
   makeTauBenchRunner,
   taubenchAdapter,
   taubenchGrader,
@@ -36,6 +37,7 @@ import { buildRunnerFromBaseline } from './baseline.js'
 import { DEFAULT_AGENT_SYSTEM_PROMPT } from '../core/prompts.js'
 import { anthropicCompactBaseline } from './baselines/anthropic_compact.js'
 import { fullContextBaseline } from './baselines/full_context.js'
+import { mastraAgentBaseline } from './baselines/mastra_agent.js'
 import { mastraOmBaseline } from './baselines/mastra_om.js'
 import { CostTracker } from './cost.js'
 import { createOpenRouterClient, resolveActorModel } from './llm.js'
@@ -209,6 +211,37 @@ function makeMastraOmRunner(): Runner {
   return buildRunnerFromBaseline(baseline)
 }
 
+// Track I baseline — full Mastra Agent + tools. Bench-aware dispatch:
+//   - tau-bench-retail-med → makeTauBenchMastraAgentRunner (episode loop с
+//     registered retail tools, runTauEpisodeMastra)
+//   - text benches (assistant-traj / lme-multiturn / locomo-med) → generic
+//     buildRunnerFromBaseline path с пустым tools (tools registration wiring
+//     стоит на месте через MastraAgentDeps.tools но не задействован на тексте).
+function makeMastraAgentRunner(): Runner {
+  const apiKey = process.env['OPENROUTER_API_KEY']
+  if (!apiKey) {
+    throw new Error(
+      'OPENROUTER_API_KEY env var is required for baseline=mastra-agent (Mastra wraps OpenRouter via OpenAI-compatible config)',
+    )
+  }
+  const textBaseline = mastraAgentBaseline({
+    apiKey,
+    systemPrompt: DEFAULT_AGENT_SYSTEM_PROMPT,
+  })
+  const textRunner = buildRunnerFromBaseline(textBaseline)
+  const tauRunner = makeTauBenchMastraAgentRunner({ apiKey })
+
+  return {
+    name: 'mastra-agent',
+    async execute(conv, ctx) {
+      if (ctx.bench === 'tau-bench-retail-med') {
+        return tauRunner.execute(conv, ctx)
+      }
+      return textRunner.execute(conv, ctx)
+    },
+  }
+}
+
 // LiteLLM proxy uses Anthropic's `model_name` field with dot-form aliases
 // (e.g. `claude-sonnet-4.6` → upstream `anthropic/claude-sonnet-4-6`). Sending
 // the raw dash-form to the proxy yields 400 "Invalid model name". Pinned to
@@ -374,6 +407,9 @@ export const defaultRunnerRegistry: RunnerRegistry = {
     }
     if (config.baseline === 'mastra_om') {
       return makeMastraOmRunner()
+    }
+    if (config.baseline === 'mastra-agent') {
+      return makeMastraAgentRunner()
     }
     if (config.baseline === 'anthropic_compact') {
       return makeAnthropicCompactRunner()
