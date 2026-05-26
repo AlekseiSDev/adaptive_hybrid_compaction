@@ -127,6 +127,14 @@ export async function runGaiaTaskMastra(
           url: deps.actorModel.url,
           apiKey: deps.actorModel.apiKey,
         },
+        // K-tail-2 (2026-05-26): Mastra defaults observation=30K/reflection=40K
+        // (per node_modules/@mastra/memory/dist/chunk-LSJJAJAF.js
+        // OBSERVATIONAL_MEMORY_DEFAULTS). На GAIA tasks input 60-95K — Observer
+        // компактит aggressively, разрушает useful tool_results, agent re-search'ит.
+        // Bumped к 100K/200K чтобы держать raw context (gpt-5.4-mini context
+        // window 128K+ → 100K observation threshold fits).
+        observation: { messageTokens: 100_000 },
+        reflection: { observationTokens: 200_000 },
       },
     },
   })

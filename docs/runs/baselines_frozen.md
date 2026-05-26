@@ -34,33 +34,56 @@ cache_hit_e3}/` (gitignored). Actor = `gpt-5.4-mini` через OpenRouter ес�
 (`main_e1_mastra_agent.yaml budget_usd=35`). Tau cell split в отдельный
 `main_e1_mastra_agent_tau.yaml` — см. tau-bench retail table ниже.
 
-### gaia-med (Track K + K-tail, 2026-05-26, после Mastra maxSteps fix)
+### gaia-med (Track K + K-tail, 2026-05-26, finalized после Mastra threshold tuning)
 
 `main_e1_gaia_competitors.yaml` × n=25 × seed=42 × `gpt-5.4-mini` (OpenRouter),
 SearXNG via `observability/searxng-docker-compose.yml`. Source:
 `docs/runs/k_gaia_audit.md`.
 
+**Naming note**: на agentic bench "FC analog" = `gaia_bench_agent` (vanilla
+actor с tools, без AHC middleware) — literal `full_context` baseline без tools
+degenerate (~5-15% expected). Все три baseline ниже используют те же 5 GAIA tools
+через SearXNG; различаются compaction layer.
+
 | bench | baseline | n | input_tok | acc | cost_$ | $/task |
 |---|---|---|---|---|---|---|
-| gaia-med | gaia_bench_agent | 25 | 1 715 589 | **0.320** | 1.347 | 0.054 |
-| gaia-med | mastra-agent ✠ | 25 | 953 688 | **0.280** | 0.829 | 0.033 |
-| gaia-med | gaia_bench_agent_ahc | — | — | — | — | — (deferred, отдельный run) |
+| gaia-med | gaia_bench_agent (FC analog) | 25 | 1 715 589 | 0.320 | 1.347 | 0.054 |
+| gaia-med | mastra-agent ✠ | 25 | 3 180 785 | **0.400** | 2.465 | 0.099 |
+| gaia-med | gaia_bench_agent_ahc ✠✠ | 25 | 804 480 | 0.200 | 0.871 | 0.035 |
 
 ✠ Track K-tail (2026-05-26): Mastra Agent + Memory + LibSQL + GAIA tools.
-Initial run gave acc=0.160 ($0.525) из-за `maxSteps=20` cap без final-text
-fallback — 9/25 tasks завершались с empty response. Fix: bumped
-`DEFAULT_MAX_STEPS` в `src/eval/adapters/gaia-med/mastra-agent-runner.ts`
-к 40; rerun acc=0.280 ($0.829), 4/25 empty (down from 9/25).
+Required two fixes:
+1. **maxSteps cap** — Mastra `agent.generate(messages, {maxSteps: 20})` returns
+   empty `result.text` if last step was tool_call awaiting result. Bumped к 40
+   (`src/eval/adapters/gaia-med/mastra-agent-runner.ts:DEFAULT_MAX_STEPS`).
+   Без fix'а: 9/25 tasks empty, acc=0.160.
+2. **Memory thresholds** — Mastra observationalMemory defaults
+   `observation.messageTokens: 30 000` / `reflection.observationTokens: 40 000`
+   (per `node_modules/@mastra/memory/dist/chunk-LSJJAJAF.js`
+   OBSERVATIONAL_MEMORY_DEFAULTS). На GAIA multi-tool tasks input 60-95K —
+   Observer fired aggressively, erasing useful tool_results. Bumped к
+   100K/200K (К-tail-2). acc 0.28 → **0.40**, empty 4/25 → 1/25, cap-hits 4 → 1.
 
-Per-level (1/2/3): vanilla 4/7 + 4/14 + 0/4; mastra 4/7 + 3/14 + 0/4.
-Mastra recovered к vanilla parity на level-1; both fail level-3
-(gpt-5.4-mini capability ceiling).
+**Mastra (0.40) > FC analog (0.32)** на этом setup — Memory effective с raised
+thresholds. Cost penalty $2.47 vs $1.35 (1.8×) приемлем для +25% accuracy.
 
-Mastra opaque to Langfuse (Mastra не emit AI SDK auto-spans for internal
-ReACT). Diagnostic via `Score.secondary.n_tool_calls` (К-tail
-instrumentation): Mastra 521 tool calls vs vanilla 358 (1.5× more
-per task). Mastra Memory compacts 56% fewer input tokens (953K vs 1.7M)
-с −0.04 acc penalty — cost-effective compaction trade-off.
+Per-level (1/2/3): FC analog 4/7 + 4/14 + 0/4; mastra 4/7 + **6/14** + 0/4;
+AHC 3/7 + 2/14 + 0/4. Mastra +3 tasks на L2 vs FC analog; AHC −2 tasks
+vs FC analog despite raised observer/reflector — see ✠✠ note.
+
+✠✠ AHC variant (К-tail-2, `main_e1_gaia_ahc.yaml`): `OBSERVER_THRESHOLD=100K`,
+`REFLECTION_THRESHOLD=200K`, `TIER3_TOKEN_BUDGET=100K`. **Не тюнили** другие
+thresholds: `T_SIZE=4096` (tool-result offload), `T_CUM=24000`, `K_RECENT=6`.
+Web search tool_results (20-50K chars) сразу offload'ятся в scratchpad через
+Type-Aware Offloader — actor теряет search context на следующем step'е.
+Input всего 804K (vs FC analog 1.72M, Mastra 3.18M) — AHC компактит
+самым агрессивным slice'ом. Полный AHC threshold-sweep (`T_SIZE` +
+`T_CUM` тоже raised) — отдельный run.
+
+Mastra opaque to Langfuse (`@mastra/core` doesn't expose `experimental_telemetry`
+option). Diagnostic via `Score.secondary.n_tool_calls` (К-tail instrumentation):
+Mastra 346 tools / 25 tasks = 13.8/task; FC analog 358 tools / 25 = 14.3/task.
+Comparable tool-call rate.
 
 Effective n=25 (5/30 attachment tasks filtered at bake — xlsx/pdf/pdb/jsonld/docx
 not vendored).

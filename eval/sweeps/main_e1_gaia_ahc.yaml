@@ -1,0 +1,32 @@
+name: main_e1_gaia_ahc
+# Track K-tail-2 (2026-05-26) — AHC variant на gaia-med с user-suggested
+# thresholds (observer 100K / reflection 200K). Mastra version of this
+# experiment landed в main_e1_gaia_competitors.yaml — это AHC parallel.
+#
+# Goal: проверить AHC с raised thresholds vs Mastra с тем же config.
+# Hypothesis (user 2026-05-26): default AHC observer=30K fires too
+# aggressively на GAIA multi-tool tasks (60-95K context windows),
+# erasing useful tool_results, agent re-search'ит. 100K/200K даёт
+# room для raw context retention.
+#
+# Live deps (same as competitors sweep):
+#   - OPENROUTER_API_KEY
+#   - WEB_SEARCH_AUTOSELECT=true + SEARXNG_URL=http://localhost:8080
+#   - LANGFUSE_ENABLED=true (для tool span verification)
+
+benches:
+  - gaia-med
+configs:
+  - id: gaia_ahc_100k_200k
+    baseline: gaia_bench_agent_ahc
+    ahc_flags:
+      TASK_AWARE_EXTRACTION: true
+      TYPE_AWARE_OFFLOAD: true
+      TRAJECTORY_CLASSIFIER: true
+      RECALL_TOOL: true
+    thresholds:
+      OBSERVER_THRESHOLD: 100000
+      REFLECTION_THRESHOLD: 200000
+      TIER3_TOKEN_BUDGET: 100000
+seeds: [42]
+budget_usd: 30

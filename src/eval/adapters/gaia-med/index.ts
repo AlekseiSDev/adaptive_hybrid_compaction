@@ -5,7 +5,7 @@
 // Dispatch is config.baseline-driven; bench routing happens in runner.ts.
 
 import { createOpenAI } from '@ai-sdk/openai'
-import type { FeatureFlags } from '../../../core/index.js'
+import type { FeatureFlags, Thresholds } from '../../../core/index.js'
 import { createOpenRouterClient } from '../../llm.js'
 import type {
   ConfigDef,
@@ -34,6 +34,7 @@ export type MakeGaiaBenchRunnerOpts = {
   baseURL?: string
   actorModelId?: string
   ahcFlags?: Partial<FeatureFlags>
+  ahcThresholds?: Partial<Thresholds>
   maxSteps?: number
 }
 
@@ -65,6 +66,7 @@ export function makeGaiaBenchRunner(opts: MakeGaiaBenchRunnerOpts): Runner {
         actorSystem: GAIA_DRIVER_SYSTEM,
         actorModelId,
         ...(opts.ahcFlags !== undefined ? { ahcFlags: opts.ahcFlags } : {}),
+        ...(opts.ahcThresholds !== undefined ? { ahcThresholds: opts.ahcThresholds } : {}),
         ...(ahcInternalLlmClient !== undefined ? { ahcInternalLlmClient } : {}),
         ...(opts.maxSteps !== undefined ? { maxSteps: opts.maxSteps } : {}),
         ...(ctx.instrumentation !== undefined ? { emit: ctx.instrumentation } : {}),
@@ -165,8 +167,13 @@ export function resolveGaiaRunner(config: ConfigDef): Runner {
     config.ahc_flags !== undefined
       ? (config.ahc_flags as Partial<FeatureFlags>)
       : undefined
+  // K-tail-2: sweep YAML может задать `thresholds` (`OBSERVER_THRESHOLD`,
+  // `REFLECTION_THRESHOLD`, etc.) — plumb через middleware для GAIA AHC
+  // variant (`gaia_bench_agent_ahc`).
+  const ahcThresholds = config.thresholds
   return makeGaiaBenchRunner({
     apiKey,
     ...(ahcFlags !== undefined ? { ahcFlags } : {}),
+    ...(ahcThresholds !== undefined ? { ahcThresholds } : {}),
   })
 }

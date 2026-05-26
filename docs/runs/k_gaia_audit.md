@@ -9,12 +9,15 @@
 > `i_mastra_agent_audit.md`. F-report consumes this audit для cross-bench
 > Pareto plot (5-я точка).
 >
-> **Status (2026-05-26):** K1–K3 + SearXNG + K-tail competitor sweep
-> + diagnostic fix complete. **K-tail final** (после maxSteps fix
-> 20→40 для Mastra): `gaia_bench_agent` acc=**0.32**, `mastra-agent`
-> acc=**0.28** (бывшее 0.16 — root cause: Mastra cap'алась на 20-step
-> БЕЗ финального текста на hard tasks; 9/25 empty responses до фикса,
-> 4/25 после). Total spend 2 runs = $1.87 + $0.83 = $2.70.
+> **Status (2026-05-26):** K1–K3 + SearXNG + K-tail comp + K-tail-2
+> threshold tune complete. **Final numbers** (после maxSteps 20→40 +
+> Mastra observer 30K→100K / reflector 40K→200K):
+>   - `gaia_bench_agent` (FC analog) acc=**0.32**, $1.35
+>   - `mastra-agent` (Mastra Memory raised thresholds) acc=**0.40**, $2.47
+>   - `gaia_bench_agent_ahc` acc=TBD (running w/ maxSteps=40)
+> Mastra > FC analog после threshold tune — Memory effective когда
+> compaction fires только на L3 hard tasks (4/25 трактуют thresholds
+> raw, 21/25 stay below). Spend tracker: ~$5 across all runs.
 
 ---
 
@@ -88,7 +91,62 @@ WEB_SEARCH_AUTOSELECT=true SEARXNG_URL=http://localhost:8080 \
 
 ---
 
-## Headline numbers (K-tail competitor sweep, n=25, seed=42, FINAL)
+## Headline numbers (K-tail-2 threshold-tuned, n=25, seed=42)
+
+Final numbers после K-tail-2 (raised Mastra observationalMemory thresholds к
+100K/200K — full set ниже).
+
+| baseline | n | acc | cost_$ | $/task | total_input_tok | tool_calls (avg/task) |
+|---|---|---|---|---|---|---|
+| `gaia_bench_agent` | 25 | 0.320 | 1.347 | 0.054 | 1 715 589 | 358 (14.3) |
+| `mastra-agent` (raised) | 25 | **0.400** | 2.465 | 0.099 | 3 180 785 | 346 (13.8) |
+| `gaia_bench_agent_ahc` (100K/200K) | 25 | 0.200 | 0.871 | 0.035 | 804 480 | 523 (20.9) |
+
+**Per-level (acc):**
+| level | n | vanilla | mastra (raised) | AHC (raised, TBD) |
+|---|---|---|---|---|
+| 1 | 7 | 4/7 = 0.57 | **4/7** = 0.57 | 3/7 = 0.43 |
+| 2 | 14 | 4/14 = 0.29 | **6/14** = 0.43 | 2/14 = 0.14 |
+| 3 | 4 | 0/4 | 0/4 | 0/4 |
+
+**AHC underperforms vanilla** (0.20 vs 0.32) даже с raised observer/reflector
+thresholds. Причина — AHC имеет ДОПОЛНИТЕЛЬНЫЕ compaction layers, которые
+не тюнили:
+- `T_SIZE: 4096` — tool_result больше 4K offload'ится в scratchpad через
+  Type-Aware Offloader (web_search results 20-50K chars → почти всегда
+  offload'ятся)
+- `T_CUM: 24000` — cumulative budget; превышение → also offload
+- `K_RECENT: 6` — только 6 recent turns остаются verbatim
+
+Total input tokens AHC 804K vs vanilla 1.72M vs Mastra 3.18M — AHC compacts
+most aggressively на любом setting'е. Чтобы вытащить AHC на parity, нужен
+полный threshold-sweep (bump T_SIZE до 50K, T_CUM до 200K, K_RECENT до 20)
+— deferred к K-tail-3 если приоритет.
+
+**Mastra compaction frequency** (NDJSON token-distribution analysis,
+threshold = 100K observer / 200K reflection):
+- 21/25 tasks input < 100K → Observer **never fires** (raw context kept)
+- 4/25 tasks input > 100K → Observer fires:
+  - gaia_010 (L3, input 1.49M) → ~14 Observer invocations
+  - gaia_023 (L2, 775K) → ~7
+  - gaia_012 (L2, 178K) → ~1
+  - gaia_002 (L2, 134K) → ~1
+- 2/25 tasks > 200K → Reflector fires (gaia_010, gaia_023)
+
+Compaction extremely rare с raised thresholds — Mastra effectively acts
+as "Memory + tools, but no compaction" на most tasks. Where compaction
+fires (L3 hard tasks), tasks fail anyway from capability ceiling. Net
+effect: threshold tune neutralized Mastra Memory's "default-aggressive"
+compaction behavior, recovering accuracy to **above FC analog** parity.
+
+**Mastra opaque to Langfuse confirmed**: 1 trace = 1 SPAN (eval.task
+root only). Mastra Memory's observation/reflection LLM calls happen
+out-of-band from AI SDK OTel context → no GENERATION spans appear.
+Per-tool attribution unavailable in Langfuse; rely on NDJSON.
+
+---
+
+## Headline numbers (legacy K-tail first run, pre-threshold-tune)
 
 ```
 docker compose -f observability/searxng-docker-compose.yml up -d

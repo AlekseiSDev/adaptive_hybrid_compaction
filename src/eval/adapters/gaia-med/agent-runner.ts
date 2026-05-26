@@ -16,7 +16,7 @@ import type { LanguageModelV3 } from '@ai-sdk/provider'
 import { generateText, stepCountIs, wrapLanguageModel } from 'ai'
 import { createAhcMiddleware } from '../../../adapters/ai-sdk-v6.js'
 import { SessionScratchpadRegistry } from '../../../adapters/sessionScratchpad.js'
-import type { FeatureFlags, HysteresisState } from '../../../core/index.js'
+import type { FeatureFlags, HysteresisState, Thresholds } from '../../../core/index.js'
 import {
   costFromUsage,
   OPENROUTER_PRICING,
@@ -37,7 +37,16 @@ function resolveGaiaActorDefault(): string {
 }
 export const GAIA_ACTOR_DEFAULT_MODEL = GAIA_ACTOR_FLASH_DEFAULT
 
-const DEFAULT_MAX_STEPS = 20
+// K-tail-2 (2026-05-26): bumped 20→40 to match Mastra runner (same cap
+// ensures cross-baseline comparability). Vanilla `gaia_bench_agent` smoke
+// при 20 had 0/25 empty responses, но AHC variant с 20 cap had 11/25
+// empty (cap hits 13/25) — AHC's middleware likely consumes some step
+// budget on internal LLM calls. Same 40 cap для consistency. Note: AI SDK
+// `stopWhen: stepCountIs(N)` counts провайдер-side LLM calls — AHC
+// digest/observer/reflection calls идут через separate LLMClient
+// (ahcInternalLlmClient), so they shouldn't count. Investigation hook
+// if AHC re-run still has cap-hit issue.
+const DEFAULT_MAX_STEPS = 40
 const FALLBACK_PRICING: ModelPricing = {
   input_per_million_usd: 0,
   output_per_million_usd: 0,
@@ -51,6 +60,11 @@ export type RunGaiaTaskDeps = {
   // AHC middleware injection (per design §5.2). When set: wrap actor model
   // through createAhcMiddleware with per-task scratchpad.
   ahcFlags?: Partial<FeatureFlags>
+  // K-tail-2 (2026-05-26): optional threshold overrides plumb through к
+  // AHC core middleware. Used для experiment "observer 100K / reflector 200K"
+  // на GAIA после Mastra-side investigation showed default 30K observer
+  // triggers too aggressively на multi-tool tasks (60-95K context windows).
+  ahcThresholds?: Partial<Thresholds>
   ahcInternalLlmClient?: LLMClient
   maxSteps?: number
   emit?: (e: InstrumentationEvent) => void
@@ -102,6 +116,7 @@ export async function runGaiaTask(
     )
     const middleware = createAhcMiddleware({
       flags: deps.ahcFlags,
+      ...(deps.ahcThresholds !== undefined ? { thresholds: deps.ahcThresholds } : {}),
       llmCaller: async (req) => {
         const resp = await baseLlmCaller(req)
         const usd =
