@@ -34,7 +34,7 @@ cache_hit_e3}/` (gitignored). Actor = `gpt-5.4-mini` через OpenRouter ес�
 (`main_e1_mastra_agent.yaml budget_usd=35`). Tau cell split в отдельный
 `main_e1_mastra_agent_tau.yaml` — см. tau-bench retail table ниже.
 
-### gaia-med (Track K + K-tail, 2026-05-26)
+### gaia-med (Track K + K-tail, 2026-05-26, после Mastra maxSteps fix)
 
 `main_e1_gaia_competitors.yaml` × n=25 × seed=42 × `gpt-5.4-mini` (OpenRouter),
 SearXNG via `observability/searxng-docker-compose.yml`. Source:
@@ -43,16 +43,24 @@ SearXNG via `observability/searxng-docker-compose.yml`. Source:
 | bench | baseline | n | input_tok | acc | cost_$ | $/task |
 |---|---|---|---|---|---|---|
 | gaia-med | gaia_bench_agent | 25 | 1 715 589 | **0.320** | 1.347 | 0.054 |
-| gaia-med | mastra-agent ✠ | 25 | 587 895 | 0.160 | 0.525 | 0.021 |
+| gaia-med | mastra-agent ✠ | 25 | 953 688 | **0.280** | 0.829 | 0.033 |
 | gaia-med | gaia_bench_agent_ahc | — | — | — | — | — (deferred, отдельный run) |
 
-✠ Track K-tail (2026-05-26): Mastra Agent + Memory + LibSQL + GAIA tools;
-opaque to Langfuse (Mastra не emit AI SDK auto-spans для internal ReACT —
-`@mastra/core` lacks `experimental_telemetry` option). NDJSON cost
-authoritative; per-tool distribution unavailable.
+✠ Track K-tail (2026-05-26): Mastra Agent + Memory + LibSQL + GAIA tools.
+Initial run gave acc=0.160 ($0.525) из-за `maxSteps=20` cap без final-text
+fallback — 9/25 tasks завершались с empty response. Fix: bumped
+`DEFAULT_MAX_STEPS` в `src/eval/adapters/gaia-med/mastra-agent-runner.ts`
+к 40; rerun acc=0.280 ($0.829), 4/25 empty (down from 9/25).
 
-Per-level (1/2/3): vanilla 4/7 + 4/14 + 0/4; mastra 1/7 + 3/14 + 0/4.
-Both fail level-3 (gpt-5.4-mini capability ceiling).
+Per-level (1/2/3): vanilla 4/7 + 4/14 + 0/4; mastra 4/7 + 3/14 + 0/4.
+Mastra recovered к vanilla parity на level-1; both fail level-3
+(gpt-5.4-mini capability ceiling).
+
+Mastra opaque to Langfuse (Mastra не emit AI SDK auto-spans for internal
+ReACT). Diagnostic via `Score.secondary.n_tool_calls` (К-tail
+instrumentation): Mastra 521 tool calls vs vanilla 358 (1.5× more
+per task). Mastra Memory compacts 56% fewer input tokens (953K vs 1.7M)
+с −0.04 acc penalty — cost-effective compaction trade-off.
 
 Effective n=25 (5/30 attachment tasks filtered at bake — xlsx/pdf/pdb/jsonld/docx
 not vendored).

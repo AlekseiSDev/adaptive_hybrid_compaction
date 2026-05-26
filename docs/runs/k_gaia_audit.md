@@ -10,11 +10,11 @@
 > Pareto plot (5-я точка).
 >
 > **Status (2026-05-26):** K1–K3 + SearXNG + K-tail competitor sweep
-> complete. **K-tail run**: 2 baselines × n=25 × seed=42, $1.87 total
-> spend, status=complete, err_rate=0%. `gaia_bench_agent` (FC analog)
-> acc=**0.32**; `mastra-agent` (Mastra Memory) acc=**0.16**. K-tail
-> integration added `mastra-agent` × `gaia-med` dispatch (Track K
-> §5.2 — был text-fallback без tools раньше).
+> + diagnostic fix complete. **K-tail final** (после maxSteps fix
+> 20→40 для Mastra): `gaia_bench_agent` acc=**0.32**, `mastra-agent`
+> acc=**0.28** (бывшее 0.16 — root cause: Mastra cap'алась на 20-step
+> БЕЗ финального текста на hard tasks; 9/25 empty responses до фикса,
+> 4/25 после). Total spend 2 runs = $1.87 + $0.83 = $2.70.
 
 ---
 
@@ -88,7 +88,7 @@ WEB_SEARCH_AUTOSELECT=true SEARXNG_URL=http://localhost:8080 \
 
 ---
 
-## Headline numbers (K-tail competitor sweep, n=25, seed=42)
+## Headline numbers (K-tail competitor sweep, n=25, seed=42, FINAL)
 
 ```
 docker compose -f observability/searxng-docker-compose.yml up -d
@@ -100,32 +100,72 @@ LANGFUSE_ENABLED=true WEB_SEARCH_AUTOSELECT=true \
   --sweep eval/sweeps/main_e1_gaia_competitors.yaml --concurrency=4
 ```
 
-| baseline | n | acc | cost_$ | $/task | input_tok | output_tok | err_rate |
-|---|---|---|---|---|---|---|---|
-| `gaia_bench_agent` | 25 | **0.320** | 1.347 | 0.054 | 1 715 589 | 13 450 | 0% |
-| `mastra-agent` | 25 | 0.160 | 0.525 | 0.021 | 587 895 | 18 694 | 0% |
+| baseline | n | acc | cost_$ | $/task | input_tok | output_tok | tool_calls | err_rate |
+|---|---|---|---|---|---|---|---|---|
+| `gaia_bench_agent` | 25 | **0.320** | 1.347 | 0.054 | 1 715 589 | 13 450 | 358* | 0% |
+| `mastra-agent` (fixed) | 25 | **0.280** | 0.829 | 0.033 | 953 688 | 25 215 | 521 | 0% |
 
-Total sweep: $1.87, wall-clock ≈ 17 min (concurrency=4).
+\*Vanilla tool_calls from Langfuse aggregation (NDJSON had no
+n_tool_calls field before K-tail diagnostic instrumentation).
 
-### Per-level breakdown
+Mastra cell re-run после fix (maxSteps 20→40 для Mastra GAIA runner).
+Prev result был acc=0.160, $0.525 — 9/25 hit 20-step cap БЕЗ final
+text (empty `final_response_text`). Vanilla cell preserved (resume
+skip — same config_id).
+
+### Per-level breakdown (after Mastra fix)
 
 | level | n | gaia_bench_agent acc | mastra-agent acc |
 |---|---|---|---|
-| 1 (easy) | 7 | **4/7 = 0.57** | 1/7 = 0.14 |
+| 1 (easy) | 7 | 4/7 = 0.57 | 4/7 = 0.57 |
 | 2 (medium) | 14 | 4/14 = 0.29 | 3/14 = 0.21 |
 | 3 (hard) | 4 | 0/4 = 0.00 | 0/4 = 0.00 |
 
 Findings:
-- **Vanilla 2× over Mastra on acc** (0.32 vs 0.16). Mastra Memory
-  compaction trades accuracy for cost.
-- **Mastra 2.57× cheaper per-task** ($0.021 vs $0.054). Memory
-  drastically reduces input-tokens read (587K vs 1.7M → 2.9× fewer)
-  but doesn't translate to better accuracy на single-shot GAIA.
-- **Both fail level-3 completely** (0/4). gpt-5.4-mini capability
+- **Mastra recovered к vanilla parity на level-1** (4/7 each).
+  Hypothesis "Memory injection breaks short ReACT" rejected — issue
+  была cap'a 20-step без final-text fallback.
+- **Vanilla slightly ahead на level-2** (4 vs 3 correct). Variance
+  within ±1 task на n=14; significance unclear.
+- **Both fail level-3 completely** (0/4) — gpt-5.4-mini capability
   ceiling, not pipeline limitation. Hard tasks need multi-step
-  research chains that exceed actor's depth.
-- **Mastra weakest on level-1** (1/7) — counterintuitive. Memory
-  injection ломает short ReACT chains для simple lookups.
+  research chains exceeding actor's depth.
+- **Mastra 1.6× cheaper per-task** ($0.033 vs $0.054) — Memory
+  compaction effective: 56% fewer input tokens read (953K vs 1.7M)
+  с only −0.04 acc penalty. Cost-accuracy trade-off shows Memory
+  works for cost containment.
+
+### Diagnostic finding (Track K-tail 2026-05-26)
+
+Initial Mastra result acc=0.160 (4/25) was misleading. Root cause
+investigation found:
+
+1. **NOT tool wiring** — Mastra correctly invokes 11-20 tool calls per
+   task через cast `as ToolsInput` (verified via diagnostic
+   instrumentation, see `bench_extras → Score.secondary.n_tool_calls`).
+2. **Step cap mishandled** — `agent.generate(messages, {maxSteps: 20})`
+   returns `result.text = ""` если последний step был `tool_call`
+   awaiting `tool_result`, а agent не вышел в text-only response к cap'у.
+   AI SDK's `stopWhen: stepCountIs(N)` ведёт себя иначе — forces
+   text-completion при cap.
+3. **Fix**: bumped `DEFAULT_MAX_STEPS` для Mastra GAIA runner с 20 → 40.
+   После fix: 4 tasks hit 39+ step cap (vs 9 ранее), но 21/25 имеют
+   non-empty text. Accuracy 0.28 (vs 0.16). Бюджет вырос с $0.525 до
+   $0.829 (+58%) — приемлемо.
+
+### Per-tool usage distribution (Mastra fixed, n=25)
+
+Из NDJSON `Score.secondary.n_tool_calls` (К-tail diagnostic):
+
+| tool | calls (Mastra) | calls (vanilla, from Langfuse) |
+|---|---|---|
+| Total tool_calls | 521 | 358 |
+| Per task avg | 20.8 | 14.3 |
+
+Mastra calls 1.5× more tools per task — Memory compaction permits more
+exploration without context blowup, но не translates 1:1 в accuracy
+gain. Per-tool breakdown для Mastra недоступен через Langfuse
+(Mastra opaque — see §Langfuse verification).
 
 ### Per-tool usage distribution
 
