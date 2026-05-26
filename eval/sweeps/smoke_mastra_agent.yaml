@@ -1,0 +1,14 @@
+name: smoke_mastra_agent
+# Track I smoke — 1 task per bench, pipeline check.
+# Acceptance gate I3: status=complete для всех 3 cells.
+# Use with --max-tasks-per-cell=1 --concurrency=1.
+
+benches:
+  - assistant-traj
+  - lme-multiturn
+  - tau-bench-retail-med
+configs:
+  - id: mastra-agent
+    baseline: mastra-agent
+seeds: [42]
+budget_usd: 5

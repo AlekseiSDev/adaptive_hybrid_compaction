@@ -1,0 +1,22 @@
+name: main_e1_mastra_agent
+# Track I sweep — `mastra-agent` baseline (full Mastra Agent + tools) across
+# 3 mt-style benches. Cross-framework comparison vs AHC competitors.
+#
+# Per docs/design/I_mastra_agent.md §5. Includes lme-multiturn (Track H
+# extension), tau-bench-retail-med (main deliverable), assistant-traj (chassis
+# consistency vs mastra_om).
+#
+# Run: pnpm tsx scripts/eval.ts --sweep eval/sweeps/main_e1_mastra_agent.yaml
+# Smoke first: see smoke_mastra_agent.yaml.
+
+benches:
+  - assistant-traj
+  - lme-multiturn
+  - tau-bench-retail-med
+configs:
+  - id: mastra-agent
+    baseline: mastra-agent
+seeds: [42]
+# Budget: tau ($0.5-0.7/episode × ≤30) + lme-mt ($0.5-1/task × ≤10) + AT
+# (~$0.01 × ≤20) ≈ $20-30. Cap at $35 для буфера.
+budget_usd: 35

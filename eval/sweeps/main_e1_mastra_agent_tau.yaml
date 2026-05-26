@@ -1,0 +1,15 @@
+name: main_e1_mastra_agent_tau
+# Track I sweep — tau-bench portion (the main deliverable).
+# Split from main_e1_mastra_agent.yaml после halt (lme-mt cost больше
+# ожидаемого на n=40 — circuit-breaker fired до tau cell).
+#
+# Tau cost predicted: $0.5-0.7/episode × ~30 episodes = $15-21. Bump cap
+# до $30 для безопасного буфера.
+
+benches:
+  - tau-bench-retail-med
+configs:
+  - id: mastra-agent
+    baseline: mastra-agent
+seeds: [42]
+budget_usd: 30
