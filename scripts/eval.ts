@@ -242,67 +242,63 @@ async function main(): Promise<void> {
 
   const obs = setupObservability()
   try {
-    // startActiveSpan (vs startSpan) registers eval.sweep as the active span
-    // in OTel context — eval.task spans created inside runSweep become its
-    // children automatically. Plus eval.task wraps in turn any AI SDK
-    // experimental_telemetry spans (ai.generateText.*) → full trace tree
-    // in Langfuse UI.
-    await obs.tracer.startActiveSpan(
-      'eval.sweep',
-      {
-        attributes: {
-          'sweep.name': plan.name,
-          'sweep.benches': plan.benches.join(','),
-          'sweep.configs_count': plan.configs.length,
-          'sweep.seeds': plan.seeds.join(','),
-          'sweep.budget_usd': plan.budget_usd,
-          'langfuse.observation.input': JSON.stringify({
-            name: plan.name,
-            benches: plan.benches,
-            configs: plan.configs.map((c) => c.id),
-            seeds: plan.seeds,
-          }),
+    // B6 (decisions.md 2026-05-26): eval.sweep is created as a standalone span
+    // (startSpan, not startActiveSpan) — it lives as its own trace with
+    // aggregate sweep metadata, but does NOT become an OTel parent for the
+    // eval.task spans created inside runSweep. That fixes the "one giant trace
+    // per sweep" behavior — each eval.task is now its own root trace, grouped
+    // into Langfuse sessions via langfuse.session.id on the task span.
+    const sweepSpan = obs.tracer.startSpan('eval.sweep', {
+      attributes: {
+        'sweep.name': plan.name,
+        'sweep.benches': plan.benches.join(','),
+        'sweep.configs_count': plan.configs.length,
+        'sweep.seeds': plan.seeds.join(','),
+        'sweep.budget_usd': plan.budget_usd,
+        'langfuse.observation.input': JSON.stringify({
+          name: plan.name,
+          benches: plan.benches,
+          configs: plan.configs.map((c) => c.id),
+          seeds: plan.seeds,
+        }),
+      },
+    })
+    try {
+      const result = await runSweep(
+        plan,
+        defaultAdapterRegistry,
+        defaultRunnerRegistry,
+        {
+          rootDir,
+          gitSha: gitSha(),
+          ...(args.dryRun ? { dryRun: { nTasksPerCell: args.nPerCell } } : {}),
+          concurrency: args.concurrency,
+          ...(args.maxTasksPerCell !== undefined
+            ? { maxTasksPerCell: args.maxTasksPerCell }
+            : {}),
+          ...(args.force.size > 0
+            ? { forceCellsForConfigs: args.force }
+            : {}),
         },
-      },
-      async (span) => {
-        try {
-          const result = await runSweep(
-            plan,
-            defaultAdapterRegistry,
-            defaultRunnerRegistry,
-            {
-              rootDir,
-              gitSha: gitSha(),
-              ...(args.dryRun ? { dryRun: { nTasksPerCell: args.nPerCell } } : {}),
-              concurrency: args.concurrency,
-              ...(args.maxTasksPerCell !== undefined
-                ? { maxTasksPerCell: args.maxTasksPerCell }
-                : {}),
-              ...(args.force.size > 0
-                ? { forceCellsForConfigs: args.force }
-                : {}),
-            },
-          )
-          span.setAttribute('sweep.halted', result.halted)
-          span.setAttribute('sweep.total_cost_usd', result.total_cost_usd)
-          span.setAttribute('sweep.configs_completed', result.configs.length)
-          span.setAttribute(
-            'langfuse.observation.output',
-            JSON.stringify({
-              halted: result.halted,
-              ...(result.halt_reason !== undefined
-                ? { halt_reason: result.halt_reason }
-                : {}),
-              total_cost_usd: result.total_cost_usd,
-              configs_completed: result.configs.length,
-            }),
-          )
-          printSummary(plan, result, obs.enabled)
-        } finally {
-          span.end()
-        }
-      },
-    )
+      )
+      sweepSpan.setAttribute('sweep.halted', result.halted)
+      sweepSpan.setAttribute('sweep.total_cost_usd', result.total_cost_usd)
+      sweepSpan.setAttribute('sweep.configs_completed', result.configs.length)
+      sweepSpan.setAttribute(
+        'langfuse.observation.output',
+        JSON.stringify({
+          halted: result.halted,
+          ...(result.halt_reason !== undefined
+            ? { halt_reason: result.halt_reason }
+            : {}),
+          total_cost_usd: result.total_cost_usd,
+          configs_completed: result.configs.length,
+        }),
+      )
+      printSummary(plan, result, obs.enabled)
+    } finally {
+      sweepSpan.end()
+    }
   } finally {
     await obs.dispose()
   }

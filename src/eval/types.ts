@@ -1,6 +1,7 @@
 // Eval harness types. Source of truth: docs/design/B_eval-harness.md §3.
 // Field renames or removals require a docs/decisions.md entry.
 
+import type { Tracer } from '@opentelemetry/api'
 import type { Message, Thresholds, TrajectoryClass } from '../core/index.js'
 
 // Re-export core types so eval-side modules import a single surface
@@ -187,6 +188,11 @@ export type RunnerContext = {
   seed: number
   task: Task
   instrumentation?: Instrumentation
+  // B6: tracer threaded from runSweep so per-turn spans (eval.turn) emit
+  // through the same OTel provider as eval.task. Optional — Runner impls
+  // fall back to `trace.getTracer('ahc-eval')` (global noop when
+  // observability is disabled).
+  tracer?: Tracer
 }
 
 export type BenchAdapter = {

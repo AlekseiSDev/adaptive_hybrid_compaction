@@ -150,6 +150,7 @@ export function makeTauBenchRunner(opts: MakeTauBenchRunnerOpts): Runner {
         ...(ahcInternalLlmClient !== undefined ? { ahcInternalLlmClient } : {}),
         ...(opts.maxSteps !== undefined ? { maxSteps: opts.maxSteps } : {}),
         ...(ctx.instrumentation !== undefined ? { emit: ctx.instrumentation } : {}),
+        ...(ctx.tracer !== undefined ? { tracer: ctx.tracer } : {}),
       })
       return {
         text: result.finalText,
@@ -215,6 +216,7 @@ export function makeTauBenchMastraAgentRunner(
         userSimModelId,
         ...(opts.maxSteps !== undefined ? { maxSteps: opts.maxSteps } : {}),
         ...(ctx.instrumentation !== undefined ? { emit: ctx.instrumentation } : {}),
+        ...(ctx.tracer !== undefined ? { tracer: ctx.tracer } : {}),
       })
       return {
         text: result.finalText,

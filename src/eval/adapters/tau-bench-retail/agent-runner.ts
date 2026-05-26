@@ -12,6 +12,7 @@
 // test. Mirrors `ahc_core.ts:70-189` pattern.
 
 import type { LanguageModelV3 } from '@ai-sdk/provider'
+import { trace, type Tracer } from '@opentelemetry/api'
 import {
   generateText,
   stepCountIs,
@@ -59,6 +60,9 @@ export type RunTauEpisodeDeps = {
   ahcInternalLlmClient?: LLMClient
   maxSteps?: number
   emit?: (e: InstrumentationEvent) => void
+  // B6: tracer for per-round eval.turn spans. AI SDK auto-spans nest under
+  // it via OTel context propagation. Optional — falls back to global noop.
+  tracer?: Tracer
 }
 
 export type EpisodeResult = {
@@ -132,67 +136,92 @@ export async function runTauEpisode(
   let lastActorText = ''
   let totalInput = 0
   let totalOutput = 0
+  // B6: per-round eval.turn span groups user-sim + actor + AI SDK auto-spans
+  // (ai.generateText.* + ai.toolCall) for one customer ↔ assistant round.
+  // turn.index increments per while-iteration; the final eval.turn count =
+  // number of rounds actually executed (≤ maxSteps).
+  const tracer = deps.tracer ?? trace.getTracer('ahc-eval')
+  let roundIdx = 0
 
   while (stepsUsed < maxSteps) {
-    // User-sim turn first (kickoff: provides the customer's opening line based
-    // on episode.instruction; subsequent turns react to actor's last reply).
-    let userResult
-    try {
-      userResult = await userSimStep(messages, episode.instruction, {
-        model: deps.userSimModel,
-        modelId: userSimModelId,
-      })
-    } catch (err) {
-      errors.push({
-        turn_index: stepsUsed,
-        kind: 'api_error',
-        message: `user-sim: ${err instanceof Error ? err.message : String(err)}`,
-      })
-      break
-    }
-    mainCostUsd += userResult.cost_usd
-    stepsUsed += 1
-    if (userResult.done) break
-    messages.push({ role: 'user', content: userResult.text })
-    if (stepsUsed >= maxSteps) break
+    const currentRound = roundIdx
+    roundIdx += 1
+    const roundOutcome = await tracer.startActiveSpan(
+      'eval.turn',
+      { attributes: { 'turn.index': currentRound } },
+      async (turnSpan): Promise<'continue' | 'break'> => {
+        try {
+          // User-sim turn first (kickoff: provides the customer's opening line
+          // based on episode.instruction; subsequent turns react to actor's
+          // last reply).
+          let userResult
+          try {
+            userResult = await userSimStep(messages, episode.instruction, {
+              model: deps.userSimModel,
+              modelId: userSimModelId,
+            })
+          } catch (err) {
+            errors.push({
+              turn_index: stepsUsed,
+              kind: 'api_error',
+              message: `user-sim: ${err instanceof Error ? err.message : String(err)}`,
+            })
+            return 'break'
+          }
+          mainCostUsd += userResult.cost_usd
+          stepsUsed += 1
+          if (userResult.done) return 'break'
+          messages.push({ role: 'user', content: userResult.text })
+          if (stepsUsed >= maxSteps) return 'break'
 
-    // Actor turn. AI SDK orchestrates the inner ReACT loop: model → tool_calls →
-    // execute (mutates envState via closures) → tool_results → model → ...
-    // until model emits text-only response OR stepCountIs cap reached.
-    const remainingSteps = maxSteps - stepsUsed
-    let actorResult
-    try {
-      actorResult = await generateText({
-        model: actorModel,
-        system: deps.actorSystem,
-        messages,
-        tools,
-        stopWhen: stepCountIs(remainingSteps),
-      })
-    } catch (err) {
-      errors.push({
-        turn_index: stepsUsed,
-        kind: 'api_error',
-        message: `actor: ${err instanceof Error ? err.message : String(err)}`,
-      })
-      break
-    }
-    stepsUsed += actorResult.steps.length
-    for (const s of actorResult.steps) {
-      toolCallsTotal += s.toolCalls.length
-    }
-    const inputTokens = actorResult.usage.inputTokens ?? 0
-    const outputTokens = actorResult.usage.outputTokens ?? 0
-    totalInput += inputTokens
-    totalOutput += outputTokens
-    mainCostUsd += costFromUsage(actorModelId, {
-      prompt_tokens: inputTokens,
-      completion_tokens: outputTokens,
-    })
-    // Append actor's response chain (assistant + tool_calls + tool_results)
-    // to messages so the next user-sim turn sees it.
-    messages.push(...actorResult.response.messages)
-    lastActorText = actorResult.text
+          // Actor turn. AI SDK orchestrates the inner ReACT loop: model →
+          // tool_calls → execute (mutates envState via closures) → tool_results
+          // → model → ... until model emits text-only response OR stepCountIs
+          // cap reached.
+          const remainingSteps = maxSteps - stepsUsed
+          let actorResult
+          try {
+            actorResult = await generateText({
+              model: actorModel,
+              system: deps.actorSystem,
+              messages,
+              tools,
+              stopWhen: stepCountIs(remainingSteps),
+              // B6: emit AI SDK auto-spans (ai.generateText.*, ai.toolCall)
+              // under the active eval.turn OTel context.
+              experimental_telemetry: { isEnabled: true, functionId: 'tau.actor' },
+            })
+          } catch (err) {
+            errors.push({
+              turn_index: stepsUsed,
+              kind: 'api_error',
+              message: `actor: ${err instanceof Error ? err.message : String(err)}`,
+            })
+            return 'break'
+          }
+          stepsUsed += actorResult.steps.length
+          for (const s of actorResult.steps) {
+            toolCallsTotal += s.toolCalls.length
+          }
+          const inputTokens = actorResult.usage.inputTokens ?? 0
+          const outputTokens = actorResult.usage.outputTokens ?? 0
+          totalInput += inputTokens
+          totalOutput += outputTokens
+          mainCostUsd += costFromUsage(actorModelId, {
+            prompt_tokens: inputTokens,
+            completion_tokens: outputTokens,
+          })
+          // Append actor's response chain (assistant + tool_calls + tool_results)
+          // to messages so the next user-sim turn sees it.
+          messages.push(...actorResult.response.messages)
+          lastActorText = actorResult.text
+          return 'continue'
+        } finally {
+          turnSpan.end()
+        }
+      },
+    )
+    if (roundOutcome === 'break') break
   }
 
   const reward = calculateReward(envState, episode.expected_end_state)

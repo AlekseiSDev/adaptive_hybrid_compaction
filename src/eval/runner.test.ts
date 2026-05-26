@@ -3,7 +3,14 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { context, trace } from '@opentelemetry/api'
 import type { Attributes, Span, SpanOptions, Tracer } from '@opentelemetry/api'
+import {
+  BasicTracerProvider,
+  InMemorySpanExporter,
+  NodeTracerProvider,
+  SimpleSpanProcessor,
+} from '@opentelemetry/sdk-trace-node'
 import {
   defaultAdapterRegistry,
   defaultRunnerRegistry,
@@ -11,7 +18,8 @@ import {
   type AdapterRegistry,
   type RunnerRegistry,
 } from './runner.js'
-import type { SweepPlan } from './types.js'
+import type { Runner, SweepPlan } from './types.js'
+import { buildRunnerFromBaseline } from './baseline.js'
 
 let workspace: string
 
@@ -454,6 +462,184 @@ describe('runSweep — per-task OTel spans (B5)', () => {
       // Stub baseline echoes task.expected → output is the assistant text
       expect(s.attributes['langfuse.observation.output']).toBeTypeOf('string')
     }
+  })
+})
+
+describe('runSweep — B6 Langfuse session/trace hierarchy', () => {
+  test('eval.task is root trace (parentSpanContext undefined) + langfuse.session.id matches ${bench}-${config_id}-${seed}', async () => {
+    // B6 inverts B5: previously eval.task was a CHILD of eval.sweep, which made
+    // Langfuse see one giant trace per sweep. B6 cuts the parent link so each
+    // eval.task is its own root trace, and adds langfuse.session.id so Langfuse
+    // groups traces of the same (bench × config × seed) cell into one session.
+    const exporter = new InMemorySpanExporter()
+    const provider = new BasicTracerProvider({
+      spanProcessors: [new SimpleSpanProcessor(exporter)],
+    })
+    const tracer = provider.getTracer('test-b6')
+
+    const result = await runSweep(
+      smokePlan,
+      defaultAdapterRegistry,
+      defaultRunnerRegistry,
+      { rootDir: workspace, gitSha: 'test-sha', tracer },
+    )
+
+    const taskSpans = exporter
+      .getFinishedSpans()
+      .filter((s) => s.name === 'eval.task')
+    // smokePlan: 2 configs × 2 synthetic tasks × 1 seed = 4 spans.
+    expect(taskSpans).toHaveLength(4)
+
+    const expectedSessionIds = new Set(
+      result.configs.map((c) => `${c.bench}-${c.config_id}-${String(c.seed)}`),
+    )
+
+    for (const span of taskSpans) {
+      // Root trace: no parent. parentSpanContext is OTel 2.x property
+      // (replaces older parentSpanId). Both should resolve undefined.
+      const parentCtx = (span as unknown as { parentSpanContext?: unknown })
+        .parentSpanContext
+      expect(parentCtx).toBeUndefined()
+      // langfuse.session.id present and matches one of the expected cells.
+      const sessionId = span.attributes['langfuse.session.id']
+      expect(typeof sessionId).toBe('string')
+      expect(expectedSessionIds.has(String(sessionId))).toBe(true)
+    }
+
+    await provider.shutdown()
+  })
+
+  test('eval.task spans of different (config_id, seed) cells get distinct session.id', async () => {
+    const exporter = new InMemorySpanExporter()
+    const provider = new BasicTracerProvider({
+      spanProcessors: [new SimpleSpanProcessor(exporter)],
+    })
+    const tracer = provider.getTracer('test-b6')
+
+    await runSweep(smokePlan, defaultAdapterRegistry, defaultRunnerRegistry, {
+      rootDir: workspace,
+      gitSha: 'test-sha',
+      tracer,
+    })
+
+    const taskSpans = exporter
+      .getFinishedSpans()
+      .filter((s) => s.name === 'eval.task')
+    const sessionIds = new Set(
+      taskSpans.map((s) => String(s.attributes['langfuse.session.id'])),
+    )
+    // 2 configs × 1 seed = 2 distinct sessions; both task spans in each cell
+    // share the same session.id.
+    expect(sessionIds.size).toBe(2)
+
+    await provider.shutdown()
+  })
+
+  test('eval.turn spans are emitted as children of eval.task (multi-turn synthesis)', async () => {
+    // Custom 3-message conv via custom adapter + simple baseline that echoes.
+    // Verifies buildRunnerFromBaseline wraps each baseline.step in eval.turn
+    // span with the correct turn.index attribute, parented to eval.task.
+    //
+    // NodeTracerProvider (vs BasicTracerProvider used in sibling tests) is
+    // required here because AsyncLocalStorageContextManager — installed by
+    // provider.register() — is what makes context.with(trace.setSpan(...))
+    // actually propagate the active span. Without it, startActiveSpan
+    // inside baseline.ts can't find a parent. Cleanup: shutdown + disable
+    // the globals.
+    const exporter = new InMemorySpanExporter()
+    const provider = new NodeTracerProvider({
+      spanProcessors: [new SimpleSpanProcessor(exporter)],
+    })
+    provider.register()
+    const tracer = provider.getTracer('test-b6')
+
+    const adapter: AdapterRegistry = {
+      resolve: () => ({
+        adapter: {
+          name: 'synthetic',
+          loadTasks: () =>
+            Promise.resolve([{ id: 'mt-1', input: 'x', expected: 'y' }]),
+          prepare: (_task) => ({
+            messages: [
+              { role: 'user', content: [{ type: 'text', text: 'q1' }] },
+              { role: 'user', content: [{ type: 'text', text: 'q2' }] },
+              { role: 'user', content: [{ type: 'text', text: 'q3' }] },
+            ],
+          }),
+        },
+        grader: { score: () => Promise.resolve({ primary: 1 }) },
+      }),
+    }
+    // Real baseline via buildRunnerFromBaseline — uses eval.turn wrapper.
+    const runnerReg: RunnerRegistry = {
+      resolve: (): Runner => {
+        let stepIdx = 0
+        return buildRunnerFromBaseline({
+          name: 'mock-mt',
+          prepare: (task) => ({ task_id: task.id, history: [] }),
+          step: (state, userMsg) => {
+            const idx = stepIdx
+            stepIdx += 1
+            return Promise.resolve({
+              response: {
+                role: 'assistant' as const,
+                content: [{ type: 'text' as const, text: `a${String(idx)}` }],
+              },
+              state: { ...state, history: [...state.history, userMsg] },
+              telemetry: {
+                turn_index: idx,
+                input_tokens: 1,
+                output_tokens: 1,
+                wall_clock_ms: 0,
+                recall_events: [],
+                compaction_events: [],
+              },
+              cost_usd: 0,
+            })
+          },
+        })
+      },
+    }
+    const plan: SweepPlan = {
+      name: 'b6-mt',
+      benches: ['synthetic'],
+      configs: [{ id: 'mt', baseline: 'mock-mt' }],
+      seeds: [0],
+      budget_usd: 10,
+    }
+    await runSweep(plan, adapter, runnerReg, {
+      rootDir: workspace,
+      gitSha: 't',
+      tracer,
+    })
+
+    const allSpans = exporter.getFinishedSpans()
+    const taskSpan = allSpans.find((s) => s.name === 'eval.task')
+    const turnSpans = allSpans
+      .filter((s) => s.name === 'eval.turn')
+      .sort(
+        (a, b) =>
+          Number(a.attributes['turn.index'] ?? 0) -
+          Number(b.attributes['turn.index'] ?? 0),
+      )
+
+    expect(taskSpan).toBeDefined()
+    expect(turnSpans).toHaveLength(3)
+    expect(turnSpans.map((s) => s.attributes['turn.index'])).toEqual([0, 1, 2])
+
+    // Each eval.turn span is a child of the eval.task span (OTel context
+    // propagation through context.with(trace.setSpan(...))).
+    const taskSpanId = taskSpan?.spanContext().spanId
+    for (const turn of turnSpans) {
+      const parentId = (
+        turn as unknown as { parentSpanContext?: { spanId: string } }
+      ).parentSpanContext?.spanId
+      expect(parentId).toBe(taskSpanId)
+    }
+
+    await provider.shutdown()
+    trace.disable()
+    context.disable()
   })
 })
 

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { rm } from 'node:fs/promises'
-import { context, SpanStatusCode, trace, type Tracer } from '@opentelemetry/api'
+import { context, ROOT_CONTEXT, SpanStatusCode, trace, type Tracer } from '@opentelemetry/api'
 import {
   appendRecord,
   computeConfigId,
@@ -102,6 +102,15 @@ export type RunSweepOptions = {
 
 const TASK_INPUT_ATTR = 'langfuse.observation.input'
 const TASK_OUTPUT_ATTR = 'langfuse.observation.output'
+// B6 (decisions.md 2026-05-26): Langfuse groups traces of one (bench × config ×
+// seed) cell under one "session" via this attribute. Recommended key per
+// Langfuse OTel convention. Set on eval.task; AI SDK auto-spans inherit through
+// OTel context propagation, so we don't dupe it on every child.
+const SESSION_ID_ATTR = 'langfuse.session.id'
+
+export function sessionIdFor(bench: Bench, config_id: string, seed: number): string {
+  return `${bench}-${config_id}-${String(seed)}`
+}
 
 export type RunSweepConfigResult = {
   bench: Bench
@@ -513,15 +522,24 @@ async function executeOneTask(args: {
   const events: InstrumentationEvent[] = []
   const conv = adapter.prepare(task)
   const started_at = Date.now()
-  const taskSpan = tracer.startSpan('eval.task', {
-    attributes: {
-      'task.id': task.id,
-      bench,
-      config_id,
-      seed: String(seed),
-      [TASK_INPUT_ATTR]: JSON.stringify(conv.messages),
+  // B6: eval.task starts in ROOT_CONTEXT (not inherited active context) so it
+  // becomes its own trace root — eval.sweep is no longer a parent ancestor.
+  // langfuse.session.id groups all tasks of the same (bench × config × seed)
+  // cell into one Langfuse session in the UI.
+  const taskSpan = tracer.startSpan(
+    'eval.task',
+    {
+      attributes: {
+        'task.id': task.id,
+        bench,
+        config_id,
+        seed: String(seed),
+        [SESSION_ID_ATTR]: sessionIdFor(bench, config_id, seed),
+        [TASK_INPUT_ATTR]: JSON.stringify(conv.messages),
+      },
     },
-  })
+    ROOT_CONTEXT,
+  )
   let response
   try {
     response = await context.with(
@@ -533,6 +551,7 @@ async function executeOneTask(args: {
           seed,
           task,
           instrumentation: (e) => events.push(e),
+          tracer,
         }),
     )
     taskSpan.setAttribute(TASK_OUTPUT_ATTR, response.text)

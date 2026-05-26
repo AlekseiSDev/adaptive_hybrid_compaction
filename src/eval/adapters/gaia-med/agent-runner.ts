@@ -142,6 +142,9 @@ export async function runGaiaTask(
       tools,
       stopWhen: stepCountIs(maxSteps),
       temperature: 0,
+      // B6: emit AI SDK auto-spans (ai.generateText.*, ai.toolCall × M) under
+      // the active eval.task OTel context — Langfuse sees full ReACT tree.
+      experimental_telemetry: { isEnabled: true, functionId: 'gaia.agent' },
     })
     finalText = result.text
     stepsUsed = result.steps.length

@@ -1,3 +1,4 @@
+import { trace } from '@opentelemetry/api'
 import type {
   Baseline,
   BaselineStepOptions,
@@ -31,15 +32,32 @@ export function buildRunnerFromBaseline(baseline: Baseline): Runner {
 
       let state = baseline.prepare(ctx.task)
       const collectedToolCalls: { name: string; args: unknown }[] = []
+      // B6: per-turn span groups AI SDK auto-spans (ai.generateText.*,
+      // ai.toolCall) by user-message boundary. ctx.tracer is set by runSweep;
+      // when missing (rare — direct test instantiation) fall back to global.
+      const tracer = ctx.tracer ?? trace.getTracer('ahc-eval')
+      let turnIndex = 0
 
       try {
         for (const msg of conv.messages) {
           if (msg.role !== 'user') continue
+          const currentTurnIdx = turnIndex
+          turnIndex += 1
           try {
             const stepOpts: BaselineStepOptions = {}
             if (ctx.instrumentation) stepOpts.instrumentation = ctx.instrumentation
             if (conv.tools) stepOpts.tools = conv.tools
-            const result = await baseline.step(state, msg, stepOpts)
+            const result = await tracer.startActiveSpan(
+              'eval.turn',
+              { attributes: { 'turn.index': currentTurnIdx } },
+              async (turnSpan) => {
+                try {
+                  return await baseline.step(state, msg, stepOpts)
+                } finally {
+                  turnSpan.end()
+                }
+              },
+            )
             state = result.state
             turns.push(result.telemetry)
             lastResponse = result.response

@@ -16,6 +16,7 @@ import type { ToolsInput } from '@mastra/core/agent'
 import { LibSQLStore } from '@mastra/libsql'
 import { Memory } from '@mastra/memory'
 import type { LanguageModelV3 } from '@ai-sdk/provider'
+import { trace, type Tracer } from '@opentelemetry/api'
 import type { ModelMessage } from 'ai'
 import { costFromUsage, OPENROUTER_PRICING, resolveActorModel, type ModelPricing } from '../../llm.js'
 import type { InstrumentationEvent } from '../../types.js'
@@ -56,6 +57,9 @@ export type RunTauEpisodeMastraDeps = {
   storageRootDir?: string
   maxSteps?: number
   emit?: (e: InstrumentationEvent) => void
+  // B6: per-round eval.turn tracer (same role as in runTauEpisode AI SDK
+  // variant). Falls back to global noop.
+  tracer?: Tracer
 }
 
 export type EpisodeResultMastra = {
@@ -145,79 +149,98 @@ export async function runTauEpisodeMastra(
   let lastActorText = ''
   let totalInput = 0
   let totalOutput = 0
+  // B6: per-round eval.turn (same as AI SDK variant).
+  const tracer = deps.tracer ?? trace.getTracer('ahc-eval')
+  let roundIdx = 0
 
   try {
     while (stepsUsed < maxSteps) {
-      let userResult
-      try {
-        userResult = await userSimStep(messages, episode.instruction, {
-          model: deps.userSimModel,
-          modelId: userSimModelId,
-        })
-      } catch (err) {
-        errors.push({
-          turn_index: stepsUsed,
-          kind: 'api_error',
-          message: `user-sim: ${err instanceof Error ? err.message : String(err)}`,
-        })
-        break
-      }
-      mainCostUsd += userResult.cost_usd
-      stepsUsed += 1
-      if (userResult.done) break
-      messages.push({ role: 'user', content: userResult.text })
-      if (stepsUsed >= maxSteps) break
+      const currentRound = roundIdx
+      roundIdx += 1
+      const outcome = await tracer.startActiveSpan(
+        'eval.turn',
+        { attributes: { 'turn.index': currentRound } },
+        async (turnSpan): Promise<'continue' | 'break'> => {
+          try {
+            let userResult
+            try {
+              userResult = await userSimStep(messages, episode.instruction, {
+                model: deps.userSimModel,
+                modelId: userSimModelId,
+              })
+            } catch (err) {
+              errors.push({
+                turn_index: stepsUsed,
+                kind: 'api_error',
+                message: `user-sim: ${err instanceof Error ? err.message : String(err)}`,
+              })
+              return 'break'
+            }
+            mainCostUsd += userResult.cost_usd
+            stepsUsed += 1
+            if (userResult.done) return 'break'
+            messages.push({ role: 'user', content: userResult.text })
+            if (stepsUsed >= maxSteps) return 'break'
 
-      const remainingSteps = maxSteps - stepsUsed
-      // Mastra drives the internal ReACT loop (tool_call → execute → tool_result
-      // → model → …) до text-only response ИЛИ `maxSteps` cap. Output shape
-      // mirrors AI SDK `generateText` (FullOutput: text / usage / steps / response).
-      let actorResult
-      try {
-        actorResult = await agent.generate(messages, {
-          memory: {
-            thread: threadId,
-            resource: resourceId,
-          },
-          maxSteps: remainingSteps,
-          modelSettings: { temperature: 0 },
-        })
-      } catch (err) {
-        errors.push({
-          turn_index: stepsUsed,
-          kind: 'api_error',
-          message: `actor (mastra): ${err instanceof Error ? err.message : String(err)}`,
-        })
-        break
-      }
+            const remainingSteps = maxSteps - stepsUsed
+            // Mastra drives the internal ReACT loop (tool_call → execute →
+            // tool_result → model → …) до text-only response ИЛИ `maxSteps`
+            // cap. Output shape mirrors AI SDK `generateText` (FullOutput:
+            // text / usage / steps / response).
+            let actorResult
+            try {
+              actorResult = await agent.generate(messages, {
+                memory: {
+                  thread: threadId,
+                  resource: resourceId,
+                },
+                maxSteps: remainingSteps,
+                modelSettings: { temperature: 0 },
+              })
+            } catch (err) {
+              errors.push({
+                turn_index: stepsUsed,
+                kind: 'api_error',
+                message: `actor (mastra): ${err instanceof Error ? err.message : String(err)}`,
+              })
+              return 'break'
+            }
 
-      // FullOutput.steps[] — per-LLM-call slice; .toolCalls на каждом step.
-      stepsUsed += actorResult.steps.length
-      for (const s of actorResult.steps) {
-        toolCallsTotal += s.toolCalls.length
-      }
-      // totalUsage aggregate across all internal steps (Mastra docs).
-      const aggUsage = actorResult.totalUsage
-      const inputTokens = aggUsage.inputTokens ?? 0
-      const outputTokens = aggUsage.outputTokens ?? 0
-      totalInput += inputTokens
-      totalOutput += outputTokens
-      mainCostUsd += costFromUsage(actorModelId, {
-        prompt_tokens: inputTokens,
-        completion_tokens: outputTokens,
-      })
-      // Push ТОЛЬКО final assistant text в messages. Mastra `response.messages`
-      // включает internal tool_call / tool_result steps; их структура у нас не
-      // гарантированно well-formed относительно AI SDK shape (наблюдалось:
-      // orphan tool_call без paired tool_result когда maxSteps hits cap — это
-      // ломает user-sim's `generateText(messages)` валидацию). User-sim видит
-      // только natural-language reply агента — этого достаточно для
-      // alternation loop. Mastra's own Memory (LibSQL thread) хранит полный
-      // chain, agent.generate() видит её на следующем turn'е.
-      lastActorText = actorResult.text
-      if (lastActorText.length > 0) {
-        messages.push({ role: 'assistant', content: lastActorText })
-      }
+            // FullOutput.steps[] — per-LLM-call slice; .toolCalls на каждом step.
+            stepsUsed += actorResult.steps.length
+            for (const s of actorResult.steps) {
+              toolCallsTotal += s.toolCalls.length
+            }
+            // totalUsage aggregate across all internal steps (Mastra docs).
+            const aggUsage = actorResult.totalUsage
+            const inputTokens = aggUsage.inputTokens ?? 0
+            const outputTokens = aggUsage.outputTokens ?? 0
+            totalInput += inputTokens
+            totalOutput += outputTokens
+            mainCostUsd += costFromUsage(actorModelId, {
+              prompt_tokens: inputTokens,
+              completion_tokens: outputTokens,
+            })
+            // Push ТОЛЬКО final assistant text в messages. Mastra `response.messages`
+            // включает internal tool_call / tool_result steps; их структура у
+            // нас не гарантированно well-formed относительно AI SDK shape
+            // (наблюдалось: orphan tool_call без paired tool_result когда
+            // maxSteps hits cap — это ломает user-sim's `generateText(messages)`
+            // валидацию). User-sim видит только natural-language reply агента —
+            // этого достаточно для alternation loop. Mastra's own Memory
+            // (LibSQL thread) хранит полный chain, agent.generate() видит её
+            // на следующем turn'е.
+            lastActorText = actorResult.text
+            if (lastActorText.length > 0) {
+              messages.push({ role: 'assistant', content: lastActorText })
+            }
+            return 'continue'
+          } finally {
+            turnSpan.end()
+          }
+        },
+      )
+      if (outcome === 'break') break
     }
   } finally {
     // Cleanup per-episode SQLite файл. Idempotent — rm с force.
