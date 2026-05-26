@@ -44,32 +44,32 @@ describe('tierize', () => {
     expect(tier3.recent).toEqual([history[2], history[3], history[4]])
   })
 
-  test('never splits a tool_use from its tool_result across K_RECENT boundary', () => {
-    // 10 messages after Tier-1; default K=6 → window covers indices 4..9.
-    // Put a tool_use at index 1 of remaining and its tool_result at index 7 — far apart.
-    // Window expansion must pull index 1 in so the pair stays together.
+  test('never splits a tool_use from its tool_result across token-budget boundary', () => {
+    // Heavy filler so token-budget walk stops mid-history. tool_use placed
+    // before the natural cut, tool_result after — window expansion must pull
+    // tool_use back in so the atomic pair stays together (§5.1).
     const tu = useMsg('tu_x', 1)
     const tr = resultMsg('tu_x', 1)
-    const filler = (i: number): Message => asstMsg(`filler-${String(i)}`, i)
+    const heavy = (i: number): Message => asstMsg('h'.repeat(400), i) // ~100 tok each
     const history: Message[] = [
       sysMsg,
       userMsg('start', 0),
-      filler(0), // remaining[0]
-      tu, //         remaining[1]  ← tool_use
-      filler(2), // remaining[2]
-      filler(3), // remaining[3]
-      filler(4), // remaining[4]
-      filler(5), // remaining[5]
-      filler(6), // remaining[6]
-      tr, //         remaining[7]  ← tool_result
-      filler(8), // remaining[8]
-      filler(9), // remaining[9]
+      heavy(0), // remaining[0]
+      tu, //       remaining[1]  ← tool_use (before natural budget cut)
+      heavy(2), // remaining[2]
+      heavy(3), // remaining[3]
+      heavy(4), // remaining[4]
+      heavy(5), // remaining[5]
+      heavy(6), // remaining[6]
+      tr, //       remaining[7]  ← tool_result (after budget cut)
+      heavy(8), // remaining[8]
+      heavy(9), // remaining[9]
     ]
-    const { tier3 } = tierize(history, { kRecent: 6 })
-    // Window must include both tu and tr
+    // budget=400 fits ~4 heavy messages from tail; natural cut would land
+    // around remaining[6], leaving tr inside the window but tu outside.
+    const { tier3 } = tierize(history, { tier3TokenBudget: 400 })
     expect(tier3.recent).toContain(tu)
     expect(tier3.recent).toContain(tr)
-    // And no atomic pair leaks: parseAtomicGroups inside tierize → no inflight here
     expect(tier3.inflight).toHaveLength(0)
   })
 
@@ -111,43 +111,26 @@ describe('tierize', () => {
     expect(() => tierize(history)).toThrow(/user message/)
   })
 
-  test('Tier-3 grows beyond K_RECENT message count up to TIER3_TOKEN_BUDGET tokens', () => {
+  test('Tier-3 grows until token budget reached — no message-count floor', () => {
+    // 30 tiny messages, large budget → all included.
     const history: Message[] = [sysMsg, userMsg('start', 0)]
     for (let i = 0; i < 30; i++) history.push(asstMsg(`tiny-${String(i)}`, i))
-    const { tier3 } = tierize(history, {
-      kRecent: 6,
-      kRecentTokenBudget: 100_000,
-      canRunObserver: true,
-    })
+    const { tier3 } = tierize(history, { tier3TokenBudget: 100_000 })
     expect(tier3.recent.length).toBe(30)
   })
 
-  test('Tier-3 stops at TIER3_TOKEN_BUDGET when messages exceed budget — K_RECENT is lower bound', () => {
+  test('Tier-3 walk stops once budget is met — no K_RECENT lower bound', () => {
     const heavy = 'x'.repeat(4000) // ~1000 tokens by chars/4
     const history: Message[] = [sysMsg, userMsg('start', 0)]
     for (let i = 0; i < 30; i++) history.push(asstMsg(`${heavy}${String(i)}`, i))
-    const { tier3 } = tierize(history, {
-      kRecent: 6,
-      kRecentTokenBudget: 5000,
-      canRunObserver: true,
-    })
-    // budget=5000 fits ~5 messages, but K_RECENT=6 is lower bound → 6
-    expect(tier3.recent.length).toBe(6)
+    const { tier3 } = tierize(history, { tier3TokenBudget: 5000 })
+    // budget=5000 fits ~5 messages (each ~1000 tokens). K_RECENT removal means
+    // the walk stops as soon as tokens >= budget — no padding to a message floor.
+    expect(tier3.recent.length).toBeLessThanOrEqual(6)
+    expect(tier3.recent.length).toBeGreaterThanOrEqual(5)
   })
 
-  test('K_RECENT lower bound enforced even when per-message cost > budget', () => {
-    const huge = 'x'.repeat(40_000) // ~10k tokens each
-    const history: Message[] = [sysMsg, userMsg('start', 0)]
-    for (let i = 0; i < 10; i++) history.push(asstMsg(`${huge}${String(i)}`, i))
-    const { tier3 } = tierize(history, {
-      kRecent: 6,
-      kRecentTokenBudget: 1000,
-      canRunObserver: true,
-    })
-    expect(tier3.recent.length).toBeGreaterThanOrEqual(6)
-  })
-
-  test('atomic tool_use/tool_result pair pulled in past token budget — §5.1 under budget path', () => {
+  test('atomic tool_use/tool_result pair pulled in past token budget — §5.1', () => {
     const tu = useMsg('tu_pair', 0)
     const tr = resultMsg('tu_pair', 0)
     const heavy = (i: number): Message => asstMsg('x'.repeat(2000), i) // ~500 tok
@@ -165,24 +148,21 @@ describe('tierize', () => {
       tr, // remaining[8] ← orphan tool_result
       asstMsg('tail', 7), // remaining[9]
     ]
-    const { tier3 } = tierize(history, {
-      kRecent: 2,
-      kRecentTokenBudget: 3000,
-      canRunObserver: true,
-    })
+    const { tier3 } = tierize(history, { tier3TokenBudget: 3000 })
     expect(tier3.recent).toContain(tu)
     expect(tier3.recent).toContain(tr)
   })
 
-  test('canRunObserver=false falls back to legacy K_RECENT message-count cap (no budget growth)', () => {
+  test('observer-absent path (UI) uses the same token-budget cap — single source of truth', () => {
+    // Post-K_RECENT-removal: no canRunObserver knob. Whether the caller wires
+    // an observer or not, Tier-3 walks to the same token budget. Without an
+    // observer, the budget becomes the hard cap (FIFO by tokens).
+    const heavy = 'x'.repeat(4000) // ~1000 tok each
     const history: Message[] = [sysMsg, userMsg('start', 0)]
-    for (let i = 0; i < 30; i++) history.push(asstMsg(`m-${String(i)}`, i))
-    const { tier3 } = tierize(history, {
-      kRecent: 6,
-      kRecentTokenBudget: 1_000_000,
-      canRunObserver: false,
-    })
-    expect(tier3.recent.length).toBe(6)
+    for (let i = 0; i < 30; i++) history.push(asstMsg(`${heavy}${String(i)}`, i))
+    const { tier3 } = tierize(history, { tier3TokenBudget: 3000 })
+    expect(tier3.recent.length).toBeLessThanOrEqual(4)
+    expect(tier3.recent.length).toBeGreaterThanOrEqual(3)
   })
 
   test('honors previousTier2 — returned tier2 carries forward observations and pointers', () => {

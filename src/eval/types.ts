@@ -2,11 +2,11 @@
 // Field renames or removals require a docs/decisions.md entry.
 
 import type { Tracer } from '@opentelemetry/api'
-import type { Message, Thresholds, TrajectoryClass } from '../core/index.js'
+import type { Message, Observation, Thresholds, TrajectoryClass } from '../core/index.js'
 
 // Re-export core types so eval-side modules import a single surface
 // (`./types.js`). Avoids cross-module drift if core paths change.
-export type { Message, Thresholds, TrajectoryClass }
+export type { Message, Observation, Thresholds, TrajectoryClass }
 
 // §3 union extended with 'synthetic' for B1 smoke. Real benches land in
 // Track D (assistant-traj) and B-tail (longmemeval/locomo/tau-bench).
@@ -68,6 +68,11 @@ export type CompactionEvent = {
   before_bytes: number
   after_bytes: number
   llm_cost_usd?: number
+  // Observer-only payload — the extracted observations as appended to Tier-2.
+  // Forwarded from core CompactionEvent via mapCoreEventToInstrumentation so
+  // records.ndjson lets a post-hoc reader see what the observer captured
+  // without re-running the workload. Empty / absent for offload / reflection.
+  observations?: Observation[]
 }
 
 export type TurnRecord = {

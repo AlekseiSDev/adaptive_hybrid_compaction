@@ -350,6 +350,7 @@ export function mapCoreEventToInstrumentation(e: CoreEvent): InstrumentationEven
         before_bytes: e.before_bytes,
         after_bytes: e.after_bytes,
         ...(e.llm_cost_usd !== undefined ? { llm_cost_usd: e.llm_cost_usd } : {}),
+        ...(e.observations !== undefined ? { observations: e.observations } : {}),
       },
     }
   }

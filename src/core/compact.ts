@@ -168,6 +168,7 @@ export async function compact(input: CompactInput): Promise<CompactResult> {
         turn_index: turnIndex,
         before_bytes: beforeBytes,
         after_bytes: afterBytes,
+        observations: newObservations,
       })
     }
   }

@@ -9,6 +9,7 @@ import type {
   AnthropicUsage,
   CompactionEvent,
   InstrumentationEvent,
+  Observation,
   OpenRouterUsage,
   RecallEvent,
 } from './types.js'
@@ -111,6 +112,38 @@ describe('aggregateTurnEvents', () => {
     expect(part.compaction_events).toEqual([])
     expect(part.recall_events).toEqual([])
     expect(part.class_signal).toBeUndefined()
+  })
+
+  test('observer compaction event carries observations array verbatim', () => {
+    const obs: Observation[] = [
+      {
+        timestamp: 1700000000,
+        confidence: 'high',
+        statement: 'user added 25 postcards to their collection on 2024-03-15',
+        sourceTurn: 12,
+      },
+      {
+        timestamp: 1700000001,
+        confidence: 'med',
+        statement: "user's cat is named Luna",
+        sourceTurn: 12,
+      },
+    ]
+    const observerEvent: CompactionEvent = {
+      type: 'observer',
+      turn_index: 12,
+      before_bytes: 50000,
+      after_bytes: 10000,
+      observations: obs,
+    }
+    const events: InstrumentationEvent[] = [{ kind: 'compaction', payload: observerEvent }]
+    const part = aggregateTurnEvents(events, 12)
+    expect(part.compaction_events).toHaveLength(1)
+    const got = part.compaction_events[0]
+    expect(got?.type).toBe('observer')
+    expect(got?.observations).toHaveLength(2)
+    expect(got?.observations?.[0]?.statement).toContain('25 postcards')
+    expect(got?.observations?.[1]?.statement).toContain('Luna')
   })
 })
 

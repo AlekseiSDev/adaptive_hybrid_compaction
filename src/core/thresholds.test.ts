@@ -9,10 +9,9 @@ describe('Thresholds defaults', () => {
       T_SIZE: 4096,
       T_SIZE_MIXED: 2048,
       T_CUM: 24000,
-      K_RECENT: 6,
       BUFFER_TOKENS: 0.2,
       BUFFER_ACTIVATION: 0.8,
-      REFLECTION_THRESHOLD: 40000,
+      REFLECTION_THRESHOLD: 100_000,
       TIER3_TOKEN_BUDGET: 30000,
     })
   })
@@ -25,5 +24,13 @@ describe('Thresholds defaults', () => {
     expect(defaultThresholds.TIER3_TOKEN_BUDGET).toBe(defaultThresholds.OBSERVER_THRESHOLD)
     expect(Number.isInteger(defaultThresholds.TIER3_TOKEN_BUDGET)).toBe(true)
     expect(defaultThresholds.TIER3_TOKEN_BUDGET).toBeGreaterThan(0)
+  })
+
+  test('REFLECTION_THRESHOLD raised to 100k (2026-05-26) — gives Tier-2 wider window before reflection', () => {
+    expect(defaultThresholds.REFLECTION_THRESHOLD).toBe(100_000)
+  })
+
+  test('K_RECENT removed from Thresholds — TIER3_TOKEN_BUDGET is the single Tier-3 cap', () => {
+    expect(defaultThresholds).not.toHaveProperty('K_RECENT')
   })
 })

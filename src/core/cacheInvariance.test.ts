@@ -67,7 +67,7 @@ describe('Cache invariance (§9.1) — bytewise via serializeForCache', () => {
     for (let t = 1; t <= 5; t++) {
       history.push(useMsg(`tu_${String(t)}`, t), resultMsg(`tu_${String(t)}`, t, big))
     }
-    const { tier1, tier2 } = tierize(history, { kRecent: 20 })
+    const { tier1, tier2 } = tierize(history, { tier3TokenBudget: 100_000 })
     const baselineBytes = serializeForCache({ tier1, tier2 })
 
     const pad = createInMemoryScratchpad<AtomicGroup>()

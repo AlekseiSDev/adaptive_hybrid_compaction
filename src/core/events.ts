@@ -1,4 +1,4 @@
-import type { TrajectoryClass } from './types.js'
+import type { Observation, TrajectoryClass } from './types.js'
 
 export type CompactionEventType = 'observer' | 'offload' | 'reflection'
 
@@ -9,6 +9,11 @@ export type CompactionEvent = {
   before_bytes: number
   after_bytes: number
   llm_cost_usd?: number
+  // Observer-only payload: the extracted observations as they were appended
+  // to Tier-2. Populated when type === 'observer' so post-hoc audit of run
+  // dirs can grade observation quality without re-running the workload.
+  // Empty / absent for offload and reflection events.
+  observations?: Observation[]
 }
 
 export type RecallEvent = {

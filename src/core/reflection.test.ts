@@ -25,6 +25,17 @@ describe('reflect — A5 reflection layer (§8)', () => {
     expect(REFLECTOR_PROMPT_TEMPLATE).toContain('Drop outdated entries')
   })
 
+  test('REFLECTOR_PROMPT_TEMPLATE warns that consolidation is destructive — preservation framing', () => {
+    // 2026-05-26: borrows Mastra reflector "CRITICAL: your reflections are
+    // THE ENTIRETY of the memory" framing. Without it the LLM treats reflection
+    // as gentle compression rather than the last-chance-to-save-facts step.
+    expect(REFLECTOR_PROMPT_TEMPLATE).toMatch(/entirety|forever lost|the ONLY/i)
+  })
+
+  test('REFLECTOR_PROMPT_TEMPLATE explicitly forbids aggregating specifics away', () => {
+    expect(REFLECTOR_PROMPT_TEMPLATE).toMatch(/preserve.+(numbers|names|dates|quantities)/is)
+  })
+
   test('without llmCaller → ran=false, reason=no_llm_caller, tier2 unchanged', async () => {
     const original = tier2With([
       obs(1700000000, 'high', 'fact-A'),

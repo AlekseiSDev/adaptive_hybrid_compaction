@@ -84,7 +84,7 @@ describe('AI SDK v6 adapter E2E — 8-turn trajectory with one offload + recall'
         TYPE_AWARE_OFFLOAD: true,
         RECALL_TOOL: true,
       },
-      thresholds: { K_RECENT: 30 },
+      thresholds: { TIER3_TOKEN_BUDGET: 100_000 },
       configuredClass: 'tool_heavy',
       emit: (e) => events.push(e),
       sessionId: () => 'e2e-session',

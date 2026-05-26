@@ -10,27 +10,22 @@ export type TierizeResult = {
 }
 
 export type TierizeOptions = {
-  kRecent?: number
   // Adapter-level Tier-2 persistence (A_ahc-algorithm §2.1): when the caller
   // (middleware) tracks Tier-2 across LLM calls, it threads the prior turn's
   // newTier2 back in so observations/pointers accumulate. Without it tierize
   // returns an empty Tier-2 — used by tests and offline core paths.
   previousTier2?: Tier2
-  // Upper bound (tokens) on Tier-3.recent. Tier-3 grows past K_RECENT messages
-  // up to this budget. Only honored when canRunObserver === true (D5 of
-  // decisions.md 2026-05-22 — without observer, Tier-3 must stay capped to
-  // K_RECENT message count to avoid unbounded growth).
-  kRecentTokenBudget?: number
-  // Signals whether the adapter has an llmCaller wired (i.e., observer can
-  // actually fire to clip Tier-3 when budget overflows). UI path passes false
-  // by design (`ahc-runtime.ts:66-70`) and relies on the legacy K_RECENT cap.
-  canRunObserver?: boolean
+  // Upper bound (tokens) on Tier-3.recent. tierize walks from tail accumulating
+  // tokens until budget is reached. Single source of truth for Tier-3 sizing
+  // (K_RECENT dropped 2026-05-26 — TIER3_TOKEN_BUDGET subsumes its role).
+  // When observer is wired, it will clip Tier-3 if it overflows
+  // OBSERVER_THRESHOLD; when observer is absent (UI path), this budget is the
+  // hard cap (oldest messages dropped, FIFO by tokens).
+  tier3TokenBudget?: number
   tokenCounter?: TokenCounter
 }
 
 export function tierize(history: Message[], opts: TierizeOptions = {}): TierizeResult {
-  const kRecent = opts.kRecent ?? defaultThresholds.K_RECENT
-
   const systemMessages = history.filter((m) => m.role === 'system')
   if (systemMessages.length !== 1) {
     throw new Error(
@@ -54,7 +49,7 @@ export function tierize(history: Message[], opts: TierizeOptions = {}): TierizeR
   }
 
   const remaining = history.filter((m) => m !== systemPrompt && m !== firstUser)
-  const seedIndex = computeSeedIndex(remaining, kRecent, opts)
+  const seedIndex = computeSeedIndex(remaining, opts)
   const startIndex = expandWindowForAtomicPairs(remaining, seedIndex)
   const recent = remaining.slice(startIndex)
 
@@ -74,33 +69,20 @@ export function tierize(history: Message[], opts: TierizeOptions = {}): TierizeR
   return { tier1, tier2, tier3 }
 }
 
-// Compute Tier-3 seed start index. Two modes:
-//   - canRunObserver=true: walk from tail accumulating tokens; keep going past
-//     K_RECENT messages until both kept>=kRecent AND tokens>=kRecentTokenBudget
-//     (observer will clip if/when Tier-3 crosses OBSERVER_THRESHOLD).
-//   - canRunObserver=false: legacy fixed K_RECENT message-count cap. Without an
-//     observer there's nothing to clip Tier-3 back, so we must not let it grow
-//     past K_RECENT (D5 of decisions.md 2026-05-22).
-function computeSeedIndex(
-  remaining: Message[],
-  kRecent: number,
-  opts: TierizeOptions,
-): number {
-  if (opts.canRunObserver !== true) {
-    return Math.max(0, remaining.length - kRecent)
-  }
-  const budget = opts.kRecentTokenBudget ?? defaultThresholds.TIER3_TOKEN_BUDGET
+// Walk from tail accumulating tokens until budget is reached. Single path —
+// observer-wired and observer-absent share the same logic. When observer is
+// present it will further clip Tier-3 on overflow of OBSERVER_THRESHOLD.
+function computeSeedIndex(remaining: Message[], opts: TierizeOptions): number {
+  const budget = opts.tier3TokenBudget ?? defaultThresholds.TIER3_TOKEN_BUDGET
   const counter = opts.tokenCounter ?? charsOver4TokenCounter
 
   let seedIndex = remaining.length
-  let kept = 0
   let tokens = 0
   for (let i = remaining.length - 1; i >= 0; i--) {
-    if (kept >= kRecent && tokens >= budget) break
+    if (tokens >= budget) break
     const msg = remaining[i]
     if (msg === undefined) continue
     tokens += messageTokens(msg, counter)
-    kept += 1
     seedIndex = i
   }
   return seedIndex

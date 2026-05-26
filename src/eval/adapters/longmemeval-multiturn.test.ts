@@ -83,10 +83,11 @@ describe('multiturnMessages', () => {
   })
 
   test('Tier-3 size diagnostic: 6 sessions of ~3KB → ~18KB Tier-3 candidate', () => {
-    // OBSERVER_THRESHOLD=4000 + K_RECENT=6 means Tier-3 with 6 recent sessions
-    // ~2.6K each = ~15.6K bytes ≥ 4K → observer fires on the 6+th turn. This
-    // test is a sanity check on the byte-size arithmetic underlying Phase 1
-    // acceptance gate: avg session-block size should be in the kilobyte range.
+    // OBSERVER_THRESHOLD=4000 + TIER3_TOKEN_BUDGET=4000 (mirror) means Tier-3
+    // saturates after ~2 sessions (~2.6K each = ~5.2K bytes ≥ 4K) → observer
+    // fires from turn 2-3. This test is a sanity check on the byte-size
+    // arithmetic underlying Phase 1 acceptance gate: avg session-block size
+    // should be in the kilobyte range.
     const oneSession = formatSessionAsTurn(
       Array.from({ length: 10 }, (_, i) => ({
         role: i % 2 === 0 ? 'user' : 'assistant',

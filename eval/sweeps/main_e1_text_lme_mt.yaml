@@ -5,8 +5,9 @@ name: main_e1_text_lme_mt
 # fires in 0 of 240 records — flag-gated off by default AND single-turn
 # longmemeval-med leaves Tier-3 empty (tierize puts first user msg in
 # Tier-1). H6.6 path: same baked 120 tasks, but adapter replays each
-# of ~47 haystack sessions as a separate user turn. K_RECENT=6 means
-# last 6 sessions live in Tier-3 — ~7.8K tokens at session avg ~2.6K.
+# of ~47 haystack sessions as a separate user turn. TIER3_TOKEN_BUDGET
+# mirrors OBSERVER_THRESHOLD (4000 here) — so Tier-3 holds last ~1-2 sessions
+# at session avg ~2.6K tokens before observer clips on the next turn.
 # OBSERVER_THRESHOLD=4000 (lowered from default 8000) makes observer
 # fire reliably on Mode A replay per docs/design/H_ablations_and_TODOs §12.2.
 #

@@ -201,12 +201,7 @@ export function createAhcMiddleware(deps: AhcMiddlewareDeps): LanguageModelV3Mid
       let tierized: ReturnType<typeof tierize>
       try {
         tierized = tierize(enriched, {
-          kRecent: thresholds.K_RECENT,
-          kRecentTokenBudget: thresholds.TIER3_TOKEN_BUDGET,
-          // Observer can only clip Tier-3 back when an llmCaller is wired; without
-          // it we must keep the legacy K_RECENT message-count cap or Tier-3 would
-          // grow unbounded (D5 of decisions.md 2026-05-22).
-          canRunObserver: flags.TASK_AWARE_EXTRACTION && deps.llmCaller !== undefined,
+          tier3TokenBudget: thresholds.TIER3_TOKEN_BUDGET,
           ...(prevTier2 !== undefined ? { previousTier2: prevTier2 } : {}),
         })
       } catch {

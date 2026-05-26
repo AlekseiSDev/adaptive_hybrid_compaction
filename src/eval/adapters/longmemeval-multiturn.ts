@@ -1,18 +1,18 @@
 // LongMemEval multi-turn replay BenchAdapter. Track H Phase 1 (2026-05-14).
 //
 // Why this exists: Phase D `longmemeval-med` adapter flattens all haystack
-// sessions into ONE user message (history) + the question. With K_RECENT=6
-// tierize and OBSERVER_THRESHOLD=8000, the entire haystack lands in Tier-3
-// on turn 0 but gets immediately summarised on turn 1 if at all — observer
-// fires 0 times across 240 sweep records (H6.5 audit).
+// sessions into ONE user message (history) + the question. The entire haystack
+// landed in Tier-3 on turn 0 but got immediately summarised on turn 1 if at
+// all — observer fired 0 times across 240 sweep records (H6.5 audit).
 //
 // This adapter replays the SAME baked tasks differently: each haystack
 // session becomes one user-turn (Mode A per H_ablations_and_TODOs §12.2)
 // containing the formatted session text. Subsequent baseline.step() calls
-// drive AHC's tier rotation: after K_RECENT turns, older sessions move
-// from Tier-3 into Tier-2 via the observer (Task-Aware Extraction). With
-// ~2.6K tok per session, Tier-3 sits at ~7.8K after 3 sessions — above
-// the lme-multiturn sweep's OBSERVER_THRESHOLD=4000 override.
+// drive AHC's tier rotation: as Tier-3 grows past TIER3_TOKEN_BUDGET, older
+// sessions move from Tier-3 into Tier-2 via the observer (Task-Aware
+// Extraction). With ~2.6K tok per session, Tier-3 hits the lme-multiturn
+// sweep's OBSERVER_THRESHOLD=4000 override after 1-2 sessions, then triggers
+// observer extraction on subsequent turns.
 //
 // Same baked task files (`benchmarks/longmemeval/tasks/lme_*.json`), same
 // grader, same n=120 seed=42 subset — only the prepare() differs. F-report

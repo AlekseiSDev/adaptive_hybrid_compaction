@@ -3,9 +3,39 @@ import { OBSERVER_PROMPT_TEMPLATE, parseObservations } from './observerPrompt.js
 
 describe('OBSERVER_PROMPT_TEMPLATE', () => {
   test('contains the §4.2 instruction skeleton', () => {
-    expect(OBSERVER_PROMPT_TEMPLATE).toMatch(/conversation observer/i)
     expect(OBSERVER_PROMPT_TEMPLATE).toMatch(/factual/i)
     expect(OBSERVER_PROMPT_TEMPLATE).toMatch(/high\|med\|low/)
+  })
+
+  test('frames observations as the ONLY persistent memory across turns', () => {
+    // Mastra-style framing: the LLM has to understand stakes — anything not
+    // captured here is forever lost. Without it the model produces lazy
+    // abstractions and drops factual specifics.
+    expect(OBSERVER_PROMPT_TEMPLATE).toMatch(/only.+memory|memory.+only|forever lost|entirety/i)
+  })
+
+  test('explicitly demands preservation of numbers, names, and specifics', () => {
+    // Direct cause of acc=0.200 on lme-multiturn n=10 was abstraction:
+    // observer turned "user added 25 postcards" → "user discussed postcards".
+    // Mastra's prompt sidesteps this by demanding specifics — borrowed wholesale.
+    expect(OBSERVER_PROMPT_TEMPLATE).toMatch(/numbers/i)
+    expect(OBSERVER_PROMPT_TEMPLATE).toMatch(/names|proper nouns/i)
+    expect(OBSERVER_PROMPT_TEMPLATE).toMatch(/preserve|verbatim/i)
+  })
+
+  test('shows BAD / GOOD examples to anchor the contrast', () => {
+    expect(OBSERVER_PROMPT_TEMPLATE).toMatch(/BAD/)
+    expect(OBSERVER_PROMPT_TEMPLATE).toMatch(/GOOD/)
+  })
+
+  test('instructs splitting multi-event messages into separate observation lines', () => {
+    expect(OBSERVER_PROMPT_TEMPLATE).toMatch(/split|separate observations/i)
+  })
+
+  test('output schema stays line-based — parseObservations must keep working', () => {
+    // Format is `- timestamp (high|med|low) statement` + optional indented sub-detail.
+    // Changing this breaks records.ndjson dump quality + downstream cache invariance.
+    expect(OBSERVER_PROMPT_TEMPLATE).toMatch(/- timestamp \(high\|med\|low\)/)
   })
 })
 

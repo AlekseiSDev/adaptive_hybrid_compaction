@@ -83,7 +83,7 @@ describe('createAhcMiddleware — A6 LanguageModelV3Middleware', () => {
         TYPE_AWARE_OFFLOAD: true,
         RECALL_TOOL: true,
       },
-      thresholds: { K_RECENT: 20 },
+      thresholds: { TIER3_TOKEN_BUDGET: 100_000 },
       configuredClass: 'tool_heavy',
     })
     const result = await mw.transformParams?.({
@@ -121,7 +121,7 @@ describe('createAhcMiddleware — A6 LanguageModelV3Middleware', () => {
         TYPE_AWARE_OFFLOAD: true,
         RECALL_TOOL: true,
       },
-      thresholds: { K_RECENT: 20 },
+      thresholds: { TIER3_TOKEN_BUDGET: 100_000 },
       configuredClass: 'tool_heavy',
       sessionId: () => {
         sessionIdCount++
@@ -188,7 +188,7 @@ describe('createAhcMiddleware — A6 LanguageModelV3Middleware', () => {
     const seen: CompactResult[] = []
     const mw = createAhcMiddleware({
       flags: { TASK_AWARE_EXTRACTION: true },
-      thresholds: { OBSERVER_THRESHOLD: 50, K_RECENT: 2 },
+      thresholds: { OBSERVER_THRESHOLD: 50 },
       configuredClass: 'mixed',
       sessionId: () => 'sticky',
       llmCaller: stubLlm,
@@ -232,7 +232,7 @@ describe('createAhcMiddleware — A6 LanguageModelV3Middleware', () => {
     const seen: CompactResult[] = []
     const mw = createAhcMiddleware({
       flags: { TASK_AWARE_EXTRACTION: true },
-      thresholds: { OBSERVER_THRESHOLD: 50, K_RECENT: 2 },
+      thresholds: { OBSERVER_THRESHOLD: 50 },
       configuredClass: 'mixed',
       sessionId: () => 'sticky-5',
       llmCaller: stubLlm,
@@ -276,7 +276,7 @@ describe('createAhcMiddleware — A6 LanguageModelV3Middleware', () => {
     const mw = createAhcMiddleware({
       flags: { TASK_AWARE_EXTRACTION: true },
       // OBSERVER_THRESHOLD overridden, TIER3_TOKEN_BUDGET not set → must mirror.
-      thresholds: { OBSERVER_THRESHOLD: 10_000, K_RECENT: 2 },
+      thresholds: { OBSERVER_THRESHOLD: 10_000 },
       configuredClass: 'mixed',
       sessionId: () => 'mirror-test',
       llmCaller: async () => Promise.resolve({ text: '- 1 (high) mirror obs' }),
@@ -299,9 +299,9 @@ describe('createAhcMiddleware — A6 LanguageModelV3Middleware', () => {
       (e) => e.kind === 'compaction' && e.type === 'observer',
     )
     expect(compactionEvents).toHaveLength(0)
-    // Assembled Tier-3 includes ALL recent messages (heavyAsst + heavyUser),
-    // not just last K_RECENT=2 — walk-to-budget honored against the
-    // mirrored 10k cap.
+    // Assembled Tier-3 includes ALL recent messages (heavyAsst + heavyUser)
+    // — walk-to-budget honored against the mirrored 10k cap (TIER3_TOKEN_BUDGET
+    // = OBSERVER_THRESHOLD via the implicit coupling).
     expect(seen[0]?.newTier3.recent.length).toBeGreaterThanOrEqual(2)
   })
 

@@ -51,9 +51,9 @@ export type AhcRuntimeOptions = {
   flags?: Partial<FeatureFlags>
   /**
    * Optional threshold overrides forwarded to `createAhcMiddleware`. Use to
-   * tune OBSERVER_THRESHOLD / T_SIZE / K_RECENT per-sweep (e.g. Track H P1
-   * lme-multiturn sweep lowers OBSERVER_THRESHOLD 8000 → 4000 to fire
-   * observer reliably on session-per-turn replay).
+   * tune OBSERVER_THRESHOLD / T_SIZE / TIER3_TOKEN_BUDGET per-sweep (e.g.
+   * Track H P1 lme-multiturn sweep lowers OBSERVER_THRESHOLD 8000 → 4000 to
+   * fire observer reliably on session-per-turn replay).
    */
   thresholds?: Partial<Thresholds>
   sessionId: () => SessionId
