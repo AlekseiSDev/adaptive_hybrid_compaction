@@ -54,10 +54,12 @@
   fixирует deterministic `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` literals
   для local dev; production / shared deployments — отдельные значения через
   `.env.local`.
-- **End-to-end Langfuse trace verifier** (`scripts/check-langfuse-trace.ts`):
-  CLI fetch'ит Langfuse REST API `/api/public/traces` с public/secret key + filter
-  по timestamp, печатает trace_id/observation count, exit 0 если ≥ 1 trace
-  поднялся за last N секунд. Programmatic acceptance вместо visual UI walk.
+- **End-to-end Langfuse trace verifier** (`scripts/check-langfuse-hierarchy.ts`,
+  rename из B4 `check-langfuse-trace.ts`): CLI fetch'ит Langfuse REST API
+  `/api/public/traces|sessions|observations` с public/secret key + filter
+  по timestamp. Default `--mode=hierarchy` asserts session/trace/span tree
+  (B6); legacy `--mode=count` для B4 acceptance gate. Programmatic
+  acceptance вместо visual UI walk.
 
 **Demo (e2e):** Три smoke-режима:
 - Stub-only (B1 regression, no API key): `pnpm tsx scripts/eval.ts --sweep
@@ -73,8 +75,9 @@
   `docker compose -f observability/docker-compose.yml up -d` →
   `LANGFUSE_ENABLED=true OPENROUTER_API_KEY=... pnpm tsx scripts/eval.ts
   --sweep eval/sweeps/smoke_full_context.yaml` →
-  `pnpm tsx scripts/check-langfuse-trace.ts --since-seconds=60` (REST API
-  verifier — exit 0 если ≥ 1 trace доехал в Langfuse за последние 60 сек).
+  `pnpm tsx scripts/check-langfuse-hierarchy.ts --mode=count --since-seconds=60`
+  (REST API verifier — exit 0 если ≥ 1 trace доехал в Langfuse за последние
+  60 сек).
   Артефакты от real run в git **не** попадают (per `decisions.md 2026-05-13`
   B4 entries) — это validation step, не reproducibility evidence.
 
@@ -93,8 +96,9 @@ Anthropic-direct subset, не на main OpenRouter sweep'ах; non-empty
 | **B1** | `src/eval/{runner,persist,types}.ts` + `scripts/eval.ts` + `eval/sweeps/smoke.yaml`; smoke run на 1-2 tasks пишет append-safe NDJSON в `benchmarks/runs/<bench>/<config_id>/<seed>/records.ndjson`; повторный run resume'ится в ту же папку | `pnpm exec vitest run src/eval/persist.test.ts` (NDJSON append + resume по `config_id`) + `pnpm tsx scripts/eval.ts --sweep eval/sweeps/smoke.yaml` |
 | **B2** | Telemetry fields (`cache_read_input_tokens`, `compaction_events`, `recall_events`, `class_signal`) присутствуют в `TurnRecord`; `LLMClient` + OpenRouter wire; `Baseline` interface + `buildRunnerFromBaseline`; `full_context` baseline ships (de-facto C3); CostTracker активен в `runSweep`; OTel pipeline через `@langfuse/otel` `LangfuseSpanProcessor`, exporter no-op при `LANGFUSE_ENABLED=false` | `pnpm exec vitest run src/eval/telemetry.test.ts` (provider tokens authoritative) + `pnpm exec vitest run src/eval/observability/langfuse.test.ts` (exporter no-op при `LANGFUSE_ENABLED=false`) + manual: `OPENROUTER_API_KEY=... pnpm tsx scripts/eval.ts --sweep eval/sweeps/smoke_full_context.yaml` |
 | **B3** | `scripts/per-class-report.ts` — CLI читает NDJSON, агрегирует mode-class per task, печатает accuracy split по `conversational/tool_heavy/mixed` с stderr | `pnpm exec vitest run src/eval/stats.test.ts` (per-class aggregate матчится с mode-class на synthetic NDJSON) + `pnpm tsx scripts/per-class-report.ts benchmarks/runs/<bench>/<config_id>` |
-| **B4** | `observability/docker-compose.yml` zero-touch boots Langfuse v3 (`LANGFUSE_INIT_*` env vars pre-create org/project/admin user/API keys); `scripts/check-langfuse-trace.ts` — CLI REST verifier; vertical-slice smoke с `LANGFUSE_ENABLED=true` доставляет ≥ 1 trace в Langfuse | `docker compose -f observability/docker-compose.yml up -d` (wait healthchecks) + `LANGFUSE_ENABLED=true OPENROUTER_API_KEY=... pnpm tsx scripts/eval.ts --sweep eval/sweeps/smoke_full_context.yaml` + `pnpm tsx scripts/check-langfuse-trace.ts --since-seconds=60` (exit 0) |
+| **B4** | `observability/docker-compose.yml` zero-touch boots Langfuse v3 (`LANGFUSE_INIT_*` env vars pre-create org/project/admin user/API keys); `scripts/check-langfuse-hierarchy.ts --mode=count` (CLI REST verifier, renamed from `check-langfuse-trace.ts` in B6); vertical-slice smoke с `LANGFUSE_ENABLED=true` доставляет ≥ 1 trace в Langfuse | `docker compose -f observability/docker-compose.yml up -d` (wait healthchecks) + `LANGFUSE_ENABLED=true OPENROUTER_API_KEY=... pnpm tsx scripts/eval.ts --sweep eval/sweeps/smoke_full_context.yaml` + `pnpm tsx scripts/check-langfuse-hierarchy.ts --mode=count --since-seconds=60` (exit 0) |
 | **B5** | `src/eval/runners/ahc_core.ts` — real AHC runner: `wrapLanguageModel({model, createAhcMiddleware(...)})` поверх `@ai-sdk/openai` configured for OpenRouter; `generateText({experimental_telemetry:{isEnabled,functionId:'ahc.step'}})` → AI SDK auto-spans под `eval.task`; cost-aware LLMCaller wrapper (digest/observer/reflection LLM calls accrue в `step.cost_usd`). Per-task `eval.task` span с `langfuse.observation.input/output` для **всех** configs (landed Commit A). `noop_ahc` остаётся как explicit offline baseline (`baseline: noop_ahc` в YAML). `eval/sweeps/smoke_ahc_core.yaml` для smoke. | `pnpm exec vitest run src/eval/runners/ahc_core.test.ts` (factory shape + cost-aware wrapper + event-mapper) + (с `OPENROUTER_API_KEY`) `pnpm exec vitest run src/eval/runners/ahc_core.live.test.ts` (3-turn pin-recall через real OpenRouter + AHC pipeline) + `LANGFUSE_ENABLED=true OPENROUTER_API_KEY=... pnpm tsx scripts/eval.ts --sweep eval/sweeps/smoke_ahc_core.yaml` → Langfuse UI показывает `eval.sweep > eval.task > ai.generateText > ai.generateText.doGenerate` |
+| **B6** | `eval.task` стартует с `ROOT_CONTEXT` (root trace, parent link к `eval.sweep` разорван) + attribute `langfuse.session.id = ${bench}-${config_id}-${seed}`; `eval.turn` span per `baseline.step()` обёртка в `src/eval/baseline.ts` (multi-turn benches) и в `src/eval/adapters/tau-bench-retail/agent-runner.ts` (custom episode loop); `scripts/check-langfuse-hierarchy.ts` (rename из `check-langfuse-trace.ts`) — REST verifier fetch'ит `/api/public/sessions|traces|observations`, assert'ит nested tree (eval.task → eval.turn × N → ai.generateText → ai.toolCall × M); 3 smoke sweep'а `eval/sweeps/smoke_hierarchy_{gaia,lme_mt,at}.yaml` (n=3 each). | `pnpm exec vitest run src/eval/runner.test.ts` (eval.task `parentSpanId === undefined` + session.id attr) + `pnpm exec vitest run src/eval/baseline.test.ts` (3 `eval.turn` spans для 3-message conv) + manual: `LANGFUSE_ENABLED=true OPENROUTER_API_KEY=... pnpm tsx scripts/eval.ts --sweep eval/sweeps/smoke_hierarchy_gaia.yaml` + `pnpm tsx scripts/check-langfuse-hierarchy.ts --bench=gaia-med --since-seconds=300 --expected-turns-min=1 --expected-tool-calls-min=1` exit 0 |
 
 ---
 
@@ -116,8 +120,9 @@ Pointer-маппинг «фаза → секции». Source of truth по фа�
 | **B3** Per-class breakdown | B1, B2 | F2 | §7 (all) | `class_signal` в `TurnRecord` | per-class aggregate матчится с mode-class на synthetic NDJSON; paired permutation по `task_id` | §5 stats pipeline |
 | **B4** End-to-end Langfuse vertical-slice verification | B2 | E1 (real-LLM main sweep), F1 (Methods reproducibility appendix) | §9 (full Langfuse stack), §9.1 (`docker-compose.yml` headless init) | (no new schema — verifies §9.2 export pipeline end-to-end) | smoke с `LANGFUSE_ENABLED=true` → trace доезжает в Langfuse REST API (`/api/public/traces?fromTimestamp=...`) ≥ 1 за 60 сек | §9.5 failure modes (Langfuse down handled gracefully); `decisions.md 2026-05-13` B4 entries |
 | **B5** AHC runtime integration | A6 (middleware), B4 (Langfuse stack) | E1 (AHC vs baselines sweep) | §2 run lifecycle, §3 telemetry schema (`compaction_events`, `recall_events`, `class_signal` теперь non-empty для ahc_core), §9 (per-task + ai.* auto-spans) | `Baseline` (`prepare/step`), `InstrumentationEvent` (`mapCoreEventToInstrumentation`), `CompactionEvent.llm_cost_usd` теперь populates через cost-aware caller | (Red) `ahcCoreBaseline(...).prepare(task)` returns scratch-bound state + factory creates wrapped LanguageModelV3 + cost-aware wrapper accumulates на 2 calls = expected pricing math + event mapper `classifier_signal → class_signal` rename | §6 cost-aware caller meaningful только для AHC (baselines одно-LLM-call-per-turn); A6 middleware `transformParams` passthrough при отсутствии system msg — synthetic adapter в B5 prepends system |
+| **B6** Langfuse session/trace/span hierarchy | B5 (auto-spans), B4 (Langfuse stack), J/K (tool-using benches для tool-call span verify) | F2 (per-class plots могут drill down через session UI), debug workflows | §9.2 (trace structure: `eval.task` root + session.id), §9.7 (verifier extended) | (no new persistence schema — pure OTel attribute + parent-link change); attribute `langfuse.session.id` literal | (Red) `runSweep` на synthetic 2-task config → in-memory exporter ловит `eval.task` spans с `parentSpanId === undefined` + `langfuse.session.id === 'synthetic-<config_id>-<seed>'`; `buildRunnerFromBaseline` на 3-message conv → 3 `eval.turn` spans с `turn.index ∈ {0,1,2}` всё parent = `eval.task` | §3 `InstrumentationEvent` NOT touched (tool calls идут через AI SDK auto-spans, не custom event); `decisions.md 2026-05-26` B6 entries |
 
-**Parallelization:** внутри Track B всё sequential — `B1 → B2 → B3 → B4 → B5` (B2 расширяет B1 telemetry, B3 consume'ит `class_signal` из B2, B4 verifies §9 end-to-end, B5 нуждается в A6 + B4 Langfuse stack для validation). Cross-track: B1 разблокирует C1/C2/C3 (baseline interface потребляет `RunRecord`) параллельно с B2; B5 разблокирует E1 (real AHC vs baselines numbers).
+**Parallelization:** внутри Track B всё sequential — `B1 → B2 → B3 → B4 → B5 → B6` (B2 расширяет B1 telemetry, B3 consume'ит `class_signal` из B2, B4 verifies §9 end-to-end, B5 нуждается в A6 + B4 Langfuse stack для validation, B6 расширяет B5 spans иерархией). Cross-track: B1 разблокирует C1/C2/C3 (baseline interface потребляет `RunRecord`) параллельно с B2; B5 разблокирует E1 (real AHC vs baselines numbers); B6 не блокирует E1 (instrumentation purely additive — main sweep'ы работают без observability).
 
 **Orthogonal / deferred:**
 - §5 Statistical pipeline — pure functions поверх NDJSON; реализуется по необходимости (часть B2-tail или E pre-report).
@@ -445,8 +450,25 @@ provider.register()
 `@opentelemetry/exporter-trace-otlp-http` (peer dep of `@langfuse/otel`).
 
 `scripts/eval.ts` оборачивает `runSweep` в `setupObservability()` → spans
-`eval.sweep` / `eval.config_seed` / `eval.task` / `eval.turn` создаются всегда;
-LangfuseSpanProcessor attach'ится только при `LANGFUSE_ENABLED=true`.
+`eval.sweep` / `eval.task` / `eval.turn` создаются всегда; LangfuseSpanProcessor
+attach'ится только при `LANGFUSE_ENABLED=true`. (`eval.config_seed` уровень
+дизайн-документировался но не приземлился — между sweep и task не оказалось
+естественного границ; session идентификатор делает группировку через атрибут,
+а не через span.)
+
+**Trace boundary alignment** (B6, см. `decisions.md 2026-05-26` B6 entries):
+- `eval.sweep` — standalone trace с aggregate sweep metadata (`sweep.name`,
+  `sweep.total_cost_usd`, `sweep.halted`, …). НЕ parent для tasks.
+- `eval.task` — root trace для одного sample; стартует с `ROOT_CONTEXT`.
+  Attribute `langfuse.session.id = ${bench}-${config_id}-${seed}` — Langfuse
+  группирует traces одной ячейки sweep'а под одну session.
+- `eval.turn` — child от `eval.task`; per `baseline.step()` (multi-turn benches:
+  `lme-multiturn`, `tau-bench-retail-med`, `assistant-traj`). Attribute
+  `turn.index` идентифицирует позицию.
+- `ai.generateText.*`, `ai.toolCall` — auto-emitted AI SDK spans под
+  соответствующий `eval.turn` (или прямо под `eval.task` для single-shot
+  benches типа `gaia-med`). OTel context propagation обрабатывает nesting
+  автоматически — custom `ToolCallEvent` инструментация **не вводится**.
 
 Core AHC дополнительно эмитит custom events через `instrumentation` callback
 (см. §3 telemetry schema):
@@ -492,29 +514,57 @@ Track G UI consume'ит ту же telemetry, что и eval harness — един
 `core/`. UI отображает их inline (sidebar); Langfuse — для post-hoc analysis. Один
 источник, два consumer'а.
 
-### 9.7 End-to-end verification (B4)
+### 9.7 End-to-end verification (B4 + B6)
 
-`scripts/check-langfuse-trace.ts` — programmatic acceptance gate, заменяет visual
-UI walk. CLI:
+`scripts/check-langfuse-hierarchy.ts` (rename из B4 `check-langfuse-trace.ts`) —
+programmatic acceptance gate, заменяет visual UI walk. Два режима:
+
+**`--mode=count` (B4 fallback, legacy):**
 
 ```bash
-pnpm tsx scripts/check-langfuse-trace.ts --since-seconds=60 [--min-traces=1]
+pnpm tsx scripts/check-langfuse-hierarchy.ts --mode=count \
+  --since-seconds=60 [--min-traces=1]
 ```
 
-Поведение:
 1. Читает `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` / `LANGFUSE_BASE_URL` из env.
 2. `fetch GET ${baseUrl}/api/public/traces?fromTimestamp=<now - since_seconds>` с
    HTTP Basic auth (`publicKey:secretKey`).
 3. Печатает `trace_id`, `name`, `observation_count` для каждого trace.
-4. Exit 0 если `data.length >= min-traces`; exit 1 иначе (с stderr explanation).
+4. Exit 0 если `data.length >= min-traces`; exit 1 иначе.
 
-Acceptance gate (B4): после `LANGFUSE_ENABLED=true ... pnpm tsx scripts/eval.ts
---sweep eval/sweeps/smoke_full_context.yaml` (vertical-slice smoke) — verifier
-exit 0. End-to-end pipeline доказан без visual confirm.
+**`--mode=hierarchy` (B6 default):**
 
-Real-run артефакты (NDJSON / summary / meta) от B4 verification **не** коммитятся
-в git — это validation step, а не reproducibility evidence. См. `decisions.md
-2026-05-13` B4 entries.
+```bash
+pnpm tsx scripts/check-langfuse-hierarchy.ts --mode=hierarchy \
+  --bench=gaia-med --since-seconds=300 \
+  [--config-id=<id>] [--seed=42] \
+  [--expected-turns-min=N] [--expected-tool-calls-min=M]
+```
+
+1. Fetch `/api/public/sessions?fromTimestamp=...` — фильтр session_id по prefix
+   `${bench}-` (или явный `${bench}-${config_id}-${seed}` если указаны).
+2. Для matched session — `/api/public/sessions/<id>` → список traces.
+3. Для каждого trace — `/api/public/traces/<id>` → observations tree.
+4. Assertions:
+   - Trace name = `eval.task`, `parent_observation_id === null` (root).
+   - Child observations включают ≥ `--expected-turns-min` spans с name=`eval.turn`.
+   - Child observations включают ≥ `--expected-tool-calls-min` spans с
+     name начинающимся с `ai.toolCall`.
+5. Печатает tree-view (indented) + summary. Exit 0 если все asserts pass.
+
+Acceptance gates:
+- **B4** (legacy): после `LANGFUSE_ENABLED=true ... pnpm tsx scripts/eval.ts
+  --sweep eval/sweeps/smoke_full_context.yaml` (vertical-slice smoke) →
+  `check-langfuse-hierarchy.ts --mode=count` exit 0.
+- **B6**: после `LANGFUSE_ENABLED=true ... pnpm tsx scripts/eval.ts --sweep
+  eval/sweeps/smoke_hierarchy_<bench>.yaml` (n=3 each) →
+  `check-langfuse-hierarchy.ts --mode=hierarchy --bench=<bench>
+  --expected-turns-min=<bench-specific>` exit 0 для всех 3 benches
+  (`gaia-med`, `lme-multiturn`, `assistant-traj`).
+
+Real-run артефакты (NDJSON / summary / meta) от B4/B6 verification **не**
+коммитятся в git — это validation step, а не reproducibility evidence. См.
+`decisions.md 2026-05-13` B4 entries + `decisions.md 2026-05-26` B6 entries.
 
 ---
 

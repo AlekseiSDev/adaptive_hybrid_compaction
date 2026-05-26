@@ -416,7 +416,7 @@ numbers процитированы; повторно интегрировать 
   локальный Langfuse stack через `observability/docker-compose.yml` (zero-touch
   bootstrap через `LANGFUSE_INIT_*` env vars — admin user/org/project/API keys
   pre-created на старте); прогоняем real OpenRouter+Gemini smoke с
-  `LANGFUSE_ENABLED=true`; `scripts/check-langfuse-trace.ts` через REST API
+  `LANGFUSE_ENABLED=true`; `scripts/check-langfuse-hierarchy.ts --mode=count` через REST API
   верифицирует что ≥ 1 trace доехал в Langfuse. Programmatic acceptance gate
   для §9 pipeline. Real-run артефакты не коммитятся (validation step, не
   reproducibility evidence). См. `decisions.md 2026-05-13` B4 entries.
@@ -431,6 +431,26 @@ numbers процитированы; повторно интегрировать 
   child `ai.generateText` spans (для ahc_core). Заменяет `noop_ahc` stub из
   B1 в `ahc_flags`-driven configs; `baseline: noop_ahc` остаётся explicit
   fallback для offline smoke без API key.
+
+- **B6. Langfuse session/trace/span hierarchy + verification (1.5 дня).**
+  До B6 telemetry была одной плоскостью: `eval.sweep` (root) → `eval.task`
+  (per-sample child) → auto-`ai.generateText.*` от AI SDK; всё попадало в
+  один gigantic trace на весь sweep, `langfuse.session.id` не ставился вообще,
+  multi-turn benches схлопывались в одну `eval.task`. B6 выравнивает иерархию
+  под Langfuse session/trace модель:
+  - **session** = `${bench}-${config_id}-${seed}` (ячейка sweep'а) — атрибут
+    `langfuse.session.id` на каждом `eval.task` span.
+  - **trace** = один task — `eval.task` стартует с `ROOT_CONTEXT` (parent link
+    к `eval.sweep` разорван); `eval.sweep` остаётся отдельным standalone trace
+    с aggregate metadata.
+  - **spans** = `eval.turn` per `baseline.step()` (multi-turn benches:
+    `lme-multiturn`, `tau-bench-retail-med`, `assistant-traj`) + AI SDK
+    auto-emitted `ai.generateText.*` + `ai.toolCall` как children (наследуют
+    через OTel context — не пишем custom `ToolCallEvent` instrumentation).
+  - **Verification** — `scripts/check-langfuse-hierarchy.ts` (rename из
+    `check-langfuse-trace.ts`) fetch'ит `/api/public/sessions|traces|observations`,
+    assert'ит nested структуру. 3 smoke sweep'а (`gaia-med`, `lme-multiturn`,
+    `assistant-traj`, n=3 each) + playwright_mcp UI nav на :3001 — manual gate.
 
 **Track C — Baselines integration**
 

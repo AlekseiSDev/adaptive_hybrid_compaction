@@ -202,4 +202,49 @@
 
 - **[2026-05-22] OBSERVER_THRESHOLD default raised 8000 → 30000 + runner double-event bug fixed (H Phase 8)**: Two coupled findings on `lme-multiturn` audit. (1) `src/eval/runner.ts:enrichTurnsWithEvents` was merging both PATH A (events embedded in `TurnRecord` by `ahc_core.ts`) and PATH B (same events re-aggregated from `ctx.instrumentation` callback) into the final `compaction_events[]`. Every observer event was counted twice in records.ndjson → H6.5 observer density of "100% on ahc_full × lme-multiturn" is actually ~50%. Real per-turn TAE work and bytes were unaffected (single underlying emission in `src/core/compact.ts:165`); only telemetry was inflated. Fix: prefer `turn.{recall,compaction}_events` when non-empty, fall back to instrumentation aggregation otherwise. Baselines like `tau-bench-retail` that rely on backfill (per `episode-turns.test.ts:43`) still work. Regression test in `runner.test.ts`. (2) On the same `lme-multiturn` run AHC scored 0.13 acc vs `mastra_om` 0.50 and `full_context` 0.50 on n=10 overlap. Per-turn input-token traces showed Mastra OM held a working window ≈25K tokens before its own periodic compact (drops to ~10K every ~10 turns), while AHC at default `OBSERVER_THRESHOLD=8000` (sweep override 4000) fired observer on every turn ≥2, keeping the live window at ~4–7K — too small to retain answer-bearing facts (knowledge-update task 01493427 confabulated "17" vs ground truth "25"; single-session-user 0862e8bf lost "Luna"). Raised default to 30000 to put AHC's pre-compact envelope in the same ballpark as Mastra OM. Old sweep YAML `eval/sweeps/main_e1_text_lme_mt.yaml` keeps the 4000 override unchanged — it documents a historical run. Tests in `thresholds.test.ts`, `observer.test.ts`, `asyncBuffer.test.ts` re-calibrated. Re-running the headline `main_e1_text_lme_mt` cells with the new default is a separate follow-up (cost ≈ $40, deferred).
 
+- **[2026-05-26] B6 — Langfuse session identifier = `${bench}-${config_id}-${seed}`**:
+  granularity choice locked at one Langfuse session per sweep cell. Rationale:
+  matches user's mental model "прогон бенча на конкретной модельке + бейзлайне"
+  (1:1 с (bench × baseline × seed) ячейкой sweep YAML); replication (seed=43)
+  показывается как отдельная session — paired comparison делается через
+  shared `task_id` в обеих traces, не через session merge. Alternative
+  `${bench}-${config_id}` (combine seeds) отвергнут — теряем визуальное
+  разделение replication. Alternative `${sweep_name}-...` отвергнут — sweep
+  name не доходит до `executeOneTask` (был бы overhead на threading).
+  Attribute key — `langfuse.session.id` literal (per Langfuse OTel convention,
+  https://langfuse.com/docs/integrations/opentelemetry/example-vercel-ai-sdk).
+  Используется на `eval.task` spans; AI SDK auto-spans под task'ом inherit
+  через OTel context propagation, явно не дублируем.
+
+- **[2026-05-26] B6 — `eval.sweep` decoupled from `eval.task` parent link**:
+  до B6 `scripts/eval.ts:startActiveSpan('eval.sweep', ...)` оборачивал
+  `runSweep` через `startActiveSpan` который ставит span в active OTel context,
+  делая его parent для всех `eval.task` spans созданных внутри. Это ломало
+  целевую модель "trace = sample" — Langfuse видел один gigantic trace на
+  весь sweep (десятки tasks под одним trace_id). Fix: `scripts/eval.ts`
+  использует `tracer.startSpan('eval.sweep', ...)` без active context wrap +
+  явный `span.end()` в `try/finally`; `src/eval/runner.ts:executeOneTask`
+  стартует `eval.task` с явным `trace.setSpan(context.ROOT_CONTEXT, ...)` +
+  passes контекст в `runner.execute`. Sweep span остаётся как standalone
+  metadata trace (sweep_name, total_cost, halted, configs_completed) видимый
+  отдельно в Langfuse — sweep-level audit полезен, но per-task поиск идёт
+  через session UI. Trade-off: sweep span теряет direct visibility "сколько
+  tasks внутри" — это можно посмотреть через session traces count.
+
+- **[2026-05-26] B6 — Tool-call spans via AI SDK auto-emission, не custom
+  `ToolCallEvent` instrumentation**: AI SDK v6 при `experimental_telemetry:
+  {isEnabled: true}` auto-emits child spans `ai.toolCall` под
+  `ai.generateText.doGenerate`. OTel context propagation автоматически
+  nest'ит их под нашими `eval.turn` (или `eval.task` для single-shot
+  benches). Альтернатива — добавить `{kind:'tool_call', ...}` variant в
+  `src/eval/types.ts:InstrumentationEvent` union и эмитить из tau/gaia/AT
+  agent-runners (line `s.toolCalls.length` counts уже считается) —
+  отвергнута: (a) дублирует то что AI SDK уже даёт бесплатно, (b) требует
+  custom span creation в каждом agent-runner, (c) ломает разделение
+  "core/eval — framework-agnostic; AI SDK auto-spans — primary integration
+  surface" (см. CLAUDE.md layered rule). Trade-off: если в будущем
+  потребуется emit tool-call telemetry с baseline'ов, которые НЕ ходят
+  через AI SDK (gipotetically a non-AI-SDK custom runner) — придётся
+  добавлять `ToolCallEvent` тогда; до тех пор YAGNI.
+
 - **[2026-05-22] Tier-2 cross-turn persistence + adaptive Tier-3 token budget (H Phase 9)**: H Phase 8 raised `OBSERVER_THRESHOLD` to 30000 expecting it to put AHC's working window in Mastra OM's envelope, but follow-up n=120 `lme-multiturn` audit (acc 0.108 vs `mastra_om` 0.520, `full_context` 0.540) exposed **two architectural defects** that made the threshold irrelevant. (1) **Tier-2 was reset every turn.** `src/core/tiers.ts:46-50` initialized `tier2 = {observations: [], pointers: [], classSignal: ...}` unconditionally; `src/adapters/ai-sdk-v6.ts:160-220` middleware kept `scratchpadRegistry` + `hysteresisStates` per-session but had no `Map<SessionId, Tier2>`. `result.newTier2` from `compact()` was used to assemble the current turn's prompt then discarded; next turn's `tierize()` started from empty. The §2.1 "Tier-2: append-only" contract was vacuously satisfied because Tier-2 was always empty. (2) **K_RECENT was a hard message-count cap, not a token budget.** `tiers.ts:64` used `Math.max(0, remaining.length - kRecent)` → Tier-3 stayed at exactly K_RECENT=6 messages regardless of token budget. Per-turn telemetry confirmed: on 48-turn lme-multiturn tasks AHC input held steady at 5-14K tokens across every turn (never grew past Tier-3 token threshold = 30K), so observer never fired (0/120 records — vs the 50% rate H Phase 8 expected after the double-counting fix). The net effect: AHC ran as a `K_RECENT=6` drop-tail policy with no summarisation, systematically discarding 95% of conversation history. **Fix shipped in one PR**: (D1) adapter persists `result.newTier2` in `Map<SessionId, Tier2>` parallel to existing `hysteresisStates`. (D2) `tierize()` accepts `previousTier2?: Tier2` and threads it through; `compact.ts:175-183` already appends append-only so the §2.1 contract holds naturally once Tier-2 is non-empty. (D3) New threshold `TIER3_TOKEN_BUDGET: number` (default = `OBSERVER_THRESHOLD` = 30000) — Tier-3 grows past K_RECENT until both `kept ≥ K_RECENT` AND `tokens ≥ TIER3_TOKEN_BUDGET`, then observer fires (token gate unchanged) and clips back to `0.2 × OBSERVER_THRESHOLD`. K_RECENT is now a **lower bound** ("minimum keep-raw on short tasks"), not the cap. (D5) When `llmCaller === undefined` (UI path in `ahc-runtime.ts:66-70` — observer cannot clip), fall back to legacy K_RECENT message-count cap so Tier-3 doesn't grow unbounded. Smoke n=1 on `ahc_full_obs30k` × lme-multiturn task 01493427: **37 observer fires** (was 0), input grew organically to ~25K by turn 9 then clipped back to ~6-9K per cycle, cache_read 268K/423K = 63%, cost $1.22/task (was $0.40 — observer LLM calls cost real money; documented expected increase). Cache invariance §9 invariant proven append-only by new test in `cacheInvariance.test.ts`. **Supersedes** the H Phase 8 30K decision *as the load-bearing fix* — H8 raised the threshold but never made it observable. **Headline n=50 numbers in `docs/runs/main_e1_text_lme_mt_n50_audit.md` (AHC@30k 0.108, AHC@128k 0.120) are historical baselines** documenting the pre-fix behaviour; a re-run is a separate follow-up (~$60-100, deferred per the H8 deferred-rerun pattern). New tests: `tiers.test.ts` (+6), `thresholds.test.ts` (+1), `ai-sdk-v6.test.ts` (+2), `cacheInvariance.test.ts` (+1).
