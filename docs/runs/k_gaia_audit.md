@@ -9,10 +9,12 @@
 > `i_mastra_agent_audit.md`. F-report consumes this audit для cross-bench
 > Pareto plot (5-я точка).
 >
-> **Status (2026-05-26):** K1–K3 complete (verify.sh all green, 693 unit
-> tests + cache-invariance). K4 main sweep **deferred** — blocked on
-> `web_search` provider key (Tavily/Brave/SearXNG self-hosted). Smoke
-> (`MOCK_WEB_SEARCH=true`) validates pipeline end-to-end.
+> **Status (2026-05-26):** K1–K3 complete. K4 smoke validated **с
+> live SearXNG**: 5-task smoke прошёл **acc=0.80** (4/5 correct) на
+> ~$0.19. K4 main sweep (n=25 × 2 baselines) — ready to run; deferred
+> только по бюджету. SearXNG infra committed: `observability/searxng-
+> docker-compose.yml`. `web_search` default-strict (2026-05-26): chain
+> требует `WEB_SEARCH_AUTOSELECT=true` opt-in (honest experiments).
 
 ---
 
@@ -29,59 +31,78 @@ Seeds: 42. Budget cap: $50 (`main_e1_gaia.yaml`).
 
 ---
 
-## Smoke validation (K3 acceptance)
+## Smoke validation (K3+SearXNG live, 2026-05-26)
 
-> `MOCK_WEB_SEARCH=true pnpm tsx scripts/eval.ts --sweep eval/sweeps/smoke_gaia.yaml --max-tasks-per-cell=1 --concurrency=1`
+```
+docker compose -f observability/searxng-docker-compose.yml up -d
+set -a && . ./.env && set +a
+WEB_SEARCH_AUTOSELECT=true SEARXNG_URL=http://localhost:8080 \
+  pnpm tsx scripts/eval.ts --sweep eval/sweeps/smoke_gaia.yaml \
+  --max-tasks-per-cell=5 --concurrency=1
+```
 
-| bench | baseline | n | acc | cost_$ | err_rate | notes |
-|---|---|---|---|---|---|---|
-| gaia-med | gaia_bench_agent | 1 | 0.0 | 0.0073 | 0% | pipeline validated; mock search returned fixture results (acc=0 expected) |
+| bench | baseline | n | acc | cost_$ | err_rate |
+|---|---|---|---|---|---|
+| gaia-med | gaia_bench_agent | 5 | **0.80** | 0.187 | 0% |
 
-**Record details** (`benchmarks/runs/smoke_gaia/gaia-med/1dcd84ecc73b608c/42/`):
-- task_id: `gaia_000` (level=2)
-- totals: input=8 142, output=269
-- score: `{primary: 0, secondary: {level: 2}, judge_cost_usd: 0}`
-- final_response_text: `"hierarchical"` (incorrect — ground truth: `"egalitarian"`)
-- errors: `[]` (no exception, normalization path executed cleanly)
+**Per-task breakdown:**
 
-**Pipeline checks passed:**
-- ✓ `defaultAdapterRegistry.resolve('gaia-med')` returns
-  `{adapter: gaiaAdapter, grader: gaiaGrader}`.
-- ✓ `defaultRunnerRegistry.resolve({baseline: 'gaia_bench_agent'})`
-  returns Runner via `resolveGaiaRunner`.
-- ✓ AI SDK v6 `generateText` with `stopWhen: stepCountIs(20)` + 5 GAIA
-  tools wired correctly.
-- ✓ `costFromUsage` accounting on `gpt-5.4-mini` returned `$0.0073` for
-  8 142+269 tokens (matches `OPENROUTER_PRICING`).
-- ✓ `gaiaGrader.score` returned `{primary: 0, secondary: {level: 2}}`
-  per pure-normalization path (no LLM judge invoked — per
-  `decisions.md 2026-05-22`).
+| task_id | level | acc | cost_$ | answered | ground_truth |
+|---|---|---|---|---|---|
+| gaia_000 | 2 | 1.0 | 0.040 | `egalitarian` | `egalitarian` ✓ |
+| gaia_001 | 2 | 1.0 | 0.018 | `34689` | `34689` ✓ |
+| gaia_002 | 2 | 0.0 | 0.056 | `Final answer: 1` | `41` ✗ (arithmetic miss) |
+| gaia_003 | 2 | 1.0 | 0.017 | `backtick` | `backtick` ✓ |
+| gaia_004 | 1 | 1.0 | 0.055 | `17` | `17` ✓ |
+
+**Findings:**
+- **4/5 correct на n=5**; SearXNG → arxiv/USGS/wikipedia → actor → grader
+  пайплайн полностью функционален.
+- **80% acc** — высокий результат относительно ожидания (Holosophus
+  reports ~60% on similar setup); n=5 sample size небольшой,
+  variance widely possible на full n=25.
+- **4/5 ответов без "Final answer:" prefix** — actor возвращает голый
+  токен ("egalitarian", "17", etc.) после tool-call chain. Grader
+  fallback на full-text normalization (per K_gaia.md §3.1) handle'ит
+  правильно, score=1.0 благодаря normalization.
+- **Единственный fail (gaia_002)**: задача требовала арифметики
+  «p-value 0.04 × N papers где false positive» — actor использовал
+  "Final answer: 1" но ground truth 41. Search вернул контекст, но
+  reasoning miss. Не пайплайн bug, а capability ceiling gpt-5.4-mini.
+
+**Pipeline checks (вшитые в K3 acceptance):**
+- ✓ `defaultAdapterRegistry.resolve('gaia-med')` returns gaiaAdapter + gaiaGrader.
+- ✓ `defaultRunnerRegistry.resolve` routes к `resolveGaiaRunner`.
+- ✓ AI SDK v6 `generateText({tools, stopWhen: stepCountIs(20)})` driving multi-step ReACT.
+- ✓ `gaiaGrader` pure-normalization (no LLM-judge invoked).
+- ✓ SearXNG `http://localhost:8080/search?format=json` отдаёт ≥1 result/query.
 - ✓ status=complete, err_rate=0%.
 
 ---
 
-## Main sweep — DEFERRED
+## Main sweep — READY (deferred only by budget)
 
-`main_e1_gaia.yaml` requires one of these env vars set:
-- `SEARXNG_URL` (self-hosted SearXNG instance — Holosophus pattern, free)
-- `TAVILY_API_KEY` (~$20/mo plan)
-- `BRAVE_API_KEY` (~$3/mo plan)
+После 2026-05-26 SearXNG commit (observability/searxng-docker-compose.yml)
++ probe + 5-task smoke pass — K4 main sweep полностью разблокирован.
+Spend estimate: n=25 × 2 baselines × ~$0.04-0.10/task ≈ $5-10 (well
+below `budget_usd: 50` cap в YAML).
 
-Without any of these, K2 `web_search` tool falls back to mock and
-accuracy degrades to 0% across the board (mock fixtures don't contain
-real GAIA answers).
+**Run command:**
+```bash
+docker compose -f observability/searxng-docker-compose.yml up -d
+set -a && . ./.env && set +a
+WEB_SEARCH_AUTOSELECT=true SEARXNG_URL=http://localhost:8080 \
+  pnpm tsx scripts/eval.ts --sweep eval/sweeps/main_e1_gaia.yaml \
+  --concurrency=4
+pnpm tsx scripts/sanity-aggregate.ts benchmarks/runs/main_e1_gaia/
+```
 
-**TODO** (user-action items, picked up next K4 attempt):
-1. Provision one search provider (recommend SearXNG self-hosted — no
-   API cost, mirrors Holosophus precedent). Spin up via
-   `docker run -p 8080:8080 searxng/searxng` or use Holosophus's
-   `docker-compose.yml`.
-2. `set -a && . ./.env && set +a && SEARXNG_URL=http://localhost:8080 pnpm tsx scripts/eval.ts --sweep eval/sweeps/main_e1_gaia.yaml --concurrency=4`
-3. Re-run `pnpm tsx scripts/sanity-aggregate.ts benchmarks/runs/main_e1_gaia/`
-4. Edit this audit's `## Headline numbers` section с реальными
-   per-level acc + per-tool usage distribution + cache rate.
-5. Update `baselines_frozen.md` с rows для `gaia-med × gaia_bench_agent`
-   + `gaia-med × gaia_bench_agent_ahc`.
+**TODO post-sweep:**
+1. Re-aggregate per-level (1/2/3) acc breakdown.
+2. Update `## Headline numbers` table с реальными цифрами для
+   `gaia_bench_agent` + `gaia_bench_agent_ahc`.
+3. Update `baselines_frozen.md` rows.
+4. Add per-tool usage distribution (count tool_calls per tool name).
 
 ---
 
@@ -163,14 +184,25 @@ pnpm tsx scripts/bake-gaia.ts
 # K3 unit smoke (offline; mocked generateText)
 pnpm exec vitest run src/eval/adapters/gaia-med.test.ts src/eval/adapters/gaia-tools/ src/eval/adapters/gaia-med/agent-runner.test.ts
 
+# Spin up SearXNG infra (once)
+docker compose -f observability/searxng-docker-compose.yml up -d
+# Wait healthcheck (~15s), then sanity-curl
+curl -s 'http://localhost:8080/search?q=test&format=json' | jq '.results | length'
+
+# Probe webSearch directly (sanity без agent loop)
+WEB_SEARCH_AUTOSELECT=true SEARXNG_URL=http://localhost:8080 \
+  pnpm tsx scripts/check-gaia-search.ts 'invasive fish species USGS'
+
 # K3 live pipeline smoke (requires OPENROUTER_API_KEY in .env)
 set -a && . ./.env && set +a
-MOCK_WEB_SEARCH=true pnpm tsx scripts/eval.ts --sweep eval/sweeps/smoke_gaia.yaml \
-  --max-tasks-per-cell=1 --concurrency=1
+WEB_SEARCH_AUTOSELECT=true SEARXNG_URL=http://localhost:8080 \
+  pnpm tsx scripts/eval.ts --sweep eval/sweeps/smoke_gaia.yaml \
+  --max-tasks-per-cell=5 --concurrency=1
+# Expected: acc≈0.80 on n=5, total cost ~$0.19
 
-# K4 main sweep (BLOCKED — needs web_search provider)
-SEARXNG_URL=http://localhost:8080 pnpm tsx scripts/eval.ts \
-  --sweep eval/sweeps/main_e1_gaia.yaml --concurrency=4
+# K4 main sweep (n=25 × 2 baselines, ~$5-10)
+WEB_SEARCH_AUTOSELECT=true SEARXNG_URL=http://localhost:8080 \
+  pnpm tsx scripts/eval.ts --sweep eval/sweeps/main_e1_gaia.yaml --concurrency=4
 pnpm tsx scripts/sanity-aggregate.ts benchmarks/runs/main_e1_gaia/
 ```
 
