@@ -1,0 +1,57 @@
+# SearXNG config for AHC GAIA bench (Track K).
+# Mirror Holosophus snapshot (/Users/Aleksei/Projects/ai_scientists/Holosophus/searxng/settings.yml)
+# с минимальными правками под нашу домен (research+web для GAIA tasks).
+#
+# Critical: search.formats includes "json" — иначе наш web_search.ts
+# не сможет вызвать /search?format=json (default SearXNG отдаёт только HTML).
+
+use_default_settings: true
+
+server:
+  secret_key: "ahc-gaia-searxng-dev-secret-2026"
+  bind_address: "0.0.0.0"
+  port: 8080
+  limiter: false
+  image_proxy: false
+  method: "GET"
+
+search:
+  safe_search: 0
+  autocomplete: ""
+  default_lang: "en"
+  ban_time_on_fail: 1
+  max_ban_time_on_fail: 10
+  formats:
+    - html
+    - json
+
+engines:
+  # Academic — relevant для GAIA's research-heavy tasks.
+  - name: google scholar
+    disabled: false
+    timeout: 10.0
+  - name: arxiv
+    disabled: false
+    timeout: 10.0
+  - name: semantic scholar
+    disabled: false
+    timeout: 10.0
+  - name: pubmed
+    disabled: false
+    timeout: 10.0
+  - name: crossref
+    disabled: false
+    timeout: 30.0
+  - name: openalex
+    disabled: false
+    timeout: 10.0
+
+  # General-purpose unreliable engines off.
+  - name: aol
+    inactive: true
+  - name: karmasearch
+    inactive: true
+  - name: karmasearch videos
+    inactive: true
+  - name: startpage
+    inactive: true

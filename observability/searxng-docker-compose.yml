@@ -1,0 +1,62 @@
+# SearXNG self-hosted для GAIA `web_search` tool (Track K).
+# Brings up SearXNG + valkey (cache) — privacy-respecting metasearch,
+# aggregates Google/Bing/DuckDuckGo/arxiv/etc без API keys.
+#
+# Usage:
+#   docker compose -f observability/searxng-docker-compose.yml up -d
+#   # wait ~15s for healthcheck
+#   curl -s 'http://localhost:8080/search?q=test&format=json' | jq '.results | length'
+#
+# Then point GAIA web_search:
+#   export WEB_SEARCH_AUTOSELECT=true
+#   export SEARXNG_URL=http://localhost:8080
+#
+# Mirror Holosophus's docker-compose.yml searxng+searxng-valkey services,
+# но self-contained (no academia-mcp/codearkt dependencies).
+
+services:
+  searxng:
+    image: docker.io/searxng/searxng:latest
+    container_name: ahc-searxng
+    restart: unless-stopped
+    ports:
+      - "${SEARXNG_PORT:-8080}:8080"
+    volumes:
+      - ./searxng:/etc/searxng:Z
+      - searxng-data:/var/cache/searxng/
+    environment:
+      - SEARXNG_BASE_URL=http://localhost:8080/
+      - SEARXNG_REDIS_URL=redis://searxng-valkey:6379/0
+    depends_on:
+      searxng-valkey:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "--proxy=off", "http://127.0.0.1:8080/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETGID
+      - SETUID
+      - DAC_OVERRIDE
+
+  searxng-valkey:
+    image: docker.io/valkey/valkey:latest
+    container_name: ahc-searxng-valkey
+    restart: unless-stopped
+    command: ["valkey-server", "--save", "30", "1", "--loglevel", "warning"]
+    volumes:
+      - searxng-valkey-data:/data
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  searxng-data:
+  searxng-valkey-data:
