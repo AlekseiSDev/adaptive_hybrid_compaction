@@ -1,0 +1,20 @@
+name: smoke_hierarchy_at
+# B6 hierarchy verification — assistant-traj × full_context baseline.
+# Multi-turn text (AT-v1 30 task pool; J-track AT-v2 tool-grounded landing
+# отдельно). Each task ~3-8 user turns.
+# Expected Langfuse hierarchy per task:
+#   eval.task (root, langfuse.session.id=assistant-traj-<cfg>-42)
+#     └ eval.turn × N (≥ 2, depends on task)
+#         └ ai.generateText
+#             └ ai.generateText.doGenerate
+#
+# Cap at 3 tasks via --max-tasks-per-cell=3 на CLI side.
+# Live deps: OPENROUTER_API_KEY (actor + judge через claude-sonnet-4.6).
+
+benches:
+  - assistant-traj
+configs:
+  - id: full_context
+    baseline: full_context
+seeds: [42]
+budget_usd: 1

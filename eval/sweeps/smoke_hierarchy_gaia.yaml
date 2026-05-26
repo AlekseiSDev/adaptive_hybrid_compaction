@@ -1,0 +1,23 @@
+name: smoke_hierarchy_gaia
+# B6 hierarchy verification — gaia-med × vanilla agent.
+# Single-turn ReACT с tool calls (web_search, visit_webpage, etc.).
+# Expected Langfuse hierarchy per task:
+#   eval.task (root, langfuse.session.id=gaia-med-<cfg>-42)
+#     └ eval.turn × 1 (buildRunnerFromBaseline path NOT used here — agent
+#       loop в gaia-med/agent-runner.ts. Если eval.turn span отсутствует
+#       — это норма для single-shot bench'а; tool calls всё равно
+#       инспектируем под eval.task.)
+#       └ ai.generateText
+#           └ ai.toolCall × M  ← M ≥ 1 (web_search at minimum)
+#
+# Cap at 3 tasks via --max-tasks-per-cell=3 на CLI side (см. B6 docs).
+# Live deps: OPENROUTER_API_KEY + web_search provider (SearXNG /
+# Tavily / Brave / MOCK_WEB_SEARCH).
+
+benches:
+  - gaia-med
+configs:
+  - id: gaia_vanilla
+    baseline: gaia_bench_agent
+seeds: [42]
+budget_usd: 2

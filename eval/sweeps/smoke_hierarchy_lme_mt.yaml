@@ -1,0 +1,19 @@
+name: smoke_hierarchy_lme_mt
+# B6 hierarchy verification — lme-multiturn × full_context baseline.
+# Multi-turn replay (5-15 turns per task), text-only (no tools).
+# Expected Langfuse hierarchy per task:
+#   eval.task (root, langfuse.session.id=lme-multiturn-<cfg>-42)
+#     └ eval.turn × N (≥ 5 на medium LME)
+#         └ ai.generateText  (full_context — один LLM call per turn)
+#             └ ai.generateText.doGenerate
+#
+# Cap at 3 tasks via --max-tasks-per-cell=3 на CLI side.
+# Live deps: OPENROUTER_API_KEY (actor + judge).
+
+benches:
+  - lme-multiturn
+configs:
+  - id: full_context
+    baseline: full_context
+seeds: [42]
+budget_usd: 1
