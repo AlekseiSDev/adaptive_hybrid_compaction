@@ -15,6 +15,8 @@ import {
   createAssistantTrajGrader,
 } from './adapters/assistant-traj.js'
 import { defaultLlmJudge } from './adapters/assistant-traj.judge.js'
+import { gaiaAdapter, gaiaGrader } from './adapters/gaia-med.js'
+import { resolveGaiaRunner } from './adapters/gaia-med/index.js'
 import {
   createLoCoMoGrader,
   defaultLocomoJudge,
@@ -160,9 +162,14 @@ export const defaultAdapterRegistry: AdapterRegistry = {
         grader: createLoCoMoGrader({ llmJudge: defaultLocomoJudge() }),
       }
     }
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
     if (bench === 'tau-bench-retail-med') {
       return { adapter: taubenchAdapter, grader: taubenchGrader }
+    }
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+    if (bench === 'gaia-med') {
+      // Track K. Pure-normalization grader (no LLM judge) — see
+      // decisions.md 2026-05-22 (Track K — gaia-med uses pure-normalization).
+      return { adapter: gaiaAdapter, grader: gaiaGrader }
     }
     // Defensive: unreachable under TS narrowing, but runtime catches type
     // casts (eg. test's `'fake-bench' as Bench` push-through).
@@ -416,6 +423,10 @@ export const defaultRunnerRegistry: RunnerRegistry = {
     }
     if (config.baseline === 'tau_bench_agent' || config.baseline === 'tau_bench_agent_ahc') {
       return makeTauBenchAgentRunner(config)
+    }
+    if (config.baseline === 'gaia_bench_agent' || config.baseline === 'gaia_bench_agent_ahc') {
+      // Track K (K3). Agentic single-shot runner over 5 GAIA tools.
+      return resolveGaiaRunner(config)
     }
     // `ahc_flags`-only configs (no explicit `baseline`) route to the real
     // ahc_core runner — A6 middleware over AI SDK v6 provider, per B5.

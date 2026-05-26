@@ -1,0 +1,8 @@
+{
+  "idx": 23,
+  "question": "In terms of geographical distance between capital cities, which 2 countries are the furthest from each other within the ASEAN bloc according to wikipedia? Answer using a comma separated list, ordering the countries by alphabetical order.",
+  "answer": "Indonesia, Myanmar",
+  "level": "2",
+  "has_file": false,
+  "file_path": ""
+}

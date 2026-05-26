@@ -19,6 +19,7 @@ export type Bench =
   | 'locomo-med'
   | 'tau-bench-retail-med'
   | 'assistant-traj'
+  | 'gaia-med'
   | 'synthetic'
 
 export type Score = {
