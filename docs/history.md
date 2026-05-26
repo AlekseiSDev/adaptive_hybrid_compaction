@@ -1,0 +1,105 @@
+# Change History
+
+Chronological log of significant changes to algorithm / dataset / tools /
+instrumentation. Source для F-report Methodology + Results timeline.
+
+Не дублирует `decisions.md` (там architectural rationale с deep context);
+history = сжатая хронология «что менялось» — 1-2 строки per entry, дата +
+subject + почему важно для отчёта. См. `CLAUDE.md §Change History` для
+scope (что попадает / что нет).
+
+Append-only. Новые записи внизу.
+
+## Format
+
+```
+- **[YYYY-MM-DD] Subject** — one-liner: что изменилось + почему важно для отчёта.
+  (Опционально: ссылка на commit / PR / decisions.md entry.)
+```
+
+## Entries
+
+### Algorithm
+
+- **[2026-05-22] OBSERVER_THRESHOLD default 8000 → 30000** — Track H Phase 8.
+  Pre-bump observer fired каждый turn ≥2 на lme-multiturn (Tier-3 window
+  ~4-7K) и съедал retention. Подняли чтобы AHC working window попадал в
+  envelope Mastra OM (~25K). См. `decisions.md 2026-05-22 H Phase 8`.
+- **[2026-05-22] Tier-2 cross-turn persistence + adaptive Tier-3 token budget**
+  — Track H Phase 9. Pre-fix Tier-2 reset'ился каждый turn → §2.1 append-only
+  contract vacuously satisfied. K_RECENT был hard message-count cap, не token
+  budget. Result: AHC ran as `K_RECENT=6` drop-tail без summarisation.
+  Fix: persist Tier-2 в `Map<SessionId, Tier2>`; `TIER3_TOKEN_BUDGET`
+  (default = 30000) → Tier-3 grows past K_RECENT до token threshold.
+  Critical change — без него AHC numbers на lme-multiturn были architectural
+  noise. См. `decisions.md 2026-05-22 H Phase 9`.
+- **[2026-05-26] Observer prompt rewrite (Mastra-style detail-preservation)**
+  — `AHC_drop_K-recent_fixed_observations`. Pre-rewrite observer выкидывал
+  численные ответы / имена (confabulation: task `01493427` → AHC "17" vs
+  ground truth "25"). Переписали под Mastra-style structured extraction
+  hint. Verification n=15 lme-multiturn: acc 0.200 → 0.333 (+13pp), но
+  43/48 observer fires вернули пустые arrays (parse-failure на новом
+  prompt). Open workstream (`current.md` Track H).
+
+### Dataset / Benches
+
+- **[2026-05-13] AssistantTraj v1 — 30 jay-canvas-seeded tasks** — Track D
+  closed. Source — `jay-canvas/apps/platform/api/e2e/golden-set/scenarios/`
+  (single-letter category codes). Replay-only через `buildRunnerFromBaseline`.
+- **[2026-05-22] AssistantTraj v2 — 50 tool-grounded tasks** — Track J3.
+  AT-v1 30 task files retired (`git rm`). 4-tool palette (`image_gen`,
+  `google_search`, `web_fetch`, `code_interpreter`). Cross-field rule:
+  `expected_tool_calls.required` ↔ `tools_available[]`. J6 sweep pending
+  (numbers в `baselines_frozen.md` Text benches table с пометкой "AT-v2").
+- **[2026-05-22] Track K — gaia-med bench (n=25 effective)** — добавлен
+  5-й bench (cross-domain agentic). 5 tools: `web_search`, `visit_webpage`,
+  `text_editor`, `python_exec`, `describe_image`. Pure-normalization grader
+  (faithful upstream GAIA, no LLM-judge). 5/30 attachment tasks filtered
+  at bake (xlsx/pdf/pdb/jsonld/docx not vendored).
+- **[2026-05-26] К-tail-2 Mastra threshold bump 30K/40K → 100K/200K** —
+  Mastra observationalMemory fire слишком aggressive на GAIA multi-tool
+  tasks (60-95K context). После bump'а: Mastra acc 0.28 → 0.40, empty
+  4/25 → 1/25. См. `baselines_frozen.md` gaia-med section.
+
+### Tools
+
+- **[2026-05-13] Tau-bench retail tools port (10 из 16 upstream)** — Track D5.
+  Subsetted out `exchange` / `payment-method-modification` / `list-product-types`
+  как 90%+ retail flows покрываются меньшим набором. Documented divergence
+  на 1-2 episodes из 10.
+- **[2026-05-22] GAIA 5-tool surface portированы из Holosophus** — Track K2.
+  `python_exec` NOT Docker-sandboxed (subprocess + 30s timeout) — caveat
+  для F-report. SearXNG self-hosted (free) + Tavily/Brave fallback.
+
+### Models / Pricing
+
+- **[2026-05-13] Actor → `openai/gpt-5.4-mini`** — supersedes
+  `gemini-3-flash-preview`. Выбрано за automatic prompt caching на OpenRouter
+  (no `cache_control` plumbing required); ~80% hit на ≥1024-token prefix.
+  Verified live: cached_tokens 0 → 2304 (80.8%) на calls 2-3. См.
+  `decisions.md 2026-05-13`.
+- **[2026-05-13] Judge → `anthropic/claude-sonnet-4.6` via OpenRouter** —
+  D4. Cross-vendor с actor (gpt-5.4-mini), vision-capable для AT image_qa.
+  `claude-sonnet-4-7` ещё не на OpenRouter — fallback на 4.6 verified live.
+
+### Instrumentation / Eval harness
+
+- **[2026-05-13] B4 — Self-hosted Langfuse stack + zero-touch bootstrap**
+  — `observability/docker-compose.yml` через `LANGFUSE_INIT_*` env vars;
+  deterministic dev keys в `.env.example`. Opt-in (`LANGFUSE_ENABLED=true`).
+- **[2026-05-13] B5 — AHC runtime integration через AI SDK v6 middleware**
+  — `ahcCoreBaseline` оборачивает `openai.chat(model)` через
+  `wrapLanguageModel({createAhcMiddleware})`; `experimental_telemetry:
+  {isEnabled, functionId: 'ahc.step'}` → AI SDK auto-spans nest'ятся под
+  `eval.task`.
+- **[2026-05-26] B6 — Langfuse session/trace/span hierarchy** — `eval.task`
+  стал root trace (ROOT_CONTEXT), `langfuse.session.id = ${bench}-${config_id}-${seed}`,
+  `eval.turn` span per `baseline.step()` / per agent round. Tool spans
+  через AI SDK auto-emission (`type=TOOL` discriminator). Verifier
+  `scripts/check-langfuse-hierarchy.ts`.
+- **[2026-05-26] B6+ Langfuse cost rollup — пере custom pricing registration**
+  — нашли что `openai/gpt-5.4-mini` отсутствовал в built-in Langfuse pricing
+  table (отсюда cost=$0 в UI). Зарегистрировали 5 моделей через
+  `POST /api/public/models` (input/output цены из `OPENROUTER_PRICING`).
+  TODO `scripts/langfuse-register-pricing.ts` для post-wipe recovery
+  (`current.md` Track B).

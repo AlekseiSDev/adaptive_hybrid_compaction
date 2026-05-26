@@ -134,6 +134,32 @@ telemetry без бизнес-логики.
 Перед добавлением — прочитай файл, не дублируй уже зафиксированное. Существующий список
 решений в `system_design.md §8` — historical; новые идут в `decisions.md`.
 
+## Change History
+
+Для F-report sake — все значимые изменения в **algorithm / dataset / tools /
+instrumentation** пишем в `docs/history.md` (append-only chronological log).
+Не дублирует `decisions.md` (там — architectural rationale); history — это
+сжатая хронология «что менялось» с датами для последующей сборки отчёта.
+
+```
+- **[YYYY-MM-DD] Subject** — one-liner: что изменилось + почему важно для отчёта.
+  (Опционально: ссылка на commit/PR/decisions.md entry.)
+```
+
+**Что попадает:** core thresholds bump (e.g. `OBSERVER_THRESHOLD` 8000→30000),
+observer/reflector prompt rewrite, dataset расширение или замена
+(AssistantTraj v1→v2, новый bench), новый tool в палитру, изменение
+grader/judge, смена actor model, новый baseline, существенный fix влияющий
+на цифры (H Phase 9 Tier-2 persistence).
+
+**Что НЕ попадает:** bug fixes без изменения чисел, doc edits, refactoring
+без изменения поведения, новые тесты, dependency bumps, CI/tooling правки.
+
+Перед добавлением — прочитай `docs/history.md`, не дублируй. Если изменение
+тянет и architectural rationale (`decisions.md`), и chronological note
+(`history.md`) — пиши в оба, history-entry будет 1-line summary со ссылкой
+на decisions.md.
+
 ## Sub-agents
 
 Встроенные сабагенты Claude Code как **context firewall**: parent держит план, child
