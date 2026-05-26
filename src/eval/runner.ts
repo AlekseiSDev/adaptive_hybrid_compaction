@@ -16,7 +16,7 @@ import {
 } from './adapters/assistant-traj.js'
 import { defaultLlmJudge } from './adapters/assistant-traj.judge.js'
 import { gaiaAdapter, gaiaGrader } from './adapters/gaia-med.js'
-import { resolveGaiaRunner } from './adapters/gaia-med/index.js'
+import { makeGaiaMastraAgentRunner, resolveGaiaRunner } from './adapters/gaia-med/index.js'
 import {
   createLoCoMoGrader,
   defaultLocomoJudge,
@@ -230,6 +230,8 @@ function makeMastraOmRunner(): Runner {
 // Track I baseline — full Mastra Agent + tools. Bench-aware dispatch:
 //   - tau-bench-retail-med → makeTauBenchMastraAgentRunner (episode loop с
 //     registered retail tools, runTauEpisodeMastra)
+//   - gaia-med → makeGaiaMastraAgentRunner (single-shot с 5 GAIA tools,
+//     Track K-tail 2026-05-26)
 //   - text benches (assistant-traj / lme-multiturn / locomo-med) → generic
 //     buildRunnerFromBaseline path с пустым tools (tools registration wiring
 //     стоит на месте через MastraAgentDeps.tools но не задействован на тексте).
@@ -246,12 +248,16 @@ function makeMastraAgentRunner(): Runner {
   })
   const textRunner = buildRunnerFromBaseline(textBaseline)
   const tauRunner = makeTauBenchMastraAgentRunner({ apiKey })
+  const gaiaRunner = makeGaiaMastraAgentRunner({ apiKey })
 
   return {
     name: 'mastra-agent',
     async execute(conv, ctx) {
       if (ctx.bench === 'tau-bench-retail-med') {
         return tauRunner.execute(conv, ctx)
+      }
+      if (ctx.bench === 'gaia-med') {
+        return gaiaRunner.execute(conv, ctx)
       }
       return textRunner.execute(conv, ctx)
     },

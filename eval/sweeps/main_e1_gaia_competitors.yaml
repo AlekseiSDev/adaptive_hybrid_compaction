@@ -1,0 +1,23 @@
+name: main_e1_gaia_competitors
+# Track K-tail (2026-05-26) — competitor sweep на gaia-med (n=25).
+# 2 baselines (no AHC): vanilla actor с tools vs Mastra Agent с tools+Memory.
+#
+# Live deps:
+#   - OPENROUTER_API_KEY (gpt-5.4-mini actor для обоих baselines)
+#   - WEB_SEARCH_AUTOSELECT=true + SEARXNG_URL=http://localhost:8080
+#   - LANGFUSE_ENABLED=true + langfuse stack up (для B6 traces — lf-traces verify)
+#
+# Pre-run:
+#   docker compose -f observability/searxng-docker-compose.yml up -d
+#   docker compose -f observability/docker-compose.yml up -d  # langfuse
+#   set -a && . ./.env && set +a
+#
+# Cost est: 2 × 25 × ~$0.04-0.08 = $2-4. budget_usd=30 — comfortable headroom.
+
+benches:
+  - gaia-med
+configs:
+  - { id: gaia_vanilla, baseline: gaia_bench_agent }
+  - { id: gaia_mastra, baseline: mastra-agent }
+seeds: [42]
+budget_usd: 30

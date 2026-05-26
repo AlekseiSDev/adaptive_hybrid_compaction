@@ -19,9 +19,15 @@ import {
   GAIA_ACTOR_DEFAULT_MODEL,
   runGaiaTask,
 } from './agent-runner.js'
+import {
+  GAIA_MASTRA_ACTOR_DEFAULT_MODEL,
+  runGaiaTaskMastra,
+} from './mastra-agent-runner.js'
 
 export { runGaiaTask, GAIA_ACTOR_DEFAULT_MODEL } from './agent-runner.js'
 export type { RunGaiaTaskDeps, GaiaTaskResult } from './agent-runner.js'
+export { runGaiaTaskMastra, GAIA_MASTRA_ACTOR_DEFAULT_MODEL } from './mastra-agent-runner.js'
+export type { RunGaiaTaskMastraDeps, GaiaTaskResultMastra } from './mastra-agent-runner.js'
 
 export type MakeGaiaBenchRunnerOpts = {
   apiKey: string
@@ -68,6 +74,60 @@ export function makeGaiaBenchRunner(opts: MakeGaiaBenchRunnerOpts): Runner {
         // GAIA per-step token accounting not split (totals at task level
         // via result.totals → RunRecord.totals). turns[] left empty;
         // future K-tail может wire per-step telemetry если потребуется.
+        turns: [],
+        errors: result.errors.map((e) => ({
+          turn_index: e.turn_index,
+          kind: e.kind,
+          message: e.message,
+        })),
+        totals: result.totals,
+        cost_usd: result.cost_usd,
+      }
+    },
+  }
+}
+
+// Track K-tail (2026-05-26): Mastra Agent variant for `baseline:
+// mastra-agent` × `bench: gaia-med`. Parallel к makeGaiaBenchRunner
+// (vanilla / AHC) — separate factory keeps Mastra wiring clean.
+export type MakeGaiaMastraAgentRunnerOpts = {
+  apiKey: string
+  baseURL?: string
+  actorModelId?: string
+  maxSteps?: number
+}
+
+export function makeGaiaMastraAgentRunner(
+  opts: MakeGaiaMastraAgentRunnerOpts,
+): Runner {
+  const baseURL = opts.baseURL ?? 'https://openrouter.ai/api/v1'
+  const envActor = process.env['AHC_ACTOR_MODEL']
+  const actorModelId =
+    opts.actorModelId ??
+    (envActor !== undefined && envActor.length > 0
+      ? envActor
+      : GAIA_MASTRA_ACTOR_DEFAULT_MODEL)
+
+  return {
+    name: 'mastra-agent',
+    async execute(_conv: Conversation, ctx: RunnerContext): Promise<RunnerResponse> {
+      const task = ctx.task.input as GaiaTask
+      const result = await runGaiaTaskMastra(task, {
+        actorModel: {
+          apiKey: opts.apiKey,
+          providerId: 'openrouter',
+          modelId: actorModelId,
+          url: baseURL,
+        },
+        // System prompt = GAIA_DRIVER_SYSTEM faithful — same that
+        // gaia_bench_agent uses → apples-to-apples cross-baseline.
+        actorSystem: GAIA_DRIVER_SYSTEM,
+        actorModelId,
+        ...(opts.maxSteps !== undefined ? { maxSteps: opts.maxSteps } : {}),
+        ...(ctx.instrumentation !== undefined ? { emit: ctx.instrumentation } : {}),
+      })
+      return {
+        text: result.finalText,
         turns: [],
         errors: result.errors.map((e) => ({
           turn_index: e.turn_index,
