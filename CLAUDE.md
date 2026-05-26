@@ -175,6 +175,13 @@ telemetry без бизнес-логики.
 - **Не добавляй фичи "на всякий случай".** MVP scope короткий; всё, что не в
   `system_design.md §7`, требует обоснования.
 - **Не вводи абстракции до второго use-case.** Three similar lines > premature abstraction.
+- **Не останавливайся посреди утверждённого плана.** После approval из `/plan-mode` выполняй
+  все шаги до конца — не запрашивай подтверждение на каждом step. «Поехали» / «сделай все шаги»
+  — авторизация **всего** плана, не каждой фазы отдельно. Исключение: экстренные ситуации,
+  требующие явного решения юзера (destructive action не в плане, unexpected auth failure,
+  fundamental scope ambiguity surface'нувшаяся mid-execution) — тогда короткий ask и продолжаем.
+  Симметрично [`feedback_no_escalation`](memory) для внешних ожиданий: poll, не паузь.
+  Verify.sh end-of-phase — gate, не permission checkpoint.
 
 ## Git Discipline
 

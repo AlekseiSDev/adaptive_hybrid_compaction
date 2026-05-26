@@ -34,3 +34,20 @@ observability/.langfuse/
 
 # Generated images from /api/chat create_image tool (kept ephemeral; dir tracked via .gitkeep)
 src/ui/public/generated/*.png
+
+# Report build output — entirely local. report/ is the live working
+# mirror (regenerated each build); results/<YYYY-MM-DD_HHMM>/ is a
+# local per-build snapshot archive. Neither tracked in git — the
+# report PDF/source is a build artifact, not source-of-truth.
+report/
+results/
+
+# Mastra local SQLite stores from tests
+.mastra/
+
+# Judge caches are data, not source. Each bench accumulates LLM-judge calls
+# locally between runs to save API spend; not authoritative for audit.
+benchmarks/*/judge_cache.json
+
+# Ad-hoc investigation probe scripts (one-shot, not part of reproducibility).
+scripts/probe-*.ts

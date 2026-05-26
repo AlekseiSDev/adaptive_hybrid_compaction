@@ -302,17 +302,26 @@ K_RECENT=6 turns старые сессии переходят Tier-3 → Tier-2 
 3 сессий — выше `OBSERVER_THRESHOLD=4000` override в sweep YAML.
 
 **Acceptance signal** Phase 1: observer event density ≥80% per cell.
-Verified — 100% density на `ahc_full × lme-multiturn`.
+Verified — 100% density на `ahc_full × lme-multiturn`. **Caveat (H8):**
+до 2026-05-22 enrichTurnsWithEvents в runner двойного-аггрегировал
+observer events (PATH A через `ahc_core` + PATH B через instrumentation
+callback) — реальная density вдвое ниже репортированной. Числа выше
+не пересчитаны, но bug пофикшен в runner.ts.
 
 **Trade-off** — accuracy на lme-multiturn падает: AHC 0.13 на n=15 vs
 `full_context` / `mastra_om` 0.50 на n=10. На пересечении тех 10 тасков,
 что все три baseline'а успели обработать до budget-halt'а, AHC = 0.20.
-Compaction выкидывает информацию, нужную для ответа. Known limitation,
+Compaction выкидывает информацию, нужную для ответа. Mastra OM держит
+~25K tok рабочее окно перед сжатием — за счёт этого сохраняет точные
+факты (числа, имена), которые AHC при `OBSERVER_THRESHOLD=4000` сжимал
+на каждом turn'е. Default подняли до 30000 в H Phase 8 — сравнимо с
+Mastra envelope. Known limitation на старой калибровке —
 `docs/runs/h_followup_audit.md`.
 
 **Где код**: `src/eval/adapters/longmemeval-multiturn.ts` (~70 LOC),
 sweep `eval/sweeps/main_e1_text_lme_mt.yaml` (override
-`OBSERVER_THRESHOLD: 4000`).
+`OBSERVER_THRESHOLD: 4000` — историч артефакт того run'а, новый default
+30000).
 
 System prompt + judge + tools=0 — те же, что у lme-med (см. caveat
 выше про `DEFAULT_AGENT_SYSTEM_PROMPT`).
