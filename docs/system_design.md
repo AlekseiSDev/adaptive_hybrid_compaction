@@ -338,6 +338,9 @@ numbers процитированы; повторно интегрировать 
 - **Track F** — Course report writing (требует E)
 - **Track G** — Demo UI (требует Track A полностью + B2 telemetry; параллелится с E/F)
 - **Track H** — Follow-up sweeps (cross-model / multi-seed / ablations / activation gates) — extends E, blocks F-report numbers beyond single-seed headline. См. `docs/design/H_ablations_and_TODOs.md`, `docs/runs/h_followup_audit.md`.
+- **Track I** — `mastra-agent` baseline (full Mastra Agent + tools) — additive baseline closing tau-bench framework-native gap (vanilla `tau_bench_agent` vs `tau_bench_agent_ahc` had no industry-standard agentic competitor). Parallel to E/H; produces cross-framework Pareto row для F-report. См. `docs/design/I_mastra_agent.md`.
+- **Track J** — AssistantTraj v2 (tool-grounded, n=50). AT-v1 (30 text-only) retire; mocked 4-tool palette (`image_gen`, `google_search`, `web_fetch`, `code_interpreter`); fixture-replay default, live за `AT_TOOL_MODE=live` (запрещён в CI). Adds tool-call coherence axis к AT (sister-метрика к content-quality). Source seed — jay-canvas e2e golden-set. Параллелится с E/H/I; cutover sweep YAML row меняется в J6. См. `docs/design/J_at_tools.md`.
+- **Track K** — `gaia-med` bench (cross-domain agentic, n=30 stratified). GAIA (Mialon et al. 2023, CC BY) — пятый bench в evaluation-протоколе, закрывает gap в agentic axis: tau-bench-retail-med узко-доменный (retail / 10 tools), GAIA cross-domain (research + web + code + multimodal, 5-tool surface). Knowledge accumulation between tool calls — другая нагрузка на observer / offloader чем env-state tau. Local snapshot из neighbour Holosophus (`/Users/Aleksei/Projects/ai_scientists/Holosophus/holosophos/evals_and_reports/data/`) → vendored в `references/gaia/`. Wall-clock ~6-7 дней; параллелится с E/H/I/J. См. `docs/design/K_gaia.md`.
 
 ### 7.2 Phase schedule с описанием шагов
 
@@ -516,6 +519,110 @@ headline-summary, **с provenance disclosure** (fully agent-generated, без hu
   frontend sidebar показывает live class, observations, scratchpad size, recall events,
   current flags. Consume'ит тот же telemetry поток, что Langfuse (Track B). Exit: видно
   как AHC компактит во время real conversation.
+
+**Track I — `mastra-agent` baseline.** Additive baseline — Mastra `Agent` с
+зарегистрированными tools и native multi-step loop. Прогон по 3 mt-style бенчам
+(`assistant-traj`, `lme-multiturn`, `tau-bench-retail-med`). Closes tau-bench
+framework-native competitor gap (до Track I на tau стояли только `tau_bench_agent`
+vanilla + `tau_bench_agent_ahc`). Wall-clock ~4 дня, бюджет $20-31. Подробности —
+`docs/design/I_mastra_agent.md`.
+
+- **I1. Mastra Agent text-bench scaffold (1 день).** `mastraAgentBaseline` в
+  `src/eval/baselines/mastra_agent.ts` — `Baseline` impl c Memory + LibSQL +
+  OpenRouter wire, копирует shape `mastra_om.ts`, но `agent.generate()` принимает
+  `tools` параметр (пустой для text-bench, готов к I2). Registered в runner
+  registry. TDD: unit tests + live smoke на 1 lme-multiturn task (cost > 0,
+  input_tokens > 0).
+- **I2. Tau-bench Mastra adapter (2 дня).** Step 0 investigation
+  `docs/investigations/mastra-tools-api.md` (Mastra tools API shape).
+  `runTauEpisodeMastra` в `src/eval/adapters/tau-bench-retail/mastra-agent-runner.ts`
+  — mirror `runTauEpisode` без AHC middleware. `aiSdkToolToMastra(name, tool)`
+  translator для 10 retail tools, closures over `envState` сохраняются. TDD:
+  unit на translator + live smoke 1 retail episode с ≥1 mutating tool call.
+- **I3. Sweep run + audit (0.5 день).** `eval/sweeps/main_e1_mastra_agent.yaml`
+  (3 bench × seed=42, $30 budget) + `eval/sweeps/smoke_mastra_agent.yaml`.
+  `docs/runs/i_mastra_agent_audit.md` — числа per bench, сравнение vs
+  `mastra_om` (chassis consistency) + vs `tau_bench_agent_ahc` (main insight).
+  `baselines_frozen.md` дополнен.
+
+**Track J — AssistantTraj v2 (tool-grounded, n=50).** Замена AT-v1 30 text-only
+задач на 50 tool-grounded с обязательным ≥1 tool-call per task. 4-tool palette
+(`image_gen` / `google_search` / `web_fetch` / `code_interpreter`), fixture-replay
+дефолт (cache-invariant A/B), live за `AT_TOOL_MODE=live` (CI guard throws).
+Wall-clock ~8 дней, бюджет ≤$5 (J6 smoke). Source — jay-canvas e2e golden-set.
+Подробности — `docs/design/J_at_tools.md`.
+
+- **J1. Schema patch + cross-field rule (1 день).** Расширение
+  `AssistantTrajTaskSchema` с superRefine `tools_available ↔ expected_tool_calls.required`,
+  новый `ToolFixtureFileSchema` (sidecar), `tool_fixtures_ref?` optional поле. Type
+  plumbing в `src/eval/types.ts`: `Conversation.tools?`, `Score.tool_coherence?`,
+  `RunnerResponse.toolCalls?`. Один новый valid + один invalid fixture (D1 pattern).
+  Existing 30 AT-v1 tasks должны продолжать parse'иться (rule применяется только
+  когда `expected_tool_calls` непустой).
+- **J2. Tool runtime + baseline forwarding (2 дня).**
+  `src/eval/adapters/assistant-traj.tools.ts` — 4 `tool()` defs + `ReplayDispatcher`
+  (default) + `ToolReplayMissError`; `tools-live.ts` (lazy) — OpenAI Images /
+  Brave / fetch+readability / pyodide. CI guard. Forward `conv.tools` через
+  `baseline.ts` + 4 baselines (`full_context`, `anthropic_compact`, `mastra_om`,
+  `mastra_agent` — последний pre-wired для tools? в deps, нужно дотянуть до
+  `agent.generate`). `RunnerResponse.toolCalls` собираются из provider response.
+- **J3. Corpus port + AT-v1 retire (1.5 дня).** Extend existing
+  `assistant-traj.import.ts`: map jay-canvas tool names в нашу 4-палитру, DROP
+  out-of-palette, emit paired `tool_fixtures/<id>.json`. Hand-extend turns до
+  5–15 (D §3.1 carried). `scripts/import-jay-canvas-tools.ts` — thin CLI runner.
+  `git rm` AT-v1 30 task files + AT-v1 attachments одним коммитом.
+- **J4. Synthetic top-up to n=50 (1 день).** `scripts/capture-at-fixture.ts` —
+  live → fixture trace recorder. Category-rebalance per `J_at_tools.md §5.1`
+  (image_qa:8/code_iter:14/research_write:14/mixed:14). 100% manual review (D §3.3).
+  Validator gate: `source:'synthetic'` требует `provenance.review_signoff` non-empty.
+- **J5. Grader tool-coherence + cache invariance test (1 день).**
+  `evaluateToolCalls()` helper в `assistant-traj.ts`. `argsMatch`: `exact`/`subset`/absent;
+  `semantic` deferred (J_at_tools.md Q2). Aggregation: `final.primary = content.primary
+  × (tool_coherence.pass ? 1.0 : 0.0)` — hard-gate default; revisit в J6 (Q1).
+  `score.tool_coherence` всегда populated на AT. `assistant-traj.cache.test.ts` —
+  bit-stability tool-result bytes (per inv §10.1).
+- **J6. Sweep cutover + AT-v2 baseline refresh (1.5 дня).**
+  `eval/sweeps/main_e1_*.yaml` row меняется на n=50; smoke 1 task per baseline (zero
+  exit, non-null primary). `docs/runs/at_v2_baselines.md` (new) — per-baseline
+  numbers, diff vs AT-v1. `baselines_frozen.md` получает retire note. Calibration
+  human_scores.json пересчитывается на 5 AT-v2 task'ах. Track D §9 compaction-axis
+  table row для AT обновляется (one-line diff).
+
+**Track K — `gaia-med` bench.** Cross-domain agentic bench, пятый
+в evaluation-протоколе. Закрывает agentic axis gap (tau узко-доменный
+retail; GAIA cross-domain research+web+code+multimodal). Medium scope:
+5-tool surface, n=30 stratified subset из Holosophus local snapshot,
+skipping xlsx/pdf attachment tasks (effective n ≈ 23-26). Pure-normalization
+grader (no LLM-judge — faithful upstream GAIA convention). Wall-clock
+~6-7 дней, бюджет $30-50. См. `docs/design/K_gaia.md`.
+
+- **K1. Bench scaffold (1 день).** `scripts/bake-gaia.ts` (Holosophus
+  snapshot → `benchmarks/gaia/tasks/gaia_*.json`, filter attachment-tasks);
+  `src/eval/adapters/gaia-med.schema.ts` (Zod); `src/eval/adapters/gaia-med.ts`
+  (`loadTasks`, `prepare`, `createGaiaGrader` с numeric/list/text
+  normalization port из `get_gaia_metrics.py:88-127`). TDD seed: 5 unit
+  cases на grader (numeric/list/text/mismatch/missing-Final-prefix).
+  References vendored snapshot в `references/gaia/data/` с LICENSE note.
+- **K2. Tools port (3 дня).** 5 tools в `src/eval/adapters/gaia-tools/`:
+  `web-search.ts` (Tavily API + Brave fallback), `visit-webpage.ts`
+  (fetch + readability), `text-editor.ts` (read-only, 100KB cap),
+  `python-exec.ts` (`child_process.spawn` + 30s timeout, NOT Docker —
+  caveat documented), `describe-image.ts` (vision LLM via OpenRouter).
+  Каждый tool — unit test (mocked) + 1 live-gated test. Pre-work: проверить
+  `TAVILY_API_KEY` / `BRAVE_API_KEY` в env, иначе ask user before K2 coding.
+- **K3. Agent runner + dispatch (1.5 дня).** `runGaiaTask` в
+  `src/eval/adapters/gaia-med/agent-runner.ts` — mirror
+  `tau-bench-retail/agent-runner.ts` shape с `generateText({tools,
+  stopWhen: stepCountIs(20)})`. Bench dispatch в `src/eval/runner.ts`
+  для `bench='gaia-med'`. Investigation step 0: support tools у
+  `fullContextBaseline` / `mastraOmBaseline` — current `Baseline.step`
+  contract возвращает text-only. Решение (per-baseline-tool-passthrough
+  vs отдельный runner per-bench) определяется в K3 plan.
+- **K4. Sweep + audit (1 день).** `eval/sweeps/{smoke,main_e1}_gaia.yaml`;
+  `docs/runs/k_gaia_audit.md` с per-level acc + cache rate + per-tool
+  usage distribution + caveats (xlsx/pdf skipped, exact-match strictness,
+  python_exec sandbox limitation). Acceptance: status=complete на cell,
+  err_rate=0%, ≥30% acc на level-1.
 
 ### 7.3 Cut points (milestones)
 
