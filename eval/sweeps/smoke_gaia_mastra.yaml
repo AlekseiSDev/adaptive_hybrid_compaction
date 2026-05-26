@@ -1,0 +1,16 @@
+name: smoke_gaia_mastra
+# Track K-tail diagnostic (2026-05-26) — short Mastra-only smoke,
+# verifies n_tool_calls + n_steps в Score.secondary через bench_extras
+# pipeline. Used для diagnosis root-cause Mastra acc=0.16 на full sweep.
+#
+# Live deps:
+#   - OPENROUTER_API_KEY (gpt-5.4-mini actor + Memory observationalMemory)
+#   - WEB_SEARCH_AUTOSELECT=true + SEARXNG_URL=http://localhost:8080
+#   - LANGFUSE_ENABLED=true (optional but helpful — see lf-traces skill)
+
+benches:
+  - gaia-med
+configs:
+  - { id: gaia_mastra_diag, baseline: mastra-agent }
+seeds: [42]
+budget_usd: 3

@@ -43,7 +43,14 @@ const FALLBACK_PRICING: ModelPricing = {
 }
 
 const DEFAULT_STORAGE_ROOT = './.mastra'
-const DEFAULT_MAX_STEPS = 20
+// K-tail diagnostic 2026-05-26: Mastra hits step cap БЕЗ финального текста
+// если actor не decided "Final answer:" к cap'у — return last step result
+// (often empty when last step was tool_call awaiting result). На diagnostic
+// 5-task smoke 3/5 tasks упёрлись в 20-cap с empty response. Bumped к 40
+// для room to converge. AI SDK vanilla (gaia_bench_agent) использует
+// stopWhen: stepCountIs(20) — иначе ведёт себя, AI SDK forces text response
+// at cap. Mastra cost-per-step ≈ $0.02 → 25 × 40 steps ≈ $0.50 cap upper bound.
+const DEFAULT_MAX_STEPS = 40
 
 function safeTaskFile(taskId: string): string {
   return taskId.replace(/[^a-zA-Z0-9_-]/g, '_')

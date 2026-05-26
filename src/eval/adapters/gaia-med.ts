@@ -177,26 +177,43 @@ export const gaiaAdapter: BenchAdapter = {
  * compare to task.expected. `judge_cost_usd: 0` always (no LLM call).
  *
  * `secondary` carries diagnostic context for post-hoc audit:
- *   - extracted: what we parsed from response text
  *   - level: 1 | 2 | 3 (numeric for downstream per-level aggregation)
+ *   - extracted_empty: 1 if response had no recoverable answer
+ *   - n_steps / n_tool_calls: lifted from RunnerResponse.bench_extras
+ *     (когда runner предоставляет — gaia_bench_agent + mastra-agent на
+ *     gaia-med). Track K-tail diagnostic 2026-05-26 — нужно различать
+ *     tool-call-zero (root cause A) от memory-balloon (root cause B).
  */
+type GaiaBenchExtras = {
+  n_steps?: number
+  n_tool_calls?: number
+}
+
 export const gaiaGrader: Grader = {
   // Sync internally — wrapped in Promise to satisfy async Grader contract.
   // No LLM call, no `await` needed.
   score: (task: Task, response: RunnerResponse): Promise<Score> => {
     const item = task.input as GaiaTask
+    const extras = (response.bench_extras as GaiaBenchExtras | undefined) ?? {}
+    const diagSecondary: Record<string, number> = {
+      level: Number.parseInt(item.level, 10),
+    }
+    if (extras.n_steps !== undefined) diagSecondary['n_steps'] = extras.n_steps
+    if (extras.n_tool_calls !== undefined) {
+      diagSecondary['n_tool_calls'] = extras.n_tool_calls
+    }
     const extracted = getFinalAnswer(response.text)
     if (extracted.trim().length === 0) {
       return Promise.resolve({
         primary: 0,
-        secondary: { level: Number.parseInt(item.level, 10), extracted_empty: 1 },
+        secondary: { ...diagSecondary, extracted_empty: 1 },
         judge_cost_usd: 0,
       })
     }
     const correct = answerScorer(extracted, item.answer)
     return Promise.resolve({
       primary: correct ? 1.0 : 0.0,
-      secondary: { level: Number.parseInt(item.level, 10) },
+      secondary: diagSecondary,
       judge_cost_usd: 0,
     })
   },

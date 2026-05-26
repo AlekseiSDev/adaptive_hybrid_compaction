@@ -82,6 +82,11 @@ export function makeGaiaBenchRunner(opts: MakeGaiaBenchRunnerOpts): Runner {
         })),
         totals: result.totals,
         cost_usd: result.cost_usd,
+        // Diagnostic side-channel — gaiaGrader lifts to Score.secondary.
+        bench_extras: {
+          n_steps: result.n_steps,
+          n_tool_calls: result.n_tool_calls,
+        },
       }
     },
   }
@@ -136,6 +141,11 @@ export function makeGaiaMastraAgentRunner(
         })),
         totals: result.totals,
         cost_usd: result.cost_usd,
+        // K-tail diagnostic — gaiaGrader lifts to Score.secondary.
+        bench_extras: {
+          n_steps: result.n_steps,
+          n_tool_calls: result.n_tool_calls,
+        },
       }
     },
   }
