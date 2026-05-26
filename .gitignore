@@ -51,3 +51,9 @@ benchmarks/*/judge_cache.json
 
 # Ad-hoc investigation probe scripts (one-shot, not part of reproducibility).
 scripts/probe-*.ts
+
+# Upstream bench datasets vendored locally for bake-*.ts to consume.
+# longmemeval_s.json alone is ~265MB — far above GitHub's push limit.
+# User fetches these from upstream; bake-{longmemeval,locomo}.ts is the source-of-truth.
+references/lme/data/
+references/locomo/data/

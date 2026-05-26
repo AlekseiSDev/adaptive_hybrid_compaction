@@ -114,7 +114,7 @@ def main() -> int:
         )
 
     ax.set_xlabel("Cost per task (USD)")
-    ax.set_ylabel("Mean accuracy (n = 30 × 2 seeds = 60)")
+    ax.set_ylabel("Mean accuracy (n = 20, seed = 42)")
     ax.set_title("AssistantTraj — accuracy × cost (E1 main sweep)")
     ax.grid(True, alpha=0.3, linestyle="--", linewidth=0.5)
     ax.set_axisbelow(True)
