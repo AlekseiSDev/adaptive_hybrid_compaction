@@ -1,9 +1,10 @@
 # Benchmarks (datasets reference)
 
-Сводная справка по 4 датасетам, на которых гоняется AHC eval-harness.
+Сводная справка по 5 датасетам, на которых гоняется AHC eval-harness.
 Источник истины по дизайну — `docs/design/D_assistant-traj.md` (§9 — eval axes
-и почему каждый bench выбран). Этот файл — практический справочник
-«что/где/как» без архитектурных рассуждений.
+и почему каждый bench выбран). Пятый bench `gaia-med` добавлен Track K
+(`docs/design/K_gaia.md`, 2026-05-26). Этот файл — практический
+справочник «что/где/как» без архитектурных рассуждений.
 
 ## Сводная таблица
 
@@ -14,6 +15,7 @@
 | LongMemEval-multiturn | `lme-multiturn` | 120 | 41–63 (med ~49) | 0 | тот же `answer` | тот же judge | тот же `DEFAULT_AGENT_SYSTEM_PROMPT` |
 | LoCoMo-med | `locomo-med` | 25 | 1 (single-shot) | 0 | `answer` + `evidence[]` dia_ids | LLM-judge yes/no (single template) → 0/1 | provided (`LOCOMO_DRIVER_SYSTEM`) |
 | τ-bench retail | `tau-bench-retail-med` | 30 | 1–30 live (типично 8–20) | 10 retail | `expected_end_state` (env diff: orders + users) | Deterministic — `calculateReward` → {0, 1} | provided + wrapped (retail wiki + `buildSystemPrompt`) |
+| GAIA-med | `gaia-med` | 25 (eff) | 1 (single-shot, multi-step internal) | 5 GAIA | `answer` string | Pure-normalization exact-match → {0, 1} (no LLM judge) | provided (`GAIA_DRIVER_SYSTEM` verbatim Holosophus) |
 
 Легенда колонок: `Turns` — количество driver calls per task (single-shot
 = 1 call с историей в user-msg). `Tools` — кол-во tool definitions
@@ -541,6 +543,80 @@ n=30 не требуется). User-simulator имеет свой собстве
 policy + наш agentic framing, потому что tau — единственный live
 agentic bench, ему нужны явные правила compaction-awareness и
 tool-usage policy.
+
+---
+
+## 5. GAIA-med (Track K)
+
+### Название и роль
+
+`gaia-med` — n=25 stratified subset из GAIA validation split (Mialon et al.
+2023, `gaia-benchmark/GAIA` на HuggingFace, CC BY 4.0). Cross-domain
+agentic bench: research questions с verifiable ground truth, требующие
+multi-step tool use (web search → page visit → python compute → image
+description integration). Закрывает gap в eval axes: tau-bench
+узко-domain retail, GAIA cross-domain.
+
+### Что покрывает
+
+- 3 difficulty levels (upstream): 1=easy single-lookup, 2=medium chained,
+  3=hard multi-tool. Distribution в subset: level 1=8, level 2=12, level 3=5
+  (после attachment filter, original snapshot 30 → 25 effective).
+- 5-tool surface: `web_search`, `visit_webpage`, `text_editor`,
+  `python_exec`, `describe_image`.
+
+### Где смотреть
+
+- Baked tasks: `benchmarks/gaia/tasks/gaia_*.json` × 25.
+- Vendored snapshot: `references/gaia/data/gaia_validation_30.json`
+  (Holosophus 2026-05-26 snapshot).
+- Bake script: `scripts/bake-gaia.ts` (filter `has_file:true` tasks per
+  Medium scope).
+- Schema: `src/eval/adapters/gaia-med.schema.ts`.
+- Adapter + grader + system prompt:
+  `src/eval/adapters/gaia-med.ts`.
+- Tools: `src/eval/adapters/gaia-tools/{web-search,visit-webpage,
+  text-editor,python-exec,describe-image}.ts`.
+- Agent runner: `src/eval/adapters/gaia-med/agent-runner.ts`.
+- Design: `docs/design/K_gaia.md`.
+- Audit: `docs/runs/k_gaia_audit.md`.
+
+### Как скорится
+
+**Pure-normalization exact-match** (port `get_gaia_metrics.py:88-127`):
+- Numeric path: strip `$,%,`, `parseFloat`, equality.
+- List path: split by `,;`, per-element normalize (numeric or text),
+  set-equality strict-position.
+- Text path: lowercase + whitespace/punctuation strip, equality.
+
+Extract via "Final answer:" prefix (fallback to full text). Decision:
+no LLM judge per `decisions.md 2026-05-22` (faithful Mialon et al.
+convention; cheaper + no `judge_cache.json`).
+
+### Tools
+
+5 AI SDK v6 `tool({...})` definitions, mirroring tau-bench shape (no Zod —
+`jsonSchema()` per `decisions.md 2026-05-13 D5`):
+
+| # | Tool | Provider | Env fallback |
+|---|---|---|---|
+| 1 | `web_search` | SearXNG → Tavily → Brave → mock | `SEARXNG_URL` / `TAVILY_API_KEY` / `BRAVE_API_KEY` / `MOCK_WEB_SEARCH=true` |
+| 2 | `visit_webpage` | cheerio HTML extract | — |
+| 3 | `text_editor` | read-only fs (workspace-rooted, path-traversal guard) | — |
+| 4 | `python_exec` | `child_process.spawn` + 30s timeout + restricted env | `python3` on PATH |
+| 5 | `describe_image` | OpenRouter vision model (gpt-5.4-mini) | `OPENROUTER_API_KEY` |
+
+### System prompt
+
+**Provided** — `GAIA_DRIVER_SYSTEM` verbatim из Holosophus
+`run_gaia.py:25-44`. Template wraps question с `===` delimiters. Не
+обёрнут в `buildSystemPrompt` (отличается от tau-bench retail) — GAIA
+prompt prescriptive enough на своё (`"Final answer:"` format requirement).
+
+### Tools (live deps)
+
+`OPENROUTER_API_KEY` (actor) + один из 4 web_search providers. Без
+provider — `MOCK_WEB_SEARCH=true` validates pipeline только (accuracy = 0).
 
 ---
 

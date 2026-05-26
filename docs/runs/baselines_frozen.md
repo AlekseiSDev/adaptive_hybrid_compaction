@@ -34,6 +34,16 @@ cache_hit_e3}/` (gitignored). Actor = `gpt-5.4-mini` через OpenRouter ес�
 (`main_e1_mastra_agent.yaml budget_usd=35`). Tau cell split в отдельный
 `main_e1_mastra_agent_tau.yaml` — см. tau-bench retail table ниже.
 
+### gaia-med (Track K, 2026-05-26)
+
+| bench | baseline | n | acc | cost_$ | notes |
+|---|---|---|---|---|---|
+| gaia-med | gaia_bench_agent | — | — | — | K4 main sweep DEFERRED — blocked on web_search provider (`SEARXNG_URL` / `TAVILY_API_KEY` / `BRAVE_API_KEY`). Pipeline validated в smoke (n=1, status=complete, $0.0073). См. `docs/runs/k_gaia_audit.md`. |
+| gaia-med | gaia_bench_agent_ahc | — | — | — | Same blocker. AHC variant — full feature flags + middleware wrap actor. |
+
+Effective n=25 (5/30 attachment tasks filtered at bake — xlsx/pdf/pdb/jsonld/docx
+not vendored).
+
 Caveats:
 - `lme-multiturn` — наше расширение upstream (см. `docs/benchmarks.md §2`);
   budget halt урезал FC/mastra до n=10, anthropic_compact не гоняли.

@@ -1,0 +1,17 @@
+name: smoke_gaia
+# Track K smoke — 1 GAIA task × vanilla agent, pipeline check (K3 acceptance).
+# Use with --max-tasks-per-cell=1 --concurrency=1.
+#
+# Live deps:
+#   - OPENROUTER_API_KEY (actor model)
+#   - one of: SEARXNG_URL / TAVILY_API_KEY / BRAVE_API_KEY / MOCK_WEB_SEARCH=true
+# Without web_search provider, set MOCK_WEB_SEARCH=true to validate pipeline
+# (accuracy will be 0 — search returns fixture results).
+
+benches:
+  - gaia-med
+configs:
+  - id: gaia_vanilla
+    baseline: gaia_bench_agent
+seeds: [42]
+budget_usd: 5

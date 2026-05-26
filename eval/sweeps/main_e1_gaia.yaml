@@ -1,0 +1,24 @@
+name: main_e1_gaia
+# Track K main sweep — n=25 effective × {vanilla, AHC-full}, seed=42.
+# Budget cap $50 — covers ~2 cells × ~25 tasks × ~$0.50-$1/task with headroom.
+#
+# Live deps:
+#   - OPENROUTER_API_KEY (gpt-5.4-mini actor)
+#   - one of: SEARXNG_URL / TAVILY_API_KEY / BRAVE_API_KEY for real web_search
+# MOCK_WEB_SEARCH=true gives pipeline-only smoke (acc=0); not suitable for
+# real-accuracy measurement.
+
+benches:
+  - gaia-med
+configs:
+  - id: gaia_vanilla
+    baseline: gaia_bench_agent
+  - id: gaia_ahc_full
+    baseline: gaia_bench_agent_ahc
+    ahc_flags:
+      TASK_AWARE_EXTRACTION: true
+      TYPE_AWARE_OFFLOAD: true
+      TRAJECTORY_CLASSIFIER: true
+      RECALL_TOOL: true
+seeds: [42]
+budget_usd: 50

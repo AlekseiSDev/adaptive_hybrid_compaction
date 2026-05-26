@@ -188,6 +188,12 @@ All `summary.json.status == 'complete'`, no `ErrorRecord` rate > 0%.
    discrimination → see H6.1). Update Track I (2026-05-22): cross-framework
    competitor `mastra-agent` теперь runs на tau-bench-retail-med — see
    `docs/runs/i_mastra_agent_audit.md`.
+6. **GAIA-med** (Track K, 2026-05-26) — fifth bench added к eval-protocol
+   (`docs/design/K_gaia.md`). Cross-domain agentic axis, n=25 effective,
+   5-tool surface (`web_search` / `visit_webpage` / `text_editor` /
+   `python_exec` / `describe_image`). K1-K3 complete; K4 main sweep
+   deferred on `web_search` provider provisioning. See
+   `docs/runs/k_gaia_audit.md`.
 
 ## Reproduction
 
