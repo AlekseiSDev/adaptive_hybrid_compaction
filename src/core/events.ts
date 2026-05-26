@@ -14,6 +14,10 @@ export type CompactionEvent = {
   // dirs can grade observation quality without re-running the workload.
   // Empty / absent for offload and reflection events.
   observations?: Observation[]
+  // Observer-only diagnostic: raw LLM text when parseObservations returned
+  // []. Lets a post-hoc reader see what the LLM actually produced when the
+  // parser silently dropped the output (prompt/parser format-drift case).
+  observerRawText?: string
 }
 
 export type RecallEvent = {

@@ -169,6 +169,7 @@ export async function compact(input: CompactInput): Promise<CompactResult> {
         before_bytes: beforeBytes,
         after_bytes: afterBytes,
         observations: newObservations,
+        ...(obsResult.rawText !== undefined ? { observerRawText: obsResult.rawText } : {}),
       })
     }
   }

@@ -114,6 +114,23 @@ describe('aggregateTurnEvents', () => {
     expect(part.class_signal).toBeUndefined()
   })
 
+  test('observer compaction event carries observerRawText verbatim when parse silently failed', () => {
+    const driftedRaw = '* 2024-03-15 user added 25 postcards\n* user lives in Berlin'
+    const observerEvent: CompactionEvent = {
+      type: 'observer',
+      turn_index: 7,
+      before_bytes: 50000,
+      after_bytes: 10000,
+      observations: [],
+      observerRawText: driftedRaw,
+    }
+    const events: InstrumentationEvent[] = [{ kind: 'compaction', payload: observerEvent }]
+    const part = aggregateTurnEvents(events, 7)
+    expect(part.compaction_events).toHaveLength(1)
+    expect(part.compaction_events[0]?.observerRawText).toBe(driftedRaw)
+    expect(part.compaction_events[0]?.observations).toHaveLength(0)
+  })
+
   test('observer compaction event carries observations array verbatim', () => {
     const obs: Observation[] = [
       {

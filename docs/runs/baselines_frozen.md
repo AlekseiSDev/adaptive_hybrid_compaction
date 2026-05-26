@@ -127,13 +127,17 @@ Caveats:
   Acc 0.200 → 0.333 (+13pp absolute, +66% relative) vs pre-fix n=10
   baseline. **Same n=15 subset** для FC/Mastra → 0.467 (drop from 0.540/0.520
   объясняется sample selection — n=15 vs n=10). Cost $33.31 ≈ FC $32.36
-  (observer на 128k threshold почти не fire'ит). Honest caveat: 43 из 48
-  observer fires вернули **пустые** observations array (parse-failure на
-  новом Mastra-style prompt — output больше не матчит strict line-based
-  parser). Killer task `01493427` всё ещё confabulating "17 postcards"
-  (FC/Mastra "25"). Net acc gain в основном механический — без
-  observations модель отвечает на raw Tier-3 tail вместо абстрактных
-  summaries. Workstream tracked в `current.md` Track H.
+  (observer на 128k threshold почти не fire'ит). The original parse-failure
+  caveat (43/48 empty observations, killer task `01493427` confabulating
+  "17 postcards") **resolved 2026-05-27** by parser loosening + prompt
+  tighten — see `decisions.md [2026-05-27]` for root cause + fix. Verified
+  on n=3 debug sweep (`main_e1_text_lme_mt_n3_observer_debug.yaml`,
+  same 3 killer tasks): non-empty observer rate 33% → **100%** (12/12),
+  mean score on those 3 tasks 0.000 → **0.667**, killer task `01493427`
+  now answers "25 new postcards" correctly. **The n=15 row above is NOT
+  yet re-run** — full n=15 re-verification (~$30) deferred per
+  `current.md` Track H. Cite the n=15 number as pre-fix lower bound; the
+  n=3 debug is directional evidence the parse fix moves the headline.
 
 ## AT corpus version note (Track J — 2026-05-22)
 

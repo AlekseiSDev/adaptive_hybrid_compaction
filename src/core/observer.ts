@@ -85,6 +85,10 @@ export type ObserverResult = {
   extracted: Observation[]
   clippedTier3: Message[]
   reason?: ObserverReason
+  // Captured only when parseObservations silently returned [] — diagnostic for
+  // prompt/parser format-drift investigation. Empty when the observer extracted
+  // anything successfully; absent on threshold/no-caller short-circuits.
+  rawText?: string
 }
 
 export type ObserverDeps = {
@@ -94,6 +98,21 @@ export type ObserverDeps = {
 }
 
 type Tier3Like = { recent: Message[] }
+
+// Render an Observation's stored numeric timestamp back to the ISO date shape
+// the prompt asks the LLM to emit. Keeps the in-prompt previous-observations
+// listing consistent with the OUTPUT FORMAT spec — otherwise the LLM sees raw
+// integers (e.g. `1701302400`) in prior obs and mirrors that opaque shape.
+// Heuristic: <=10-digit → seconds, longer → ms; anything that doesn't yield a
+// valid Date falls back to raw `String(n)` (e.g. small synthetic test values).
+function formatTimestampForPrompt(n: number): string {
+  const ms = n < 1e12 ? n * 1000 : n
+  const d = new Date(ms)
+  if (Number.isNaN(d.getTime())) return String(n)
+  const iso = d.toISOString().slice(0, 10)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return String(n)
+  return iso
+}
 
 function buildLLMRequest(
   tier3: Tier3Like,
@@ -105,7 +124,7 @@ function buildLLMRequest(
     .map((m) => `${m.role}: ${JSON.stringify(m.content)}`)
     .join('\n')
   const prevObsAll = tier2.observations
-    .map((o) => `- ${String(o.timestamp)} (${o.confidence}) ${o.statement}`)
+    .map((o) => `- ${formatTimestampForPrompt(o.timestamp)} (${o.confidence}) ${o.statement}`)
     .join('\n')
   const prevObsWindow = (() => {
     let used = 0
@@ -162,7 +181,12 @@ function applyExtraction(
     targetTokens: 0.2 * ctx.thresholds.OBSERVER_THRESHOLD,
     tokenCounter: deps.tokenCounter,
   })
-  return { ran: true, extracted, clippedTier3: clipped }
+  return {
+    ran: true,
+    extracted,
+    clippedTier3: clipped,
+    ...(extracted.length === 0 ? { rawText: raw } : {}),
+  }
 }
 
 export async function maybeExtractObservations(

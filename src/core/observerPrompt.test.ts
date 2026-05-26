@@ -33,9 +33,24 @@ describe('OBSERVER_PROMPT_TEMPLATE', () => {
   })
 
   test('output schema stays line-based — parseObservations must keep working', () => {
-    // Format is `- timestamp (high|med|low) statement` + optional indented sub-detail.
-    // Changing this breaks records.ndjson dump quality + downstream cache invariance.
-    expect(OBSERVER_PROMPT_TEMPLATE).toMatch(/- timestamp \(high\|med\|low\)/)
+    // Format is `- YYYY-MM-DD (high|med|low) statement` + optional indented sub-detail.
+    // Changing the surface format breaks records.ndjson dump quality + cache invariance.
+    // ISO date chosen over integer epoch because real LLM output (Gemini-3.1-Flash
+    // on lme-multiturn) naturally emits ISO — see decisions.md [2026-05-27] entry.
+    expect(OBSERVER_PROMPT_TEMPLATE).toMatch(/- YYYY-MM-DD \(high\|med\|low\)/)
+  })
+
+  test('forbids answering the user query (extraction-only, no refusal/answer-leak)', () => {
+    // lme-mt killer task 01493427: observer LLM returned `25\n` (the answer) instead
+    // of observations. Mitigation — explicit "do not answer" rule in prompt.
+    expect(OBSERVER_PROMPT_TEMPLATE).toMatch(/do not answer|do not respond|only observation/i)
+  })
+
+  test('shows a literal example at the very end for the LLM to mimic', () => {
+    // Just an OUTPUT FORMAT line isn't enough — Mastra adds literal example
+    // observations the LLM can pattern-match against. We did not do this in the
+    // 2026-05-26 rewrite and lme-mt n=15 paid for it (parse-failure 8/12 fires).
+    expect(OBSERVER_PROMPT_TEMPLATE).toMatch(/example/i)
   })
 })
 
@@ -76,5 +91,45 @@ describe('parseObservations', () => {
   test('empty input returns empty array', () => {
     expect(parseObservations('', 0)).toEqual([])
     expect(parseObservations('   \n\n  ', 0)).toEqual([])
+  })
+
+  test('accepts ISO date YYYY-MM-DD as timestamp (real Gemini-3.1-Flash output shape)', () => {
+    // 7 of 8 empty fires on n=3 lme-mt debug run came from LLM writing
+    // `- 2023-11-30 (high) ...` — ISO date instead of integer epoch.
+    // Parser must accept it without losing the observation.
+    const raw = '- 2023-11-30 (high) user added 25 postcards to collection'
+    const obs = parseObservations(raw, 12)
+    expect(obs).toHaveLength(1)
+    expect(obs[0]?.statement).toContain('25 postcards')
+    expect(obs[0]?.confidence).toBe('high')
+    // Timestamp stored as epoch seconds for symmetry with existing integer path.
+    const expectedSeconds = Math.floor(Date.UTC(2023, 10, 30) / 1000)
+    expect(obs[0]?.timestamp).toBe(expectedSeconds)
+  })
+
+  test('accepts slash-format date YYYY/MM/DD as timestamp', () => {
+    // Empty fires #5 and #8: `- 2023/08/11 (high) ...` slash variant.
+    // Same root cause; accepting both keeps the parser robust without a prompt re-tune.
+    const raw = '- 2023/08/11 (med) user keeps old sneakers under bed'
+    const obs = parseObservations(raw, 0)
+    expect(obs).toHaveLength(1)
+    expect(obs[0]?.timestamp).toBe(Math.floor(Date.UTC(2023, 7, 11) / 1000))
+    expect(obs[0]?.statement).toContain('sneakers')
+  })
+
+  test('integer epoch timestamp still accepted (backward compat)', () => {
+    // Existing observer.test.ts cases construct fixtures with `1700000000`.
+    // The format drift fix must not regress the original path.
+    const obs = parseObservations('- 1700000000 (high) old-format observation', 0)
+    expect(obs).toHaveLength(1)
+    expect(obs[0]?.timestamp).toBe(1700000000)
+  })
+
+  test('refusal-style output (single number, no bullet) returns []', () => {
+    // Empty fire #1 (killer task 01493427): LLM wrote `25\n` — answered the user's
+    // question instead of extracting. Parser should NOT magically rescue this;
+    // returning [] is correct (the prompt-side anti-answer rule prevents it).
+    const obs = parseObservations('25\n', 0)
+    expect(obs).toEqual([])
   })
 })

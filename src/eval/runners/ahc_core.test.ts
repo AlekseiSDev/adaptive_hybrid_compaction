@@ -102,6 +102,22 @@ describe('mapCoreEventToInstrumentation', () => {
     expect(out.payload.llm_cost_usd).toBe(0.0003)
   })
 
+  test('observer compaction event forwards observerRawText (parse-failure diagnostic)', () => {
+    const e: CoreEvent = {
+      kind: 'compaction',
+      type: 'observer',
+      turn_index: 4,
+      before_bytes: 8000,
+      after_bytes: 1600,
+      observations: [],
+      observerRawText: '* drifted output',
+    }
+    const out = mapCoreEventToInstrumentation(e)
+    if (out.kind !== 'compaction') throw new Error('expected compaction')
+    expect(out.payload.observerRawText).toBe('* drifted output')
+    expect(out.payload.observations).toEqual([])
+  })
+
   test('recall event preserves fields', () => {
     const e: CoreEvent = {
       kind: 'recall',

@@ -150,6 +150,40 @@ describe('maybeExtractObservations — LLM extraction path', () => {
     expect(llmCaller).toHaveBeenCalledTimes(1)
   })
 
+  test('LLM returns parser-mismatched text → ran=true, extracted=[], rawText captured for debug', async () => {
+    const long = 'x'.repeat(200000)
+    const tier3 = { recent: [userMsg(long, 0)], inflight: [] }
+    // Wrong bullet (* not -), wrong timestamp shape (ISO date), no (high|med|low)
+    // anywhere — does NOT trip CONFIDENCE_LINE_HINT, parser silently returns [].
+    // This is the exact 43/48 lme-multiturn failure mode we need to debug.
+    const driftedOutput = '* 2024-03-15 user added 25 postcards to collection\n* user lives in Berlin'
+    const llmCaller = vi.fn<LLMCaller>().mockResolvedValue({ text: driftedOutput })
+    const result = await maybeExtractObservations(tier3, emptyTier2(), ctxFor(), {
+      tokenCounter: charsOver4TokenCounter,
+      currentQuery: 'q',
+      llmCaller,
+    })
+    expect(result.ran).toBe(true)
+    expect(result.extracted).toHaveLength(0)
+    expect(result.rawText).toBe(driftedOutput)
+  })
+
+  test('successful extraction does not carry rawText (no diagnostic bloat on healthy fires)', async () => {
+    const long = 'x'.repeat(200000)
+    const tier3 = { recent: [userMsg(long, 0)], inflight: [] }
+    const llmCaller = vi.fn<LLMCaller>().mockResolvedValue({
+      text: '- 1700000000 (high) user has 2 cats',
+    })
+    const result = await maybeExtractObservations(tier3, emptyTier2(), ctxFor(), {
+      tokenCounter: charsOver4TokenCounter,
+      currentQuery: 'q',
+      llmCaller,
+    })
+    expect(result.ran).toBe(true)
+    expect(result.extracted).toHaveLength(1)
+    expect(result.rawText).toBeUndefined()
+  })
+
   test('stub LLM returns malformed → ran=false, reason=parse_error (no throw)', async () => {
     const long = 'x'.repeat(200000)
     const tier3 = { recent: [userMsg(long, 0)], inflight: [] }

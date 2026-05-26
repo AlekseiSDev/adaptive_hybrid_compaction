@@ -1,0 +1,46 @@
+name: main_e1_text_lme_mt_n3_observer_debug
+# 2026-05-27 — observer parse-failure debug sweep.
+#
+# Why this sweep:
+# After AHC_drop_K-recent_fixed_observations + observer-rawText capture commit,
+# we need to dump the actual LLM output on tasks where parseObservations
+# silently returned []. The Step 0 capture in src/core/observer.ts now stores
+# raw text in CompactionEvent.observerRawText whenever observations is empty.
+#
+# Tasks selected — first 3 alphabetically (matches `readdir().sort()` order):
+#   - lme_01493427 — killer task (AHC confabulates "17 postcards" vs "25")
+#   - lme_07741c44 — stably empty observations on prior n=15 run
+#   - lme_07b6f563 — stably empty observations on prior n=15 run
+# These three are reliably reproducing the 43/48 empty-fire pattern.
+# Selection mechanism: --max-tasks-per-cell=3 + default alphabetical task
+# order (`longmemeval-med.ts:loadAllTaskFiles → readdir().sort()`).
+#
+# Only one cell — ahc_full_obs128k — because full_context / mastra_om don't
+# exercise the observer at all. Save ~$8 by dropping them.
+#
+# Cost ballpark: 3 tasks × ~$1.5 per task (~25 turns × actor cost) ≈ $5.
+# budget_usd=15 for buffer.
+#
+# Run:
+#   set -a && . ./.env && set +a
+#   pnpm tsx scripts/eval.ts --sweep eval/sweeps/main_e1_text_lme_mt_n3_observer_debug.yaml \
+#     --concurrency=3 --max-tasks-per-cell=3
+#
+# Post-sweep:
+#   Inspect records.ndjson for `observerRawText` fields on observer events.
+#   Read 5-10 raw outputs, categorise format/structural/refusal drift,
+#   decide Step 3 branch in moonlit-weaving-sunset plan.
+
+benches:
+  - lme-multiturn
+configs:
+  - id: ahc_full_obs128k
+    ahc_flags:
+      TASK_AWARE_EXTRACTION: true
+      TYPE_AWARE_OFFLOAD: true
+      TRAJECTORY_CLASSIFIER: true
+      RECALL_TOOL: true
+    thresholds:
+      OBSERVER_THRESHOLD: 128000
+seeds: [42]
+budget_usd: 15

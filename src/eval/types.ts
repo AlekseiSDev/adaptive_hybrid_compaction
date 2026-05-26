@@ -73,6 +73,10 @@ export type CompactionEvent = {
   // records.ndjson lets a post-hoc reader see what the observer captured
   // without re-running the workload. Empty / absent for offload / reflection.
   observations?: Observation[]
+  // Observer-only diagnostic — raw LLM text when parseObservations silently
+  // dropped the output. Forwarded from core for prompt/parser format-drift
+  // investigation. Absent on healthy fires (observations populated).
+  observerRawText?: string
 }
 
 export type TurnRecord = {
