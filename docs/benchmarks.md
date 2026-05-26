@@ -317,8 +317,8 @@ Compaction выкидывает информацию, нужную для отв
 ~25K tok рабочее окно перед сжатием — за счёт этого сохраняет точные
 факты (числа, имена), которые AHC при `OBSERVER_THRESHOLD=4000` сжимал
 на каждом turn'е. Default подняли до 30000 в H Phase 8 — сравнимо с
-Mastra envelope. Known limitation на старой калибровке —
-`docs/runs/h_followup_audit.md`.
+Mastra envelope. Известные ограничения старой калибровки + H Phase 9
+observer fix narrative — `docs/runs/baselines_frozen.md` (text-bench caveats).
 
 **Где код**: `src/eval/adapters/longmemeval-multiturn.ts` (~70 LOC),
 sweep `eval/sweeps/main_e1_text_lme_mt.yaml` (override
@@ -579,7 +579,7 @@ description integration). Закрывает gap в eval axes: tau-bench
   text-editor,python-exec,describe-image}.ts`.
 - Agent runner: `src/eval/adapters/gaia-med/agent-runner.ts`.
 - Design: `docs/design/K_gaia.md`.
-- Audit: `docs/runs/k_gaia_audit.md`.
+- Numbers: `docs/runs/baselines_frozen.md` (gaia-med section).
 
 ### Как скорится
 
@@ -643,5 +643,7 @@ provider — `MOCK_WEB_SEARCH=true` validates pipeline только (accuracy = 
 - `docs/design/B_eval-harness.md` — runner / grader / sweep mechanics.
 - `docs/design/C_baselines.md` — какие baselines прогоняются (full_context,
   mastra_om, mastra_summarizer, ahc_*).
-- `docs/runs/h_followup_audit.md` — последние числа per bench
-  (Track H Phase 7 audit).
+- `docs/runs/baselines_frozen.md` — числа per bench (4-bench + GAIA + tau)
+  + Cross-bench ablations + audit caveats.
+- `docs/runs/current.md` — активные workstreams (H observer extraction quality,
+  J6 AT-v2 sweep, K-tail-3 AHC threshold sweep).

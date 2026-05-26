@@ -62,8 +62,10 @@
   `tool()` shape, mirror tau-retail tools.ts pattern).
 - `eval/sweeps/main_e1_gaia.yaml` complete'ит N baselines × 30 tasks ×
   seed=42, NDJSON в `benchmarks/runs/main_e1_gaia/gaia-med/<config>/42/`.
-- Audit-таблица в `docs/runs/k_gaia_audit.md` с per-level accuracy +
-  per-tool usage distribution + cache rate + cost.
+- Per-level accuracy + per-tool usage distribution + cache rate + cost
+  лягут в `docs/runs/baselines_frozen.md` gaia-med section (К-tail-2
+  consolidated narrative включён). `k_gaia_audit.md` retired 2026-05-26
+  — full original в `git log --diff-filter=D docs/runs/`.
 - `docs/benchmarks.md` — добавлен §5 для `gaia-med` (sample shape,
   scoring, system prompt, tools).
 - `docs/runs/baselines_frozen.md` — добавлены competitor rows для
@@ -92,7 +94,7 @@ pnpm tsx scripts/eval.ts --sweep eval/sweeps/smoke_gaia.yaml --concurrency=1
 | **K1** Bench scaffold | `references/gaia/data/gaia_validation_30.json` vendored + LICENSE; `scripts/bake-gaia.ts` produces 23-26 baked tasks в `benchmarks/gaia/tasks/gaia_*.json` (attachment-tasks filtered); `src/eval/adapters/gaia-med.{ts,schema.ts}` (`loadTasks` + `prepare` + `createGaiaGrader`); 5 grader unit tests зелёные | `pnpm exec vitest run src/eval/adapters/gaia-med.test.ts` (unit) + `pnpm tsx scripts/bake-gaia.ts references/gaia/data/gaia_validation_30.json` идемпотентен |
 | **K2** Tools port | `src/eval/adapters/gaia-tools/{web-search,visit-webpage,text-editor,python-exec,describe-image}.ts` — 5 tools с unit (mocked) + 1 live-gated smoke each | `pnpm exec vitest run src/eval/adapters/gaia-tools/` (unit) + live smokes (gated по `TAVILY_API_KEY`) |
 | **K3** Runner + dispatch | `src/eval/adapters/gaia-med/agent-runner.ts` с `runGaiaTask(task, deps)`; `src/eval/runner.ts` имеет dispatch для `bench='gaia-med'`; 1 live smoke task проходит end-to-end | `pnpm exec vitest run src/eval/adapters/gaia-med/agent-runner.test.ts` + live smoke `pnpm tsx scripts/eval.ts --sweep eval/sweeps/smoke_gaia.yaml --max-tasks-per-cell=1` |
-| **K4** Sweep + audit | `benchmarks/runs/main_e1_gaia/<bench>/<config>/42/{summary.json,records.ndjson,meta.json}` populated; `docs/runs/k_gaia_audit.md` создан с per-level acc + caveats; `docs/benchmarks.md §5` добавлен; `baselines_frozen.md` дополнен | `pnpm tsx scripts/sanity-aggregate.ts benchmarks/runs/main_e1_gaia/` показывает cells со status=complete |
+| **K4** Sweep + audit | `benchmarks/runs/main_e1_gaia/<bench>/<config>/42/{summary.json,records.ndjson,meta.json}` populated; per-level acc + caveats + competitor rows лежат в `docs/runs/baselines_frozen.md` gaia-med section; `docs/benchmarks.md §5` добавлен | `pnpm tsx scripts/sanity-aggregate.ts benchmarks/runs/main_e1_gaia/` показывает cells со status=complete |
 
 ---
 
@@ -106,7 +108,7 @@ Source of truth по фазам — `system_design §7.2 Track K`. Колонк�
 | **K1** Bench scaffold (1 день) | Holosophus snapshot copied | K3 | §2.1, §2.2, §3 | `GaiaTask` (Zod), `Grader` impl `createGaiaGrader`, bake-script CLI | Failing unit: `score(task{answer:"25"}, "Final answer: 25")` → `{primary: 1.0}`; ещё 4 cases (list / text / mismatch / missing-Final) | §3.4 failure modes; `B_eval-harness.md §3` RunRecord |
 | **K2** Tools port (3 дня) | K1 | K3 | §4, §4.1, §4.2 | 5 tool definitions (AI SDK `tool({inputSchema: jsonSchema(...), execute})` shape, mirror `tau-bench-retail/tools.ts:164`) | Failing unit на каждый tool: `webSearch({query: "test"})` returns array (mocked Tavily); `pythonExec({code: "while True: pass"})` timeout fires в 30s; `visitWebpage({url})` truncates до 50K | §4.3 failure modes; `decisions.md 2026-05-13 D5` (AI SDK v6 native engine, не custom ReACT) |
 | **K3** Runner + dispatch (1.5 дня) | K1, K2 | K4 | §5, §5.1 | `runGaiaTask(task, deps)` parallel `runTauEpisode`; bench-dispatch в `src/eval/runner.ts` | Failing live smoke: 1 level-1 task → возвращает text с "Final answer:", `n_tool_calls ≥ 1`, no exception | §5.2 baseline-tools investigation; `tau-bench-retail/agent-runner.ts` (template) |
-| **K4** Sweep + audit (1 день) | K3 | F-report (опционально) | §6, §7 | `eval/sweeps/{smoke,main_e1}_gaia.yaml`; `docs/runs/k_gaia_audit.md` | Pre-flight: `pnpm tsx scripts/eval.ts --sweep eval/sweeps/smoke_gaia.yaml --max-tasks-per-cell=1` exit 0; post-run: sanity-aggregate показывает status=complete | `e_sweep_audit.md` Known caveats §5 (обновить — теперь 5 benches не 4); `baselines_frozen.md`; `docs/benchmarks.md §5` |
+| **K4** Sweep + audit (1 день) | K3 | F-report (опционально) | §6, §7 | `eval/sweeps/{smoke,main_e1}_gaia.yaml`; gaia-med section в `docs/runs/baselines_frozen.md` | Pre-flight: `pnpm tsx scripts/eval.ts --sweep eval/sweeps/smoke_gaia.yaml --max-tasks-per-cell=1` exit 0; post-run: sanity-aggregate показывает status=complete | `docs/runs/baselines_frozen.md` (5 benches теперь); `docs/benchmarks.md §5`; `docs/runs/current.md` Track K (К-tail-3 deferred) |
 
 **Parallelization:** K1 → K2 строго (K2 наследует bench setup из K1).
 K3 ждёт K1+K2. K4 ждёт K3. Track K параллелится с любым не-bench Track-H
@@ -242,7 +244,7 @@ domain (10 retail tools, single env: orders/users/products). Mastra-agent
 | Episode runner | Actor loop с GAIA tools | `src/eval/adapters/gaia-med/agent-runner.ts` | K3 |
 | Runner dispatch | bench-to-runner factory | `src/eval/runner.ts` (edit) | K3 |
 | Sweep configs | Smoke + main | `eval/sweeps/{smoke,main_e1}_gaia.yaml` | K4 |
-| Audit | Numbers + caveats | `docs/runs/k_gaia_audit.md` | K4 |
+| Numbers + caveats | Per-level acc + per-tool distribution + К-tail narratives | `docs/runs/baselines_frozen.md` gaia-med section | K4 |
 
 ### 2.4 Public types / contracts
 
@@ -636,8 +638,8 @@ follow-up в Track I-tail.
 ### 6.2 Track-level gate
 
 - `./scripts/verify.sh all` зелёный после каждой фазы.
-- Audit doc `k_gaia_audit.md` создан + cross-linked из
-  `e_sweep_audit.md` Known caveats §5 (обновляется — 5 benches теперь).
+- Per-level numbers + per-tool usage + cache rate + caveats записаны в
+  `docs/runs/baselines_frozen.md` gaia-med section (К-tail-2 finalized).
 - `docs/benchmarks.md` получает §5 GAIA entry с реальными numbers (не
   forward-looking).
 

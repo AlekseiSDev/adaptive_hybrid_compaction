@@ -27,7 +27,8 @@
   см. Open question 1), `design/E_main-runs.md §3-§6` (orchestration
   primitives), `design/A_ahc-algorithm.md §2.1` (cache-hit target
   verified in H6), `decisions.md [2026-05-13] actor model pivot`,
-  `docs/runs/e_sweep_audit.md` (Phase D headline this track extends),
+  `docs/runs/baselines_frozen.md` (Phase D headline numbers this track
+  extends; `e_sweep_audit.md` retired 2026-05-26 — see `git log`),
   `memory/feedback_verify_code_state_before_sweep.md` (rationale for
   H1).
 
@@ -50,9 +51,11 @@
   grader (post-`d9d1424`).
 - `benchmarks/runs/cache_hit_e3/**` — real LongMemEval cells (not
   smoke fixtures), Sonnet via LITELLM.
-- `docs/runs/h_followup_audit.md` — consolidated post-run audit
-  (replaces `e_sweep_audit.md` as the F-report numeric source of
-  truth).
+- `docs/runs/baselines_frozen.md` — F-report numeric source of truth
+  (consolidated post-H audit data: Cross-bench ablations + text-bench
+  caveats + lme-multiturn observer fix narrative). Per-audit docs
+  (`h_followup_audit.md`, `e_sweep_audit.md`, `main_e1_text_lme_mt_n50_audit.md`)
+  retired 2026-05-26 — full content in `git log --diff-filter=D docs/runs/`.
 
 **Demo:**
 ```bash
@@ -532,9 +535,10 @@ Add «Mastra OM execution depth» row в `h_followup_audit.md`. Если case (i
 
 ### 11.1 Why
 
-Phase D sweep audit (`docs/runs/e_sweep_audit.md`) reports cache-rate as
-the headline AHC win, **but says nothing about how often the Task-Aware
-Observer (§A §4) actually fires**. Across all 240 NDJSON records of
+Phase D sweep audit (retired 2026-05-26; numbers in
+`docs/runs/baselines_frozen.md`) reported cache-rate as the headline AHC
+win, **but said nothing about how often the Task-Aware Observer (§A §4)
+actually fires**. Across all 240 NDJSON records of
 `main_e1_text`, `compaction_events` of `type:'observer'` count is **0**
 in every cell — including `ahc_full`. Tooling for this measurement
 already exists (records carry `compaction_events[]`); finding was

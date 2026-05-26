@@ -337,7 +337,7 @@ numbers процитированы; повторно интегрировать 
 - **Track E** — Main runs (требует A + B + C + D)
 - **Track F** — Course report writing (требует E)
 - **Track G** — Demo UI (требует Track A полностью + B2 telemetry; параллелится с E/F)
-- **Track H** — Follow-up sweeps (cross-model / multi-seed / ablations / activation gates) — extends E, blocks F-report numbers beyond single-seed headline. См. `docs/design/H_ablations_and_TODOs.md`, `docs/runs/h_followup_audit.md`.
+- **Track H** — Follow-up sweeps (cross-model / multi-seed / ablations / activation gates) — extends E, blocks F-report numbers beyond single-seed headline. См. `docs/design/H_ablations_and_TODOs.md`; numbers в `docs/runs/baselines_frozen.md` (Cross-bench ablations section + text-bench caveats), open workstreams в `docs/runs/current.md` Track H.
 - **Track I** — `mastra-agent` baseline (full Mastra Agent + tools) — additive baseline closing tau-bench framework-native gap (vanilla `tau_bench_agent` vs `tau_bench_agent_ahc` had no industry-standard agentic competitor). Parallel to E/H; produces cross-framework Pareto row для F-report. См. `docs/design/I_mastra_agent.md`.
 - **Track J** — AssistantTraj v2 (tool-grounded, n=50). AT-v1 (30 text-only) retire; mocked 4-tool palette (`image_gen`, `google_search`, `web_fetch`, `code_interpreter`); fixture-replay default, live за `AT_TOOL_MODE=live` (запрещён в CI). Adds tool-call coherence axis к AT (sister-метрика к content-quality). Source seed — jay-canvas e2e golden-set. Параллелится с E/H/I; cutover sweep YAML row меняется в J6. См. `docs/design/J_at_tools.md`.
 - **Track K** — `gaia-med` bench (cross-domain agentic, n=30 stratified). GAIA (Mialon et al. 2023, CC BY) — пятый bench в evaluation-протоколе, закрывает gap в agentic axis: tau-bench-retail-med узко-доменный (retail / 10 tools), GAIA cross-domain (research + web + code + multimodal, 5-tool surface). Knowledge accumulation between tool calls — другая нагрузка на observer / offloader чем env-state tau. Local snapshot из neighbour Holosophus (`/Users/Aleksei/Projects/ai_scientists/Holosophus/holosophos/evals_and_reports/data/`) → vendored в `references/gaia/`. Wall-clock ~6-7 дней; параллелится с E/H/I/J. См. `docs/design/K_gaia.md`.
@@ -561,9 +561,9 @@ vanilla + `tau_bench_agent_ahc`). Wall-clock ~4 дня, бюджет $20-31. П�
   unit на translator + live smoke 1 retail episode с ≥1 mutating tool call.
 - **I3. Sweep run + audit (0.5 день).** `eval/sweeps/main_e1_mastra_agent.yaml`
   (3 bench × seed=42, $30 budget) + `eval/sweeps/smoke_mastra_agent.yaml`.
-  `docs/runs/i_mastra_agent_audit.md` — числа per bench, сравнение vs
-  `mastra_om` (chassis consistency) + vs `tau_bench_agent_ahc` (main insight).
-  `baselines_frozen.md` дополнен.
+  Числа per bench + сравнение vs `mastra_om` (chassis consistency) + vs
+  `tau_bench_agent_ahc` (main insight) лягут в `docs/runs/baselines_frozen.md`
+  (Track I rows + Tau-bench section).
 
 **Track J — AssistantTraj v2 (tool-grounded, n=50).** Замена AT-v1 30 text-only
 задач на 50 tool-grounded с обязательным ≥1 tool-call per task. 4-tool palette
@@ -603,10 +603,11 @@ Wall-clock ~8 дней, бюджет ≤$5 (J6 smoke). Source — jay-canvas e2e
   bit-stability tool-result bytes (per inv §10.1).
 - **J6. Sweep cutover + AT-v2 baseline refresh (1.5 дня).**
   `eval/sweeps/main_e1_*.yaml` row меняется на n=50; smoke 1 task per baseline (zero
-  exit, non-null primary). `docs/runs/at_v2_baselines.md` (new) — per-baseline
-  numbers, diff vs AT-v1. `baselines_frozen.md` получает retire note. Calibration
-  human_scores.json пересчитывается на 5 AT-v2 task'ах. Track D §9 compaction-axis
-  table row для AT обновляется (one-line diff).
+  exit, non-null primary). Per-baseline numbers + diff vs AT-v1 лягут в
+  `docs/runs/baselines_frozen.md` (Text benches table с пометкой "AT-v2";
+  AT-v1 numbers получают retire note inline). Calibration human_scores.json
+  пересчитывается на 5 AT-v2 task'ах. Track D §9 compaction-axis table row
+  для AT обновляется (one-line diff).
 
 **Track K — `gaia-med` bench.** Cross-domain agentic bench, пятый
 в evaluation-протоколе. Закрывает agentic axis gap (tau узко-доменный
@@ -639,10 +640,10 @@ grader (no LLM-judge — faithful upstream GAIA convention). Wall-clock
   contract возвращает text-only. Решение (per-baseline-tool-passthrough
   vs отдельный runner per-bench) определяется в K3 plan.
 - **K4. Sweep + audit (1 день).** `eval/sweeps/{smoke,main_e1}_gaia.yaml`;
-  `docs/runs/k_gaia_audit.md` с per-level acc + cache rate + per-tool
-  usage distribution + caveats (xlsx/pdf skipped, exact-match strictness,
-  python_exec sandbox limitation). Acceptance: status=complete на cell,
-  err_rate=0%, ≥30% acc на level-1.
+  per-level acc + cache rate + per-tool usage distribution + caveats
+  (xlsx/pdf skipped, exact-match strictness, python_exec sandbox limitation)
+  лягут в `docs/runs/baselines_frozen.md` gaia-med section. Acceptance:
+  status=complete на cell, err_rate=0%, ≥30% acc на level-1.
 
 ### 7.3 Cut points (milestones)
 
