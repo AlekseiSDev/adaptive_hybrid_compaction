@@ -14,7 +14,13 @@ function fetchUrl(input: Parameters<typeof fetch>[0]): string {
   return input.url
 }
 
-const ENV_KEYS = ['SEARXNG_URL', 'TAVILY_API_KEY', 'BRAVE_API_KEY', 'MOCK_WEB_SEARCH'] as const
+const ENV_KEYS = [
+  'WEB_SEARCH_AUTOSELECT',
+  'SEARXNG_URL',
+  'TAVILY_API_KEY',
+  'BRAVE_API_KEY',
+  'MOCK_WEB_SEARCH',
+] as const
 
 describe('webSearch fallback chain', () => {
   const saved: Record<string, string | undefined> = {}
@@ -24,12 +30,24 @@ describe('webSearch fallback chain', () => {
       saved[k] = process.env[k]
       Reflect.deleteProperty(process.env, k)
     }
+    // All chain-tests require explicit opt-in (strict default since
+    // 2026-05-26). The standalone "throws when AUTOSELECT not set" test
+    // overrides this to verify the gate.
+    process.env['WEB_SEARCH_AUTOSELECT'] = 'true'
   })
   afterEach(() => {
     for (const k of ENV_KEYS) {
       if (saved[k] === undefined) Reflect.deleteProperty(process.env, k)
       else process.env[k] = saved[k]
     }
+  })
+
+  it('throws when WEB_SEARCH_AUTOSELECT not set, even with provider configured', async () => {
+    Reflect.deleteProperty(process.env, 'WEB_SEARCH_AUTOSELECT')
+    process.env['SEARXNG_URL'] = 'http://searxng:8080'
+    await expect(webSearch('q', { fetchFn: vi.fn<typeof fetch>() })).rejects.toThrow(
+      /WEB_SEARCH_AUTOSELECT=true/,
+    )
   })
 
   it('uses SearXNG when SEARXNG_URL set', async () => {
@@ -88,9 +106,9 @@ describe('webSearch fallback chain', () => {
     expect(fetchFn).not.toHaveBeenCalled()
   })
 
-  it('throws when no provider configured', async () => {
+  it('throws when AUTOSELECT enabled but no provider configured', async () => {
     await expect(webSearch('q', { fetchFn: vi.fn<typeof fetch>() })).rejects.toThrow(
-      /no provider configured/,
+      /не настроен ни один provider/,
     )
   })
 

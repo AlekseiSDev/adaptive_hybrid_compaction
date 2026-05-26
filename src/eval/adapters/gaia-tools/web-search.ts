@@ -116,6 +116,19 @@ export async function webSearch(
   query: string,
   opts: WebSearchOptions = {},
 ): Promise<SearchResult[]> {
+  // Strict default (2026-05-26): provider chain is opt-in via
+  // WEB_SEARCH_AUTOSELECT=true. Цель — honest experiments: пользователь
+  // должен явно подтвердить что готов к silent fallback (SearXNG →
+  // Tavily → Brave → mock) если первый provider не настроен. Без флага
+  // — throw, чтобы случайный mock в проде не подменил реальные числа.
+  if (process.env['WEB_SEARCH_AUTOSELECT'] !== 'true') {
+    throw new Error(
+      'web_search: strict default. Set WEB_SEARCH_AUTOSELECT=true to ' +
+        'enable provider chain (SearXNG → Tavily → Brave → mock). Then ' +
+        'configure one of: SEARXNG_URL / TAVILY_API_KEY / BRAVE_API_KEY ' +
+        '/ MOCK_WEB_SEARCH=true.',
+    )
+  }
   const maxResults = opts.maxResults ?? DEFAULT_MAX
   const fetchFn = opts.fetchFn ?? fetch
 
@@ -135,7 +148,8 @@ export async function webSearch(
     return mockResults(query, maxResults)
   }
   throw new Error(
-    'web_search: no provider configured. Set one of: ' +
-      'SEARXNG_URL (self-hosted), TAVILY_API_KEY, BRAVE_API_KEY, MOCK_WEB_SEARCH=true.',
+    'web_search: WEB_SEARCH_AUTOSELECT=true но не настроен ни один provider. ' +
+      'Set one of: SEARXNG_URL (self-hosted), TAVILY_API_KEY, BRAVE_API_KEY, ' +
+      'MOCK_WEB_SEARCH=true.',
   )
 }

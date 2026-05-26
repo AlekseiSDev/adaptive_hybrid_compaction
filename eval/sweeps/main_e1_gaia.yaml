@@ -4,9 +4,13 @@ name: main_e1_gaia
 #
 # Live deps:
 #   - OPENROUTER_API_KEY (gpt-5.4-mini actor)
+#   - WEB_SEARCH_AUTOSELECT=true (strict default — explicit opt-in)
 #   - one of: SEARXNG_URL / TAVILY_API_KEY / BRAVE_API_KEY for real web_search
 # MOCK_WEB_SEARCH=true gives pipeline-only smoke (acc=0); not suitable for
 # real-accuracy measurement.
+# Recommended local infra:
+#   docker compose -f observability/searxng-docker-compose.yml up -d
+#   export WEB_SEARCH_AUTOSELECT=true SEARXNG_URL=http://localhost:8080
 
 benches:
   - gaia-med

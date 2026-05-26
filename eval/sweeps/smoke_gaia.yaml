@@ -4,9 +4,13 @@ name: smoke_gaia
 #
 # Live deps:
 #   - OPENROUTER_API_KEY (actor model)
+#   - WEB_SEARCH_AUTOSELECT=true (strict default — explicit opt-in)
 #   - one of: SEARXNG_URL / TAVILY_API_KEY / BRAVE_API_KEY / MOCK_WEB_SEARCH=true
 # Without web_search provider, set MOCK_WEB_SEARCH=true to validate pipeline
 # (accuracy will be 0 — search returns fixture results).
+# Recommended: spin up SearXNG локально через
+#   docker compose -f observability/searxng-docker-compose.yml up -d
+# и установить SEARXNG_URL=http://localhost:8080.
 
 benches:
   - gaia-med
