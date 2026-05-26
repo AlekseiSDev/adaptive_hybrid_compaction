@@ -49,10 +49,10 @@ const ctxFor = (overrides: Partial<CompactionContext> = {}): CompactionContext =
 
 describe('clipTier3KeepingTail (§4.3)', () => {
   test('clips down to ≤ 20% of OBSERVER_THRESHOLD by token count', () => {
-    // ~16k chars of total tier3, target = 0.2 * 8000 = 1600 tokens ≈ 6400 chars budget.
+    // ~80k chars of total tier3, target = 0.2 * 30000 = 6000 tokens ≈ 24000 chars budget.
     const long = 'x'.repeat(200)
     const recent: Message[] = []
-    for (let i = 0; i < 80; i++) recent.push(asstMsg(long, i))
+    for (let i = 0; i < 400; i++) recent.push(asstMsg(long, i))
     const clipped = clipTier3KeepingTail(recent, {
       targetTokens: 0.2 * defaultThresholds.OBSERVER_THRESHOLD,
       tokenCounter: charsOver4TokenCounter,
@@ -120,7 +120,7 @@ describe('maybeExtractObservations — gate + no-LLM no-op', () => {
   })
 
   test('above threshold but no llmCaller injected → ran=false, reason=no_llm_caller', async () => {
-    const long = 'x'.repeat(50000) // exceeds 8000 tokens × 4 chars/token = 32000 chars budget
+    const long = 'x'.repeat(200000) // exceeds 30000 tokens × 4 chars/token = 120000 chars budget
     const tier3 = { recent: [userMsg(long, 0)], inflight: [] }
     const result = await maybeExtractObservations(tier3, emptyTier2(), ctxFor(), {
       tokenCounter: charsOver4TokenCounter,
@@ -133,7 +133,7 @@ describe('maybeExtractObservations — gate + no-LLM no-op', () => {
 
 describe('maybeExtractObservations — LLM extraction path', () => {
   test('stub LLM with 2 observations → extracted parsed; Tier-3 clipped shorter', async () => {
-    const long = 'x'.repeat(50000)
+    const long = 'x'.repeat(200000)
     const tier3 = { recent: [userMsg(long, 0), asstMsg(long, 0)], inflight: [] }
     const llmCaller = vi.fn<LLMCaller>().mockResolvedValue({
       text: `- 1700000000 (high) user wants strict mode
@@ -151,7 +151,7 @@ describe('maybeExtractObservations — LLM extraction path', () => {
   })
 
   test('stub LLM returns malformed → ran=false, reason=parse_error (no throw)', async () => {
-    const long = 'x'.repeat(50000)
+    const long = 'x'.repeat(200000)
     const tier3 = { recent: [userMsg(long, 0)], inflight: [] }
     const llmCaller = vi.fn<LLMCaller>().mockResolvedValue({
       text: 'this is not in the observation format at all\n- 1234 (bogus) bad',
@@ -166,7 +166,7 @@ describe('maybeExtractObservations — LLM extraction path', () => {
   })
 
   test('Tier-2 entries strict append-only (existing entries reference-equal post-extract)', async () => {
-    const long = 'x'.repeat(50000)
+    const long = 'x'.repeat(200000)
     const tier3 = { recent: [userMsg(long, 0)], inflight: [] }
     const preexisting: Tier2 = {
       observations: [
@@ -215,7 +215,7 @@ describe('extractObservationsSync + cache prefix preservation', () => {
   })
 
   test('extractObservationsSync exists and accepts synchronous LLMCaller', () => {
-    const long = 'x'.repeat(50000)
+    const long = 'x'.repeat(200000)
     const tier3 = { recent: [userMsg(long, 0)], inflight: [] }
     const sync = (req: { messages: { content: string }[] }): { text: string } => ({
       text: `- 1700000000 (high) sync extracted from ${String(req.messages.length)} messages`,

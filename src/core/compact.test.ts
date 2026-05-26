@@ -46,7 +46,7 @@ const emptyTier2 = (): Tier2 => ({
 
 describe('compact() orchestrator — A5', () => {
   test('conversational class + observer enabled → tier2 receives observation, recall NOT injected', async () => {
-    const long = 'x'.repeat(50000)
+    const long = 'x'.repeat(200000)
     const tier3: Tier3 = {
       recent: [userMsg(long, 1), asstMsg(long, 1, 1)],
       inflight: [],
@@ -122,7 +122,7 @@ describe('compact() orchestrator — A5', () => {
   })
 
   test('mixed class → BOTH observer and offload events emitted', async () => {
-    const longText = 'y'.repeat(40000)
+    const longText = 'y'.repeat(150000)
     const heavyOutput = 'B'.repeat(8000)
     const tier3: Tier3 = {
       recent: [

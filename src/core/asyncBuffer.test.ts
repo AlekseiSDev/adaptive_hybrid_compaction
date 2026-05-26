@@ -27,7 +27,7 @@ const ctxFor = (): CompactionContext => ({
 })
 
 const heavyTier3 = (): Tier3 => ({
-  recent: [userMsg('x'.repeat(50000), 1)],
+  recent: [userMsg('x'.repeat(200000), 1)],
   inflight: [],
 })
 
@@ -80,8 +80,8 @@ describe('AsyncBuffer — §4.5 pre-emptive Observer + activation hooks', () => 
 
   test('blockAfter: tier3 > 1.2 × OBSERVER_THRESHOLD → true; below → false', () => {
     const buf = new AsyncBuffer()
-    // 1.2 × 8000 = 9600 tokens × 4 chars/token = 38400 chars budget
-    const huge: Tier3 = { recent: [userMsg('y'.repeat(50000), 1)], inflight: [] }
+    // 1.2 × 30000 = 36000 tokens × 4 chars/token = 144000 chars budget; 200K clears it.
+    const huge: Tier3 = { recent: [userMsg('y'.repeat(200000), 1)], inflight: [] }
     const small: Tier3 = { recent: [userMsg('hi', 1)], inflight: [] }
     expect(
       buf.blockAfter(huge, charsOver4TokenCounter, defaultThresholds.OBSERVER_THRESHOLD),
