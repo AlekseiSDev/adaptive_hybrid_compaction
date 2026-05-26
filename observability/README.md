@@ -31,11 +31,21 @@ LANGFUSE_ENABLED=true pnpm tsx scripts/eval.ts \
   --sweep eval/sweeps/smoke_full_context.yaml
 ```
 
-End-to-end verification (B4 acceptance gate):
+End-to-end verification (B4 acceptance gate, legacy --mode=count):
 
 ```bash
-pnpm tsx scripts/check-langfuse-trace.ts --since-seconds=60
+pnpm tsx scripts/check-langfuse-hierarchy.ts --mode=count --since-seconds=60
 # exit 0 + печатает trace_id/observation_count если ≥ 1 trace доехал.
+```
+
+B6 session/trace/span hierarchy verification (per bench):
+
+```bash
+pnpm tsx scripts/check-langfuse-hierarchy.ts \
+  --bench=gaia-med --since-seconds=300 \
+  --expected-turns-min=1 --expected-tool-calls-min=1
+# exit 0 если: ≥ 1 session matching `gaia-med-*`, каждый trace = root (parent
+# null), nested eval.turn/ai.toolCall counts ≥ заданных thresholds.
 ```
 
 ## Stop / wipe
