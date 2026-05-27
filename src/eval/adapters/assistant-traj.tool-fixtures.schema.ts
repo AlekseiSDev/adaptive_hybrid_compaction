@@ -7,7 +7,15 @@
 
 import { z } from 'zod'
 
-export const AT_TOOL_NAMES = ['image_gen', 'google_search', 'web_fetch', 'code_interpreter'] as const
+// J7: image_edit added (refine an existing image per natural-language instruction).
+// Order preserved for stability of any consumer that snapshots this constant.
+export const AT_TOOL_NAMES = [
+  'image_gen',
+  'image_edit',
+  'google_search',
+  'web_fetch',
+  'code_interpreter',
+] as const
 export type AtToolName = (typeof AT_TOOL_NAMES)[number]
 
 // Content parts emitted by replay tool output. Mirrors a narrowed subset of
@@ -42,11 +50,18 @@ const ToolFixtureSchema = z.object({
   input_match: InputMatchSchema.optional(),
   output_parts: z.array(OutputPartSchema).min(1),
   is_error: z.boolean().optional(),
+  // J7: marker for fixtures whose output_parts is a stand-in until bake-fixtures.ts
+  // runs the real tool. Validator (Step 7) flags any `needs_bake: true` entry as
+  // a hard error in `validate.ts` so it can't survive into a sweep.
+  needs_bake: z.boolean().optional(),
 })
 
 // task_id pattern enforced here too — sidecar must reference the canonical AT
 // task id so the validator can cross-check `<task_id>.json` filename pair.
-const TaskIdRegex = /^at_(?:image_qa|code_iter|research_write|mixed)_\d{3}$/
+// D6: AT-v3 jay-canvas import uses `at_<cat>_jc_<section>_<NNN>` shape; original
+// AT-v1/v2 `at_<cat>_<NNN>` remains valid for legacy non-deprecated tasks.
+const TaskIdRegex =
+  /^at_(?:image_qa|code_iter|research_write|mixed)(?:_jc_[a-z]{1,4})?_\d{3}$/
 
 export const ToolFixtureFileSchema = z.object({
   task_id: z.string().regex(TaskIdRegex, 'task_id must match at_<category>_<NNN>'),

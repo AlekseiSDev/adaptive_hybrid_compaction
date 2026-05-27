@@ -178,6 +178,39 @@ describe('buildReplayTools — AI SDK v6 tool() interop', () => {
   })
 })
 
+describe('image_edit (J7)', () => {
+  test('included in AT_TOOL_NAMES', () => {
+    expect(AT_TOOL_NAMES).toContain('image_edit')
+  })
+
+  test('replay dispatches image_edit and returns fixture content', async () => {
+    const fixtures: ToolFixture[] = [
+      {
+        tool_name: 'image_edit',
+        output_parts: [
+          { type: 'text', text: 'Edited image: https://x/edited.png\nCaption: blue cat' },
+        ],
+      },
+    ]
+    const d = new ReplayDispatcher({ task_id: 'at_image_qa_jc_ie_001', fixtures })
+    const r = await d.dispatch('image_edit', {
+      image_url: 'https://x/orig.png',
+      instruction: 'make it blue',
+    })
+    expect(r.content[0]).toEqual({
+      type: 'text',
+      text: 'Edited image: https://x/edited.png\nCaption: blue cat',
+    })
+  })
+
+  test('replay miss for image_edit raises ToolReplayMissError', async () => {
+    const d = new ReplayDispatcher({ task_id: 'at_image_qa_jc_ie_002', fixtures: [] })
+    await expect(
+      d.dispatch('image_edit', { image_url: 'https://x', instruction: 'edit' }),
+    ).rejects.toBeInstanceOf(ToolReplayMissError)
+  })
+})
+
 describe('resolveToolMode — replay default, live opt-in', () => {
   test('default = replay when AT_TOOL_MODE unset', () => {
     const prev = process.env['AT_TOOL_MODE']

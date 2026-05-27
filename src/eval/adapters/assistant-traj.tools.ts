@@ -175,6 +175,17 @@ export const imageGenInput = z.object({
     .optional(),
 })
 
+// J7: edit an existing image. image_url required; instruction = natural-language
+// delta to apply. Output shape mirrors image_gen.
+export const imageEditInput = z.object({
+  image_url: z.url(),
+  instruction: z.string().min(1).max(2000),
+  n: z.number().int().min(1).max(4).optional(),
+  size: z
+    .enum(['256x256', '512x512', '1024x1024', '1024x1792', '1792x1024'])
+    .optional(),
+})
+
 export const googleSearchInput = z.object({
   q: z.string().min(1).max(500),
   n: z.number().int().min(1).max(10).optional(),
@@ -194,6 +205,7 @@ export const codeInterpreterInput = z.object({
 
 export const TOOL_INPUT_SCHEMAS = {
   image_gen: imageGenInput,
+  image_edit: imageEditInput,
   google_search: googleSearchInput,
   web_fetch: webFetchInput,
   code_interpreter: codeInterpreterInput,
@@ -201,6 +213,8 @@ export const TOOL_INPUT_SCHEMAS = {
 
 export const TOOL_DESCRIPTIONS: Record<AtToolName, string> = {
   image_gen: 'Generate an image from a text prompt. Returns image URL plus short caption.',
+  image_edit:
+    'Edit an existing image per a natural-language instruction. Returns new image URL plus short caption.',
   google_search: 'Web search via Google. Returns top-N results as title+snippet+URL list.',
   web_fetch: 'Fetch a web page and return cleaned main content as Markdown. HTML only.',
   code_interpreter: 'Execute Python 3 code in a sandbox. Returns stdout, stderr, and exit code.',

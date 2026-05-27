@@ -143,13 +143,14 @@ describe('ToolFixtureFileSchema — output_parts shapes', () => {
 })
 
 describe('AT_TOOL_NAMES — palette closure', () => {
-  test('exactly 4 tools', () => {
-    expect(AT_TOOL_NAMES).toHaveLength(4)
+  test('exactly 5 tools (J7 added image_edit)', () => {
+    expect(AT_TOOL_NAMES).toHaveLength(5)
   })
 
-  test('contains image_gen, google_search, web_fetch, code_interpreter', () => {
+  test('contains the J7 palette in canonical order', () => {
     expect(AT_TOOL_NAMES).toEqual([
       'image_gen',
+      'image_edit',
       'google_search',
       'web_fetch',
       'code_interpreter',
