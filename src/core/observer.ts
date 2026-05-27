@@ -79,10 +79,6 @@ export type ObserverReason =
   | 'below_threshold'
   | 'no_llm_caller'
   | 'parse_error'
-  // Throttle path: enough new tokens haven't accumulated since last fire.
-  // Prevents re-extraction of essentially the same Tier-3 content turn
-  // after turn (see decisions.md [2026-05-27] observer fire throttle).
-  | 'delta_too_small'
 
 export type ObserverResult = {
   ran: boolean
@@ -201,70 +197,14 @@ function applyExtraction(
   }
 }
 
-// Watermark-based observer scoping — extracted from `tier2.observations[].sourceTurn`.
-// Solves the dual problem found 2026-05-27:
-//   (1) Without scoping, observer LLM saw the full Tier-3 every turn (≤64k);
-//       LLM tends to summarise the LATEST messages and skip the older ones,
-//       so content from skipped turns silently dropped. Aggregate cost: 72%
-//       observer overhead, plus regressions on questions about mid-window
-//       content.
-//   (2) A naive count-throttle (skip N turns between fires) made it worse —
-//       sessions arriving between fires never got into Tier-2 at all (the
-//       LLM still ignored them on the next fire because it focused on the
-//       latest tail).
-// Fix: each fire sees ONLY messages with metadata.turn_index > lastObservedTurn.
-// Smaller observer prompt (one batch of new sessions, not full window),
-// nothing is missed, no count-based skip needed. Fall back to fire-the-whole-
-// thing when metadata is absent (synthetic tests) so existing core tests
-// keep their semantics.
-function computeLastObservedTurn(tier2: Tier2): number {
-  let last = -1
-  for (const o of tier2.observations) {
-    if (o.sourceTurn > last) last = o.sourceTurn
-  }
-  return last
-}
-
-function filterNewMessages(
-  messages: readonly Message[],
-  lastObservedTurn: number,
-): Message[] {
-  if (lastObservedTurn < 0) return [...messages]
-  const out: Message[] = []
-  for (const m of messages) {
-    // Messages without metadata treated as "new" — preserves existing core
-    // test semantics where synthetic Tier-3 has no turn_index hooks.
-    const ti = m.metadata?.turn_index
-    if (ti === undefined || ti > lastObservedTurn) out.push(m)
-  }
-  return out
-}
-
-// Fire-floor 2026-05-27 v2: skip only when there's truly no new content.
-// Earlier attempt batched 0.1×OBSERVER_THRESHOLD before firing — but LLM
-// observer turned out to be MYOPIC (focuses on the tail of its input even
-// when the input is a 10-session batch), so old-end sessions in each batch
-// were silently dropped. Smaller batches keep more sessions in the LLM's
-// attention window. With OBSERVER_THRESHOLD=64k on lme-mt, this means
-// firing roughly every turn on a ~2.6k single-session window — each fire
-// is cheap (~$0.007) and no session is skipped. Total observer overhead
-// halves vs. the count-throttle attempt while preserving content coverage.
-const NEW_TOKENS_FIRE_FLOOR = 1
-
-function throttleResult(
-  tier3: Tier3Like,
-  ctx: CompactionContext,
-  tokenCounter: TokenCounter,
-): ObserverResult {
-  // Even when we skip the LLM call, clip Tier-3 so the actor still sees the
-  // compacted tail — otherwise throttle would inflate per-turn actor input
-  // (tierize re-fills to threshold every turn from full history).
-  const clipped = clipTier3KeepingTail(tier3.recent, {
-    targetTokens: 0.2 * ctx.thresholds.OBSERVER_THRESHOLD,
-    tokenCounter,
-  })
-  return { ran: false, extracted: [], clippedTier3: clipped, reason: 'delta_too_small' }
-}
+// Note (2026-05-27): observer used to carry its own content-aware filter +
+// floor=1 "fire on any new content" hack — a workaround for the fact that
+// tierize re-built Tier-3 from full history every turn (always at threshold
+// → observer fired every turn). The proper fix lives in tierize itself
+// (`lastObservedTurn` option, src/core/tiers.ts), which now excludes
+// already-observed messages from Tier-3 candidates upstream. Observer is
+// back to the simple shape: fire when Tier-3 size crosses threshold,
+// extract from the whole (already-watermarked) Tier-3.
 
 export async function maybeExtractObservations(
   tier3: Tier3Like,
@@ -279,13 +219,7 @@ export async function maybeExtractObservations(
   if (deps.llmCaller === undefined) {
     return { ran: false, extracted: [], clippedTier3: tier3.recent, reason: 'no_llm_caller' }
   }
-  const lastObservedTurn = computeLastObservedTurn(tier2)
-  const newMessages = filterNewMessages(tier3.recent, lastObservedTurn)
-  const newTokens = totalTokens(newMessages, deps.tokenCounter)
-  if (newTokens < NEW_TOKENS_FIRE_FLOOR) {
-    return throttleResult(tier3, ctx, deps.tokenCounter)
-  }
-  const request = buildLLMRequest(newMessages, tier2, deps.currentQuery, deps.tokenCounter)
+  const request = buildLLMRequest(tier3.recent, tier2, deps.currentQuery, deps.tokenCounter)
   const response = await deps.llmCaller(request)
   return applyExtraction(tier3, ctx, response.text, deps)
 }
@@ -314,13 +248,7 @@ export function extractObservationsSync(
   if (deps.syncLLMCaller === undefined) {
     return { ran: false, extracted: [], clippedTier3: tier3.recent, reason: 'no_llm_caller' }
   }
-  const lastObservedTurn = computeLastObservedTurn(tier2)
-  const newMessages = filterNewMessages(tier3.recent, lastObservedTurn)
-  const newTokens = totalTokens(newMessages, deps.tokenCounter)
-  if (newTokens < NEW_TOKENS_FIRE_FLOOR) {
-    return throttleResult(tier3, ctx, deps.tokenCounter)
-  }
-  const request = buildLLMRequest(newMessages, tier2, deps.currentQuery, deps.tokenCounter)
+  const request = buildLLMRequest(tier3.recent, tier2, deps.currentQuery, deps.tokenCounter)
   const response = deps.syncLLMCaller(request)
   return applyExtraction(tier3, ctx, response.text, {
     tokenCounter: deps.tokenCounter,

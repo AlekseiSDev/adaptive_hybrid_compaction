@@ -189,6 +189,16 @@ export type ConfigDef = {
    * Ignored for non-AHC baselines.
    */
   thresholds?: Partial<Thresholds>
+  /**
+   * Optional model override for AHC internal LLM calls (observer, reflection,
+   * digest). Defaults to the main actor model. Use a cheaper model here when
+   * extraction quality doesn't need the actor's strength — e.g. set to
+   * `google/gemini-3.1-flash-lite-preview` (~3x cheaper than gpt-5.4-mini) for
+   * lme-multiturn-style summarisation. Pricing is resolved from
+   * OPENROUTER_PRICING by `ahc_core.ts`. Ignored for non-AHC baselines.
+   * Added 2026-05-27 — Step B of the observer-overhead PR.
+   */
+  internal_model?: string
 }
 
 export type RunnerContext = {

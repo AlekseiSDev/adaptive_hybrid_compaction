@@ -63,6 +63,56 @@ Append-only. Новые записи внизу.
   mean score 2/3 без регрессии. Same 82 fires но каждый input 25× меньше
   (одна new session, не full window). vs FC ($6.88, 3/3) — AHC@64k 49%
   cheaper; vs Mastra ($1.43, 3/3) — ещё 2.4× дороже (Step B target).
+- **[2026-05-27] Pluggable observer/internal model (`ConfigDef.internal_model`)**
+  — Step B of the observer-overhead PR. Новый sweep YAML knob:
+  `internal_model: google/gemini-3.1-flash-lite-preview` маршрутизирует AHC
+  internal LLM calls (observer/reflection/digest) через cheaper model вместо
+  main actor. Main actor остаётся на `gpt-5.4-mini` (его умность важна
+  для answer quality). Pricing 3× cheaper input ($0.25 vs $0.75 per-M),
+  3× cheaper output. n=3 lme-mt debug на тех же 3 killer tasks:
+  total cost $3.50 → **$2.63 (−25% on top of Step A, −57% from PRE)**,
+  observer overhead $1.69 → **$0.94 (3× drop как и pricing)**, full-obs rate
+  поднялся 80/82 → 82/82 (flash-lite extracted строже), mean score 2/3
+  preserved. vs FC ($6.88, 3/3) — AHC@64k 62% cheaper; vs Mastra ($1.43,
+  3/3) — AHC всё ещё 1.8× дороже (Mastra gap не закрыт; их 4.6× cheaper
+  baseline на full n=15 lme-multiturn вероятно ещё больше — single-shot
+  reflection vs наш per-turn extract). Sweep YAML
+  `eval/sweeps/main_e1_text_lme_mt_n3_observer_t64k_flashlite.yaml`.
+- **[2026-05-27] Tier-3 watermark: fire-on-threshold вместо fire-every-turn**
+  — supersedes Step A's `floor=1` hack. Step A's content-filter в observer'е
+  с floor=1 был workaround: tierize re-build'ила Tier-3 из full history
+  каждый turn (всегда ≥threshold → observer всегда fires), а content-filter
+  пытался сжимать LLM input по-новому. На самом деле fires count stayed at
+  82 (one per turn). Правильное место для fix'а — **tierize**:
+  `lastObservedTurn` parameter excludes уже-наблюдённые messages из
+  Tier-3 candidates ДО token-budget walk. Tier-3 теперь стартует empty
+  после fire'а, растёт сессия-за-сессией, пересекает OBSERVER_THRESHOLD
+  естественно через ~25 сессий → ONE fire на batch → reset. Adapter
+  (`ai-sdk-v6.ts`) computes watermark как `max(prevTier2.observations[].sourceTurn)`
+  и passes в tierize. Observer возвращён к простой "threshold check → fire"
+  shape (content-filter / floor=1 / throttleResult всё удалено).
+  **Result на тех же 3 killer tasks:**
+  - **fires 82 → 5** (16× меньше) — 1 per task для 01493427, 2 each для 07741c44/07b6f563
+  - **mean score 2/3 → 3/3** (matched FC + Mastra accuracy)
+  - total cost $3.50 → $3.47 (~wash — observer overhead −$0.27, но actor input
+    +$0.25 потому что accumulates до threshold вместо clip)
+  - killer task `01493427` всё ещё ✓ "25 postcards"; **07741c44 теперь ✓**
+    (раньше failed на всех configs кроме FC/Mastra); 07b6f563 ✓
+  **Observer-model swap experiments** (Step B `internal_model` knob):
+  - `gpt-5.4-mini` (default, актер model): 3/3, $3.47, 5 fires — canonical
+  - `gemini-3.1-flash-lite`: 2/3 (07b6f563 ✗), $3.23 — generic phone-accessories answer
+  - `gemini-2.5-flash` (Mastra default): **1/3** (01493427 + 07741c44 ✗), $3.26 —
+    разные tasks failing, разный failure mode; парадокс что Mastra на этой же
+    модели 3/3 — указывает на prompt-mismatch (наш observer prompt оптимизирован
+    под gpt-extraction-style, не под Mastra-style coverage). Step C3 prompt
+    rewrite (Mastra-style coverage instructions) пропущен в этом PR — мог бы
+    закрыть gap, но рискует current 3/3. Отложен как follow-up workstream.
+  Production canonical: gpt-5.4-mini observer. Mastra gap closure: vs Mastra
+  ($1.43, 3/3) AHC@64k теперь 2.4× дороже но 3/3-equivalent на этих 3 задачах.
+  Mastra win на cost остаётся (single-batch reflection + 2.5-flash их default).
+  Sweep YAMLs: `main_e1_text_lme_mt_n3_observer_t64k.yaml` (canonical),
+  `..._t64k_flashlite.yaml` (experimental, regression documented),
+  `..._t64k_gemini25flash.yaml` (experimental, regression documented).
 
 ### Dataset / Benches
 

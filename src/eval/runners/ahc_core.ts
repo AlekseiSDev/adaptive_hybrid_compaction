@@ -89,6 +89,18 @@ export type AhcCoreBaselineDeps = {
    * Injecting custom caller is useful for tests.
    */
   llmCaller?: LLMCaller
+  /**
+   * Optional model to use for AHC internal LLM calls (observer / reflection /
+   * digest). Defaults to `model`. Set to a cheaper model when extraction
+   * quality doesn't need the actor's strength — e.g. `gemini-3.1-flash-lite`
+   * for ~3x cheaper observer overhead. Pricing auto-resolved from the same
+   * pricing tables as the main actor (`OPENROUTER_PRICING` /
+   * `ANTHROPIC_DIRECT_PRICING` / `GOOGLE_DIRECT_PRICING`).
+   * Added 2026-05-27 (Step B observer-overhead PR).
+   */
+  internalModel?: string
+  /** Optional pricing override for `internalModel`. Default: resolved from provider table. */
+  internalPricing?: ModelPricing
   /** Optional injected LLMClient wrapper for tests. */
   llmClient?: LLMClient
   /**
@@ -160,6 +172,8 @@ export function ahcCoreBaseline(deps: AhcCoreBaselineDeps): Baseline {
   const provider: AhcProvider = deps.provider ?? 'openrouter'
   const model = deps.model ?? resolveDefaultModel(provider)
   const pricing = deps.pricing ?? resolvePricing(provider, model)
+  const internalModel = deps.internalModel ?? model
+  const internalPricing = deps.internalPricing ?? resolvePricing(provider, internalModel)
 
   return {
     name: 'ahc_core',
@@ -185,15 +199,23 @@ export function ahcCoreBaseline(deps: AhcCoreBaselineDeps): Baseline {
       // Cost-aware caller for AHC internal LLM calls (digest, observer,
       // reflection). Accumulator updated synchronously per-call so the
       // step.cost_usd we return at the end reflects all upstream consumption.
+      // `internalModel` defaults to the main actor model; setting it to a
+      // cheaper LLM (e.g. gemini-3.1-flash-lite, 3x cheaper input) lets the
+      // observer/reflection calls run on the cheap model while the main
+      // actor stays on `gpt-5.4-mini`.
       const baseLlmCaller =
         deps.llmCaller ??
         wrapLlmClientAsLLMCaller(
           deps.llmClient ?? defaultLlmClient(provider, deps.apiKey, deps.baseURL),
-          model,
+          internalModel,
         )
-      const costAwareLlmCaller = makeCostAwareLLMCaller(baseLlmCaller, pricing, (usd) => {
-        scratch.internalCostUsdSinceLastStep += usd
-      })
+      const costAwareLlmCaller = makeCostAwareLLMCaller(
+        baseLlmCaller,
+        internalPricing,
+        (usd) => {
+          scratch.internalCostUsdSinceLastStep += usd
+        },
+      )
 
       // Shared AHC-over-AI-SDK assembly — provider switch (openrouter /
       // anthropic_direct), middleware wiring, scratchpad lifecycle all live

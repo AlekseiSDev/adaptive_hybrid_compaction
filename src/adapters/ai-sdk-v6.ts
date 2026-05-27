@@ -9,7 +9,8 @@ import {
   compact,
   defaultFeatureFlags,
   defaultThresholds,
-  recallToolDefinition,
+  recallFullToolDefinition,
+  recallSummaryToolDefinition,
   tierize,
   type CompactResult,
   type CoreEvent,
@@ -97,14 +98,8 @@ function withDerivedMetadata(messages: readonly Message[]): Message[] {
   return out
 }
 
-function buildRecallFunctionTool(): LanguageModelV3FunctionTool {
-  // recallToolDefinition is a frozen branded literal; we extract the published fields
-  // for the SDK without touching the original reference (cache prefix stability).
-  const def = recallToolDefinition as unknown as {
-    name: string
-    description: string
-    parameters: Record<string, unknown>
-  }
+function toFnTool(toolDef: unknown): LanguageModelV3FunctionTool {
+  const def = toolDef as { name: string; description: string; parameters: Record<string, unknown> }
   return {
     type: 'function',
     name: def.name,
@@ -113,7 +108,26 @@ function buildRecallFunctionTool(): LanguageModelV3FunctionTool {
   }
 }
 
-const RECALL_FN_TOOL: LanguageModelV3FunctionTool = buildRecallFunctionTool()
+const RECALL_SUMMARY_FN_TOOL: LanguageModelV3FunctionTool = toFnTool(recallSummaryToolDefinition)
+const RECALL_FULL_FN_TOOL: LanguageModelV3FunctionTool = toFnTool(recallFullToolDefinition)
+
+// Tail system message instructing the actor on AHC recall protocol. Frozen
+// literal so its referential identity is stable across calls — cache prefix
+// only churns on the boundary where scratchpad goes from empty → non-empty
+// (which also flips the tools list, so the cache miss is unavoidable
+// regardless). After that, the note text is byte-identical turn-over-turn.
+const RECALL_PROTOCOL_NOTE = Object.freeze(
+  [
+    '[AHC recall protocol] Some earlier tool_results have been offloaded to keep this context small.',
+    'You will see placeholders of the form:',
+    '  [Offloaded #G1 tool=<name> size=<N>B — summary: recall_tool_summary(G1); raw: recall_tool_full(G1)]',
+    '',
+    'When you need data from such a placeholder, do not re-run the original tool. Instead:',
+    '  • call recall_tool_summary(recall_id="G1", reason="...") for a content-aware summary (cheap, try this first);',
+    '  • call recall_tool_full(recall_id="G1", reason="...") only if the summary is insufficient.',
+    'Recall is faster, cheaper, and exact — prefer it over re-searching.',
+  ].join('\n'),
+)
 
 // Marks the stable cacheable prefix in the assembled prompt with Anthropic's
 // `cacheControl: ephemeral` hint so api.anthropic.com caches the prompt
@@ -165,6 +179,21 @@ function withAnthropicCacheControlOnSystem(
   )
 }
 
+// Inserts an additional system message carrying RECALL_PROTOCOL_NOTE right
+// after the first existing system message. Placement preserves the cache
+// breakpoint (which sits on the first user message): both system entries are
+// in the cached prefix. If no system message is present, returns prompt
+// unchanged — passthrough paths skip recall injection anyway.
+function injectRecallProtocolNote(prompt: LanguageModelV3Prompt): LanguageModelV3Prompt {
+  const sysIdx = prompt.findIndex((m) => m.role === 'system')
+  if (sysIdx < 0) return prompt
+  const note: LanguageModelV3Prompt[number] = {
+    role: 'system',
+    content: RECALL_PROTOCOL_NOTE,
+  }
+  return [...prompt.slice(0, sysIdx + 1), note, ...prompt.slice(sysIdx + 1)]
+}
+
 export function createAhcMiddleware(deps: AhcMiddlewareDeps): LanguageModelV3Middleware {
   const registry = deps.scratchpadRegistry ?? new SessionScratchpadRegistry()
   const hysteresisStates = deps.hysteresisStateOverride ?? new Map<SessionId, HysteresisState>()
@@ -198,11 +227,24 @@ export function createAhcMiddleware(deps: AhcMiddlewareDeps): LanguageModelV3Mid
       const lastUserText =
         lastUser?.content.find((p) => p.type === 'text')?.text ?? ''
 
+      // Watermark for tier-3 filtering (decisions.md [2026-05-27]): exclude
+      // messages already covered by Tier-2 observations so Tier-3 grows
+      // incrementally across turns and only crosses OBSERVER_THRESHOLD when
+      // genuinely new content has accumulated. Without this, tierize re-built
+      // Tier-3 from full history every turn → observer fired every turn.
+      let lastObservedTurn = -1
+      if (prevTier2 !== undefined) {
+        for (const o of prevTier2.observations) {
+          if (o.sourceTurn > lastObservedTurn) lastObservedTurn = o.sourceTurn
+        }
+      }
+
       let tierized: ReturnType<typeof tierize>
       try {
         tierized = tierize(enriched, {
           tier3TokenBudget: thresholds.TIER3_TOKEN_BUDGET,
           ...(prevTier2 !== undefined ? { previousTier2: prevTier2 } : {}),
+          ...(lastObservedTurn >= 0 ? { lastObservedTurn } : {}),
         })
       } catch {
         // tierize requires exactly one system message and at least one user message;
@@ -248,14 +290,43 @@ export function createAhcMiddleware(deps: AhcMiddlewareDeps): LanguageModelV3Mid
         ? withAnthropicCacheControlOnSystem(newPrompt)
         : newPrompt
       const baseTools = (params.tools ?? []) as LanguageModelV3CallOptions['tools']
+      const recallActive = flags.RECALL_TOOL && scratchpad.size() > 0
+      // K-tail-3 fix (2026-05-27): only append recall schemas the runner
+      // hasn't already provided. Otherwise an AHC-aware runner like
+      // gaia-tools — which registers recall_tool_summary / recall_tool_full
+      // with execute()s — produces a tools list with duplicate names, which
+      // the OpenAI / OpenRouter providers happily echo back, polluting the
+      // schema list and confusing tool-call routing. The execute path lives
+      // runner-side; middleware just fills in schemas when no runner did.
+      const baseToolNames = new Set(
+        (baseTools ?? [])
+          .filter((t) => t.type === 'function')
+          .map((t) => t.name),
+      )
+      const recallExtras: typeof RECALL_SUMMARY_FN_TOOL[] = []
+      if (recallActive) {
+        if (!baseToolNames.has(RECALL_SUMMARY_FN_TOOL.name)) {
+          recallExtras.push(RECALL_SUMMARY_FN_TOOL)
+        }
+        if (!baseToolNames.has(RECALL_FULL_FN_TOOL.name)) {
+          recallExtras.push(RECALL_FULL_FN_TOOL)
+        }
+      }
       const newTools =
-        flags.RECALL_TOOL && scratchpad.size() > 0
-          ? [...(baseTools ?? []), RECALL_FN_TOOL]
-          : baseTools
+        recallExtras.length > 0 ? [...(baseTools ?? []), ...recallExtras] : baseTools
+
+      // K-tail-3 (2026-05-26): inject recall-protocol explainer as a second
+      // system message right after the (cacheable) first system message.
+      // Bench/UI system prompts are upstream-faithful and don't mention AHC;
+      // without this hint actors don't discover recall_tool_summary/full and
+      // either ignore pointers or re-run the original tool.
+      const promptWithRecallNote = recallActive
+        ? injectRecallProtocolNote(promptWithCacheHint)
+        : promptWithCacheHint
 
       const merged: LanguageModelV3CallOptions = {
         ...params,
-        prompt: promptWithCacheHint,
+        prompt: promptWithRecallNote,
         ...(newTools !== undefined ? { tools: newTools } : {}),
       }
       // Classifier hysteresis update happens implicitly via compact(); we just need to

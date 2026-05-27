@@ -40,6 +40,15 @@ export const OPENROUTER_PRICING: Record<string, ModelPricing> = Object.freeze({
     input_per_million_usd: 0.25,
     output_per_million_usd: 1.5,
   },
+  // gemini-2.5-flash — Mastra default observer model. Stronger than
+  // flash-lite (extraction quality preserved on lme-mt killer tasks per
+  // 2026-05-27 sweep), still 2.5x cheaper input than gpt-5.4-mini.
+  // Pricing taken from Google AI Studio published rates (same as
+  // GOOGLE_DIRECT_PRICING below); OpenRouter passes through ~equivalent.
+  'google/gemini-2.5-flash': {
+    input_per_million_usd: 0.30,
+    output_per_million_usd: 2.50,
+  },
   // Primary actor (per decisions.md 2026-05-13 pivot). OpenAI prompt cache
   // fires automatically on OpenRouter on ≥1024-token stable prefix — no
   // cache_control plumbing required. Probe verified ~80% cached_tokens

@@ -1,0 +1,49 @@
+name: main_e1_text_lme_mt_n3_observer_t64k
+# 2026-05-27 — threshold-sweep ablation: same 3 killer tasks, OBSERVER_THRESHOLD
+# 64000 instead of 128000.
+#
+# Why this sweep:
+# Post-fix n=3 debug on `ahc_full_obs128k` showed observer fires bunched at the
+# end of each task (turns 46-52 out of 48-53) — 90-96% of cumulative input was
+# racked up DURING the buildup phase before any compaction. AHC ended up ~3%
+# MORE expensive than full_context on n=15 because observer LLM call overhead
+# outpaced the limited savings on short tasks.
+#
+# Hypothesis: at OBSERVER_THRESHOLD=64000, Tier-3 fills to 64k after ~25 of
+# 2.6k-tok haystack sessions (vs 49 sessions at 128k). First fire at ~turn 25
+# rather than ~turn 46 → ~half of each task runs in compacted state. Expected
+# cost drop: significant; accuracy: should hold or improve (observer extracts
+# observations more often → more facts in Tier-2 by the time the final question
+# fires).
+#
+# Auto-mirror per adapters/ai-sdk-v6.ts:204-212 — setting OBSERVER_THRESHOLD
+# alone implicitly sets TIER3_TOKEN_BUDGET to match, keeping the two coupled
+# (one fire per overflow with predictable residue).
+#
+# Same 3 tasks as `main_e1_text_lme_mt_n3_observer_debug.yaml` — first 3
+# alphabetically (01493427, 07741c44, 07b6f563) via `--max-tasks-per-cell=3`.
+#
+# Cost ballpark: ~$5-8 (more observer fires but smaller Tier-3 dumps per fire).
+#
+# Run:
+#   set -a && . ./.env && set +a
+#   pnpm tsx scripts/eval.ts --sweep eval/sweeps/main_e1_text_lme_mt_n3_observer_t64k.yaml \
+#     --concurrency=3 --max-tasks-per-cell=3
+#
+# Post-sweep: compare against the 64k post-fix run dir
+# `42_pre-fix` (renamed pre-fix) / `42` (post-fix at 128k): observer fire
+# count, cumulative input savings, mean primary score, total cost.
+
+benches:
+  - lme-multiturn
+configs:
+  - id: ahc_full_obs64k
+    ahc_flags:
+      TASK_AWARE_EXTRACTION: true
+      TYPE_AWARE_OFFLOAD: true
+      TRAJECTORY_CLASSIFIER: true
+      RECALL_TOOL: true
+    thresholds:
+      OBSERVER_THRESHOLD: 64000
+seeds: [42]
+budget_usd: 15

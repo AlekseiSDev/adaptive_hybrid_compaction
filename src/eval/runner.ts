@@ -357,6 +357,10 @@ function makeAhcCoreRunner(config: ConfigDef): Runner {
     // Threshold overrides (e.g. OBSERVER_THRESHOLD=4000 for lme-multiturn sweep).
     // createAhcMiddleware merges with defaultThresholds. Track H P1 plumbing.
     ...(config.thresholds !== undefined ? { thresholds: config.thresholds } : {}),
+    // Separate model for AHC internal LLM calls (observer/reflection/digest).
+    // Defaults to main actor model — set in sweep YAML when extraction can use
+    // a cheaper LLM than the actor. Added 2026-05-27 (Step B observer overhead).
+    ...(config.internal_model !== undefined ? { internalModel: config.internal_model } : {}),
     systemPrompt: DEFAULT_AGENT_SYSTEM_PROMPT,
   })
   return buildRunnerFromBaseline(baseline)

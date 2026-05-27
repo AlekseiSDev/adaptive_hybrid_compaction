@@ -14,7 +14,7 @@ import type { LLMClient } from '../types.js'
 // and the CoreEvent → InstrumentationEvent mapper.
 
 describe('ahcCoreBaseline factory', () => {
-  test('prepare(task) yields state with task.id, empty history, scratchpad+hysteresis in scratch', () => {
+  test('prepare(task) yields state with task.id, empty history, scratchpad+hysteresis+tier2Registry in scratch', () => {
     const baseline = ahcCoreBaseline({
       apiKey: 'sk-fake',
       baseURL: 'http://localhost:9999',
@@ -28,10 +28,49 @@ describe('ahcCoreBaseline factory', () => {
     const scratch = state.scratch as unknown as {
       registry: { size?: () => number }
       hysteresis: Map<string, unknown>
+      tier2Registry: Map<string, unknown>
       internalCostUsdSinceLastStep: number
     }
     expect(scratch.hysteresis).toBeInstanceOf(Map)
+    // 2026-05-27: per-task Tier-2 registry pinned in scratch so observations
+    // survive across baseline.step() calls. Closes the H Phase 9 eval-path gap.
+    expect(scratch.tier2Registry).toBeInstanceOf(Map)
     expect(scratch.internalCostUsdSinceLastStep).toBe(0)
+  })
+})
+
+describe('ahcCoreBaseline — internalModel wiring (Step B)', () => {
+  test('accepts internalModel option without crashing; defaults to main model', () => {
+    // With internalModel set, factory should build successfully — pricing
+    // auto-resolves from OPENROUTER_PRICING. Unknown models fall back to
+    // ZERO_PRICING (no crash; cost stays 0 — caller is responsible for
+    // supplying internalPricing override when using an unlisted model).
+    const baselineWithOverride = ahcCoreBaseline({
+      apiKey: 'sk-fake',
+      model: 'openai/gpt-5.4-mini',
+      internalModel: 'google/gemini-3.1-flash-lite-preview',
+    })
+    expect(baselineWithOverride.name).toBe('ahc_core')
+    expect(baselineWithOverride.prepare({ id: 't', input: '', expected: '' })).toBeDefined()
+
+    const baselineDefault = ahcCoreBaseline({
+      apiKey: 'sk-fake',
+      model: 'openai/gpt-5.4-mini',
+      // internalModel omitted — should default to main model with no error
+    })
+    expect(baselineDefault.name).toBe('ahc_core')
+  })
+
+  test('accepts unknown internalModel without crashing (pricing falls back to zero)', () => {
+    // Defensive: sweep YAML might name a model not yet in OPENROUTER_PRICING.
+    // factory must not crash — cost just won't accumulate for those calls.
+    expect(() =>
+      ahcCoreBaseline({
+        apiKey: 'sk-fake',
+        model: 'openai/gpt-5.4-mini',
+        internalModel: 'some/unknown-model-not-in-pricing-table',
+      }),
+    ).not.toThrow()
   })
 })
 

@@ -1,0 +1,23 @@
+name: main_e1_text_lme_mt_n3_observer_t64k_gemini25flash
+# 2026-05-27 — sweep variant: gemini-2.5-flash as observer model (Mastra default).
+# Compare with:
+#   - gpt-5.4-mini (..._t64k.yaml) — production canonical, 3/3 score, $3.47
+#   - gemini-3.1-flash-lite (..._t64k_flashlite.yaml) — too weak, 2/3 score
+#   - full_context — $6.88, 3/3 (no observer; baseline upper bound)
+#   - mastra_om — $1.43, 3/3 (their algorithm at 30k threshold)
+# Hypothesis: 2.5-flash sweet spot — 2.5x cheaper than gpt observer,
+# strong enough to preserve 3/3.
+benches:
+  - lme-multiturn
+configs:
+  - id: ahc_full_obs64k_gemini25flash_obs
+    ahc_flags:
+      TASK_AWARE_EXTRACTION: true
+      TYPE_AWARE_OFFLOAD: true
+      TRAJECTORY_CLASSIFIER: true
+      RECALL_TOOL: true
+    thresholds:
+      OBSERVER_THRESHOLD: 64000
+    internal_model: google/gemini-2.5-flash
+seeds: [42]
+budget_usd: 10

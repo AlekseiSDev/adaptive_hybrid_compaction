@@ -192,4 +192,65 @@ describe('tierize', () => {
     expect(tier2.pointers).toEqual(previousTier2.pointers)
     expect(tier2.classSignal).toEqual(previousTier2.classSignal)
   })
+
+  // 2026-05-27: tier-3 watermark prevents observer from re-firing every turn.
+  // Without filtering by lastObservedTurn, tierize re-built Tier-3 from full
+  // history each turn → observer always saw ≥threshold tokens → fired every
+  // turn (82 fires on 3 lme-mt tasks before fix). With watermark, Tier-3
+  // contains only post-watermark messages and grows incrementally.
+  describe('lastObservedTurn watermark', () => {
+    // Sentinel "no cap" budget — large enough that no test message is ever
+    // budget-trimmed. NOT tied to any production threshold; if defaults
+    // (TIER3_TOKEN_BUDGET=30000) shift, this value stays the same.
+    const NO_BUDGET_CAP = Number.MAX_SAFE_INTEGER
+
+    test('excludes messages with turn_index ≤ lastObservedTurn from Tier-3', () => {
+      const history: Message[] = [sysMsg, userMsg('q', 0)]
+      for (let t = 1; t <= 10; t++) {
+        history.push(userMsg(`session ${String(t)}`, t), asstMsg(`reply ${String(t)}`, t))
+      }
+      const watermark = 5 // arbitrary mid-range turn; test asserts the filter, not the value
+      const { tier3 } = tierize(history, {
+        tier3TokenBudget: NO_BUDGET_CAP,
+        lastObservedTurn: watermark,
+      })
+      // Only messages with turn_index > watermark should be in Tier-3.
+      for (const m of tier3.recent) {
+        expect(m.metadata?.turn_index).toBeGreaterThan(watermark)
+      }
+      // Sessions 6-10 (5 turns × 2 messages each) = 10 messages in Tier-3.
+      expect(tier3.recent).toHaveLength(10)
+    })
+
+    test('lastObservedTurn=-1 / undefined includes all messages (backward compat)', () => {
+      const history: Message[] = [sysMsg, userMsg('q', 0)]
+      for (let t = 1; t <= 5; t++) {
+        history.push(userMsg(`session ${String(t)}`, t), asstMsg(`reply ${String(t)}`, t))
+      }
+      const noWatermark = tierize(history, { tier3TokenBudget: NO_BUDGET_CAP })
+      const explicitNegative = tierize(history, {
+        tier3TokenBudget: NO_BUDGET_CAP,
+        lastObservedTurn: -1,
+      })
+      expect(noWatermark.tier3.recent.length).toBe(10) // all 5 turns × 2 messages
+      expect(explicitNegative.tier3.recent.length).toBe(10)
+    })
+
+    test('messages without metadata.turn_index are treated as new (synthetic test compat)', () => {
+      // Core-only synthetic tests build messages without metadata. Watermark
+      // filter must include them unconditionally regardless of how high the
+      // watermark is set.
+      const noMetaMsg: Message = {
+        role: 'user',
+        content: [{ type: 'text', text: 'no metadata content' }],
+      }
+      const history: Message[] = [sysMsg, userMsg('q', 0), noMetaMsg]
+      const { tier3 } = tierize(history, {
+        tier3TokenBudget: NO_BUDGET_CAP,
+        lastObservedTurn: Number.MAX_SAFE_INTEGER, // would exclude everything with metadata
+      })
+      // The no-metadata message survives the filter (no turn_index hook to compare against).
+      expect(tier3.recent).toContain(noMetaMsg)
+    })
+  })
 })

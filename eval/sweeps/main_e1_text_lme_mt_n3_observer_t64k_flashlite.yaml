@@ -1,0 +1,39 @@
+name: main_e1_text_lme_mt_n3_observer_t64k_flashlite
+# 2026-05-27 — Step B verification sweep for the observer-overhead PR.
+#
+# Identical to main_e1_text_lme_mt_n3_observer_t64k.yaml except for the new
+# `internal_model` field: AHC internal LLM calls (observer / reflection /
+# digest) now route through `google/gemini-3.1-flash-lite-preview` instead of
+# the main actor model. Pricing per OPENROUTER_PRICING:
+#   gpt-5.4-mini       — input $0.75/M, output $4.5/M (main actor unchanged)
+#   gemini-3.1-flash-lite — input $0.25/M, output $1.5/M (3x cheaper)
+#
+# Expected vs Step A post (commit f789b7e, $3.50 on 3 tasks):
+#   total cost: ~$2.0-2.3 (Step A observer overhead $1.69 × ~0.33 = $0.6 →
+#     total ~$2.2). Mean score should hold at 0.667; flash-lite is weaker but
+#     extracting line-based observations on summarisation isn't actor-grade
+#     work. If accuracy drops by ≥1 task — fallback to gemini-2.5-flash (1.5x
+#     cheaper than gpt-5.4-mini, qualitatively stronger than flash-lite).
+#
+# Same 3 killer tasks (01493427 / 07741c44 / 07b6f563) via
+# --max-tasks-per-cell=3 + alphabetical readdir order.
+#
+# Run:
+#   set -a && . ./.env && set +a
+#   pnpm tsx scripts/eval.ts --sweep eval/sweeps/main_e1_text_lme_mt_n3_observer_t64k_flashlite.yaml \
+#     --concurrency=3 --max-tasks-per-cell=3
+
+benches:
+  - lme-multiturn
+configs:
+  - id: ahc_full_obs64k_flashlite_obs
+    ahc_flags:
+      TASK_AWARE_EXTRACTION: true
+      TYPE_AWARE_OFFLOAD: true
+      TRAJECTORY_CLASSIFIER: true
+      RECALL_TOOL: true
+    thresholds:
+      OBSERVER_THRESHOLD: 64000
+    internal_model: google/gemini-3.1-flash-lite-preview
+seeds: [42]
+budget_usd: 10
