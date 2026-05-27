@@ -81,43 +81,25 @@ Per-level (1/2/3):
 L3 ceiling 0/4 общий для всех baselines — gpt-5.4-mini single-session
 не справляется с multi-hop L3 (видимо bound актёр-модели, не compaction layer).
 
-✠✠ AHC K-tail-2 variant (`main_e1_gaia_ahc.yaml`): `OBSERVER_THRESHOLD=100K`,
-`REFLECTION_THRESHOLD=200K`, `TIER3_TOKEN_BUDGET=100K`. Web search tool_results
-(20-50K chars) сразу offload'ятся в scratchpad через Type-Aware Offloader.
-Recall path был architecturally wired, but functionally dead (0 invocations
-of `recall_tool_result` across all 25 tasks):
-1. `GAIA_DRIVER_SYSTEM` (faithful upstream GAIA prompt) не упоминал pointer'ы
-   или recall tool;
-2. Single `recall_tool_result` tool injected via middleware schema-only —
-   `gaiaTools(workspaceDir)` factory не attach'ил execute path, AI SDK
-   не мог dispatch'ить если actor вообще попробовал бы позвать;
-3. Pointer stub несёт inline `digest` = 80-token LLM summary поверх 20-50K
-   web_search dump'а — lossy на multi-step reasoning.
+✠✠ / ✠✠✠ K-tail-2 vs K-tail-3 — обе строки это `gaia_bench_agent_ahc` baseline,
+разные версии AHC алгоритма. K-tail-3 — fix recall path (K-tail-2 audit нашёл 0
+invocations recall tool across 25 tasks) + tightened thresholds.
 
-Actor терял search context на следующем step'е, не имел способа вернуть его,
-re-search'ил с нуля → 0.20 acc.
+| | K-tail-2 (`main_e1_gaia_ahc.yaml`) | K-tail-3 (`main_e1_gaia_ahc_v3.yaml`) |
+|---|---|---|
+| Recall in system prompt | не упомянут | `RECALL_PROTOCOL_NOTE` injected |
+| Recall tools | `recall_tool_result` (schema-only, без execute) | `recall_tool_summary` + `recall_tool_full` (execute wired через `gaiaTools()`) |
+| Digest | 80-token LLM summary (lossy) | per-tool content-aware projectors |
+| Pointer stub | inline digest | refs-only `[Offloaded #G1 ...; summary: ...(G1); raw: ...(G1)]` |
+| Parallel tool calls | siblings overwrote в offloader | per-`tool_use_id` replacement map |
+| `visit_webpage` MIME | любой Content-Type | text/xml/json/rss/atom whitelist (binary throws) |
+| OBSERVER / REFLECTION / TIER3 | 100K / 200K / 100K | 64K / 100K / 64K |
+| Observer fires | почти never (per-turn context < 100K) | реально fires на heavier tasks (gaia_010 115K, 016 83K, 013 79K) |
+| acc | 0.200 | **0.440** |
 
-✠✠✠ AHC K-tail-3 variant (`main_e1_gaia_ahc_v3.yaml`): три coupled fix'а
-для recall path (см. `decisions.md` 2026-05-27 entry).
-(1) Centralized recall-protocol injection в system prompt
-(`RECALL_PROTOCOL_NOTE` frozen literal) — actor узнаёт о pointer формате +
-recall tool сигнатурах.
-(2) Two-stage rehydration: split single recall tool в pair
-`recall_tool_summary` (cheap, content-aware) + `recall_tool_full` (raw
-fallback); scratchpad payload `AtomicGroup` → `{group, summary}`, stub
-format переписан с inline digest на pointer-only references.
-(3) Content-aware digest (`CONTENT_AWARE_DIGEST=true`): per-tool rule-based
-projectors заменяют LLM-summary — `web_search` → top-N {title, url,
-snippet_head_300}, `visit_webpage` → {title, head_800+tail_400},
-`python_exec` → {stdout, stderr, exit_code}, `text_editor` → {path,
-content_head_600}, `describe_image` → verbatim if ≤2000 chars. Plus три
-side fix'а из debug pass'а (parallel tool calls в offloader, dedupe recall
-schema injection, `visit_webpage` Content-Type whitelist на binary dump'ы).
-Thresholds tightened: `OBSERVER_THRESHOLD=64000`, `REFLECTION_THRESHOLD=100000`,
-`TIER3_TOKEN_BUDGET=64000`. Observer теперь реально fires на heavier tasks
-(gaia_010 input 115K, gaia_016 83K, gaia_013 79K — все пересекают 64K
-threshold; в K-tail-2 при 100K threshold Observer почти не срабатывал
-на per-turn context).
+K-tail-3 rationale + per-change verification — `decisions.md` 2026-05-27
+"Two-stage recall (summary + full) + content-aware digest". Algorithm-level
+chronology — `history.md` 2026-05-27 K-tail-3 entry.
 
 Mastra opaque to Langfuse (`@mastra/core` doesn't expose `experimental_telemetry`
 option). Diagnostic via `Score.secondary.n_tool_calls` (К-tail instrumentation):
