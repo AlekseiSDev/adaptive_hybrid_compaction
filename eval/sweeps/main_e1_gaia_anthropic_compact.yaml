@@ -1,0 +1,37 @@
+name: main_e1_gaia_anthropic_compact
+# Track K-tail-4 (2026-05-27) — Anthropic's server-side /compact agent на
+# gaia-med, 2 модели: claude-haiku-4-5 (default tier matching gpt-5.4-mini)
+# и claude-sonnet-4-6 (strength upper bound в haiku-tier comparable scope).
+#
+# Чёрный ящик-конкурент для AHC: vendor managed compaction (через
+# `betas: ['compact-2026-01-12']` + `context_management.edits[]` API) вместо
+# middleware-side rewriting. Тот же GAIA_DRIVER_SYSTEM, тот же gaiaTools
+# (web_search / visit_webpage / python_exec / text_editor / describe_image),
+# просто другая стратегия compaction.
+#
+# Trigger threshold = 100K (default из anthropic_compact AT baseline). GAIA
+# tasks rarely cross 100K input — это валидный сигнал «как vendor agent
+# ведёт себя без compaction trigger'а на нашем bench'е».
+#
+# Auth: LiteLLM proxy preferred (LITELLM_BASE_URL+LITELLM_MASTER_KEY,
+# upstream-billet corporate Anthropic key) → ANTHROPIC_API_KEY direct fallback.
+# Auth dispatch в src/eval/adapters/gaia-med/index.ts:resolveGaiaAnthropicCompactRunner.
+#
+# Model: claude-sonnet-4.6 only. Haiku 4.5 был добавлен в начале, но Anthropic
+# API возвращает 400 "claude-haiku-4-5-20251001 does not support the
+# 'compact_20260112' context management strategy" — vendor /compact feature
+# только на Sonnet+ tier (pilot 2026-05-27, см. docs/history.md).
+#
+# Live deps:
+#   - LITELLM_MASTER_KEY + LITELLM_BASE_URL (preferred) OR ANTHROPIC_API_KEY
+#   - WEB_SEARCH_AUTOSELECT=true + BRAVE_API_KEY (или SEARXNG_URL)
+#   - LANGFUSE_ENABLED=true (опционально)
+
+benches:
+  - gaia-med
+configs:
+  - id: gaia_anthropic_compact_sonnet_4_6
+    baseline: gaia_bench_agent_anthropic_compact
+    actor_model: claude-sonnet-4.6
+seeds: [42]
+budget_usd: 25
