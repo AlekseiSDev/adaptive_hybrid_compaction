@@ -168,10 +168,27 @@ describe('Cache invariance (§9.1) — bytewise via serializeForCache', () => {
     })
     expect(turn1.newTier2.observations.length).toBeGreaterThanOrEqual(1)
 
+    // Simulate ≥MIN_TURNS_BETWEEN_FIRES (= 3) turns of growth so the observer
+    // throttle (decisions.md [2026-05-27]) doesn't skip turn 2. Without this,
+    // turn 2 would see the same turn_index and the throttle would correctly
+    // suppress the redundant re-extraction.
+    const turn2Tier3 = {
+      recent: [
+        ...turn1.newTier3.recent,
+        userMsg('third q', 2),
+        asstMsg('third a', 2),
+        userMsg('fourth q', 3),
+        asstMsg('fourth a', 3),
+        userMsg('fifth q', 4),
+        asstMsg('fifth a', 4),
+      ],
+      inflight: turn1.newTier3.inflight,
+    }
+
     const turn2 = await compact({
       tier1: turn1.newTier1,
       tier2: turn1.newTier2,
-      tier3: turn1.newTier3,
+      tier3: turn2Tier3,
       scratchpad,
       flags: flagsWithObs,
       configuredClass: 'mixed',

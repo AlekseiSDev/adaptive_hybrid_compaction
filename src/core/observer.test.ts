@@ -9,7 +9,7 @@ import { defaultThresholds } from './thresholds.js'
 import { charsOver4TokenCounter } from './tokenCounter.js'
 import { serializeForCache } from './serializeForCache.js'
 import type { LLMCaller } from './llm.js'
-import type { CompactionContext, Message, Tier2 } from './types.js'
+import type { CompactionContext, Message, Observation, Tier2 } from './types.js'
 
 const userMsg = (s: string, turn: number, step = 0): Message => ({
   role: 'user',
@@ -201,7 +201,9 @@ describe('maybeExtractObservations — LLM extraction path', () => {
 
   test('Tier-2 entries strict append-only (existing entries reference-equal post-extract)', async () => {
     const long = 'x'.repeat(200000)
-    const tier3 = { recent: [userMsg(long, 0)], inflight: [] }
+    // turn_index=5 on new message — strictly > pre-existing sourceTurn=0 so the
+    // content-aware filter (decisions.md [2026-05-27]) includes it.
+    const tier3 = { recent: [userMsg(long, 5)], inflight: [] }
     const preexisting: Tier2 = {
       observations: [
         { timestamp: 1, confidence: 'high', statement: 'pre', sourceTurn: 0 },
@@ -221,6 +223,150 @@ describe('maybeExtractObservations — LLM extraction path', () => {
     // Caller appends; verify pre-existing entry reference identity remains for indexing
     const merged = [...preexisting.observations, ...result.extracted]
     expect(merged[0]).toBe(preexisting.observations[0])
+  })
+})
+
+describe('maybeExtractObservations — content-aware filter via sourceTurn watermark', () => {
+  // 2026-05-27 — observer was firing every turn over OBSERVER_THRESHOLD with the
+  // FULL Tier-3 as LLM input. 82 fires on 3 lme-mt tasks burned 72% of cost,
+  // and the LLM tended to focus on the latest tail — middle-window sessions
+  // dropped silently. Fix: each fire sees ONLY messages with turn_index newer
+  // than max sourceTurn in current Tier-2 observations. Two consequences:
+  //   (1) Per-fire observer LLM input shrinks dramatically (only new content).
+  //   (2) Skip the LLM call entirely when delta < 0.1 × OBSERVER_THRESHOLD —
+  //       still clip Tier-3 so actor input stays low.
+  const long = 'x'.repeat(200000) // ~50k tokens — well above default 30k threshold
+  const obsFromTurn = (turn: number, statement = 'old observation'): Observation => ({
+    timestamp: 1700000000 + turn,
+    confidence: 'high',
+    statement,
+    sourceTurn: turn,
+  })
+
+  test('skips fire when no new messages (all turn_index ≤ lastObservedTurn)', async () => {
+    // All tier-3 messages have turn_index ≤ lastObservedTurn (20) → filter yields []
+    // → newTokens=0 → skip. Total tier-3 tokens still > OBSERVER_THRESHOLD so the
+    // threshold gate passes; content filter is the actual decider.
+    const shortMsg = 'x'.repeat(4000)
+    const manyRecent: Message[] = []
+    // 60 messages, all turn_index ≤ 20 (cycling 0..20). Totalt ~60k tokens.
+    for (let i = 0; i < 60; i++) manyRecent.push(userMsg(shortMsg, i % 21))
+    const tier3 = { recent: manyRecent, inflight: [] }
+    const populatedTier2: Tier2 = {
+      observations: [obsFromTurn(20, 'observed turn 20')],
+      pointers: [],
+      classSignal: { class: 'mixed', confidence: 0, updatedAt: 0 },
+    }
+    const llmCaller = vi.fn<LLMCaller>().mockResolvedValue({
+      text: '- 2024-01-01 (high) should never extract — content already observed',
+    })
+    const result = await maybeExtractObservations(tier3, populatedTier2, ctxFor(), {
+      tokenCounter: charsOver4TokenCounter,
+      currentQuery: 'q',
+      currentTurnIndex: 21,
+      llmCaller,
+    })
+    expect(result.ran).toBe(false)
+    expect(result.reason).toBe('delta_too_small')
+    expect(llmCaller).not.toHaveBeenCalled()
+    // Skip path still clips Tier-3 — actor input stays low even when LLM was skipped.
+    const clippedTokens = result.clippedTier3.reduce(
+      (s, m) => s + charsOver4TokenCounter(JSON.stringify(m.content)),
+      0,
+    )
+    expect(clippedTokens).toBeLessThanOrEqual(0.2 * defaultThresholds.OBSERVER_THRESHOLD + 1500)
+    expect(result.clippedTier3.length).toBeLessThan(manyRecent.length)
+  })
+
+  test('fires when enough new tokens accumulated (newMessages tokens ≥ fireFloor)', async () => {
+    // 30 fresh messages × ~1k = 30k tokens of new content, far above fireFloor
+    // (0.1 × 30000 = 3000). Should fire.
+    const shortMsg = 'x'.repeat(4000)
+    const manyRecent: Message[] = []
+    for (let i = 21; i <= 50; i++) manyRecent.push(userMsg(shortMsg, i))
+    const tier3 = { recent: manyRecent, inflight: [] }
+    const populatedTier2: Tier2 = {
+      observations: [obsFromTurn(20)],
+      pointers: [],
+      classSignal: { class: 'mixed', confidence: 0, updatedAt: 0 },
+    }
+    const llmCaller = vi.fn<LLMCaller>().mockResolvedValue({
+      text: '- 2024-06-15 (high) new fact extracted from fresh content',
+    })
+    const result = await maybeExtractObservations(tier3, populatedTier2, ctxFor(), {
+      tokenCounter: charsOver4TokenCounter,
+      currentQuery: 'q',
+      currentTurnIndex: 50,
+      llmCaller,
+    })
+    expect(result.ran).toBe(true)
+    expect(result.extracted).toHaveLength(1)
+    expect(llmCaller).toHaveBeenCalledTimes(1)
+  })
+
+  test('empty Tier-2 (first-ever fire) processes all Tier-3 content regardless of metadata', async () => {
+    const tier3 = { recent: [userMsg(long, 5)], inflight: [] }
+    const llmCaller = vi.fn<LLMCaller>().mockResolvedValue({
+      text: '- 2024-01-01 (high) first fire',
+    })
+    const result = await maybeExtractObservations(tier3, emptyTier2(), ctxFor(), {
+      tokenCounter: charsOver4TokenCounter,
+      currentQuery: 'q',
+      currentTurnIndex: 5,
+      llmCaller,
+    })
+    expect(result.ran).toBe(true)
+    expect(llmCaller).toHaveBeenCalledTimes(1)
+  })
+
+  test('messages without metadata.turn_index are treated as new (backward compat)', async () => {
+    // Synthetic core tests build messages without metadata. The filter must
+    // treat them as "new" so existing core-only tests keep their semantics.
+    const noMetaMsg: Message = {
+      role: 'user',
+      content: [{ type: 'text', text: long }],
+    }
+    const tier3 = { recent: [noMetaMsg], inflight: [] }
+    const populatedTier2: Tier2 = {
+      observations: [obsFromTurn(10)],
+      pointers: [],
+      classSignal: { class: 'mixed', confidence: 0, updatedAt: 0 },
+    }
+    const llmCaller = vi.fn<LLMCaller>().mockResolvedValue({
+      text: '- 2024-01-01 (high) extracted from no-metadata msg',
+    })
+    const result = await maybeExtractObservations(tier3, populatedTier2, ctxFor(), {
+      tokenCounter: charsOver4TokenCounter,
+      currentQuery: 'q',
+      llmCaller,
+    })
+    expect(result.ran).toBe(true)
+  })
+
+  test('extractObservationsSync uses the same content-aware filter', () => {
+    const shortMsg = 'x'.repeat(4000)
+    const manyRecent: Message[] = []
+    // Mirror of the async test: 60 messages all turn_index ≤ 20 (cycling), so
+    // filter yields [] and skip triggers despite total tokens > threshold.
+    for (let i = 0; i < 60; i++) manyRecent.push(userMsg(shortMsg, i % 21))
+    const tier3 = { recent: manyRecent, inflight: [] }
+    const populatedTier2: Tier2 = {
+      observations: [obsFromTurn(20)],
+      pointers: [],
+      classSignal: { class: 'mixed', confidence: 0, updatedAt: 0 },
+    }
+    const syncCaller = vi.fn<(_req: unknown) => { text: string }>().mockReturnValue({
+      text: '- 2024-01-01 (high) should not be called',
+    })
+    const result = extractObservationsSync(tier3, populatedTier2, ctxFor(), {
+      tokenCounter: charsOver4TokenCounter,
+      currentQuery: 'q',
+      currentTurnIndex: 21,
+      syncLLMCaller: syncCaller,
+    })
+    expect(result.ran).toBe(false)
+    expect(result.reason).toBe('delta_too_small')
+    expect(syncCaller).not.toHaveBeenCalled()
   })
 })
 

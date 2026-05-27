@@ -156,6 +156,7 @@ export async function compact(input: CompactInput): Promise<CompactResult> {
     const obsResult = await maybeExtractObservations(tier3, input.tier2, observerCtx, {
       tokenCounter,
       currentQuery: input.deps.currentQuery ?? '',
+      currentTurnIndex: turnIndex,
       ...(input.deps.llmCaller !== undefined ? { llmCaller: input.deps.llmCaller } : {}),
     })
     if (obsResult.ran) {
@@ -171,6 +172,11 @@ export async function compact(input: CompactInput): Promise<CompactResult> {
         observations: newObservations,
         ...(obsResult.rawText !== undefined ? { observerRawText: obsResult.rawText } : {}),
       })
+    } else if (obsResult.reason === 'delta_too_small') {
+      // Throttle path: didn't fire the observer LLM but still apply the clip
+      // so the actor sees the compacted Tier-3 tail this turn (otherwise
+      // re-tierize from full history inflates per-turn input).
+      tier3 = { ...tier3, recent: obsResult.clippedTier3 }
     }
   }
 

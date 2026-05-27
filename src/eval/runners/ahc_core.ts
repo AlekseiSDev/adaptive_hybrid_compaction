@@ -11,6 +11,7 @@ import type {
   LLMResponse as CoreLLMResponse,
   Message,
   Thresholds,
+  Tier2,
 } from '../../core/index.js'
 import {
   ANTHROPIC_DIRECT_PRICING,
@@ -101,6 +102,13 @@ export type AhcCoreBaselineDeps = {
 type AhcScratch = {
   registry: SessionScratchpadRegistry
   hysteresis: Map<string, HysteresisState>
+  // Persistent Tier-2 across baseline.step() calls. Without this each step()
+  // built a fresh AHC runtime with a fresh tier2Registry inside the
+  // middleware, dropping all observations between turns. Discovered
+  // 2026-05-27 when the observer-throttle PR exposed the gap: throttle
+  // checks `tier2.observations[].sourceTurn`, which is always empty if
+  // Tier-2 doesn't survive across step() calls.
+  tier2Registry: Map<string, Tier2>
   internalCostUsdSinceLastStep: number
 }
 
@@ -161,6 +169,7 @@ export function ahcCoreBaseline(deps: AhcCoreBaselineDeps): Baseline {
       scratch: {
         registry: new SessionScratchpadRegistry(),
         hysteresis: new Map<string, HysteresisState>(),
+        tier2Registry: new Map<string, Tier2>(),
         internalCostUsdSinceLastStep: 0,
       } satisfies AhcScratch,
     }),
@@ -200,6 +209,7 @@ export function ahcCoreBaseline(deps: AhcCoreBaselineDeps): Baseline {
         sessionId: () => state.task_id,
         scratchpadRegistry: scratch.registry,
         hysteresisStateOverride: scratch.hysteresis,
+        tier2Registry: scratch.tier2Registry,
         emit: (e) => {
           events.push(mapCoreEventToInstrumentation(e))
         },

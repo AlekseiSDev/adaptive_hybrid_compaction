@@ -12,6 +12,7 @@ import type {
   HysteresisState,
   LLMCaller,
   Thresholds,
+  Tier2,
 } from '../core/index.js'
 
 // createAhcRuntime — canonical assembly of AHC over AI SDK v6 provider.
@@ -59,6 +60,18 @@ export type AhcRuntimeOptions = {
   sessionId: () => SessionId
   scratchpadRegistry: SessionScratchpadRegistry
   hysteresisStateOverride?: Map<SessionId, HysteresisState>
+  /**
+   * Persistent Tier-2 registry across `generateText` calls on the same
+   * sessionId. H Phase 9 decisions.md 2026-05-22 D1 promised cross-turn
+   * Tier-2 persistence in the adapter, but the eval baseline path
+   * (`src/eval/runners/ahc_core.ts`) re-created the runtime per
+   * `baseline.step()`, dropping the registry — observations didn't actually
+   * accumulate across turns. This option lets the caller pin a registry that
+   * lives across step() calls (parallel to `scratchpadRegistry` /
+   * `hysteresisStateOverride`); without it, every runtime gets a fresh map
+   * and behaves like pre-H9.
+   */
+  tier2Registry?: Map<SessionId, Tier2>
   emit?: (event: CoreEvent) => void
   onCompactResult?: (sessionId: SessionId, result: CompactResult) => void
   /**
@@ -150,6 +163,7 @@ export function createAhcRuntime(opts: AhcRuntimeOptions): AhcRuntime {
     ...(opts.hysteresisStateOverride !== undefined
       ? { hysteresisStateOverride: opts.hysteresisStateOverride }
       : {}),
+    ...(opts.tier2Registry !== undefined ? { tier2Registry: opts.tier2Registry } : {}),
     ...(opts.emit !== undefined ? { emit: opts.emit } : {}),
     ...(opts.onCompactResult !== undefined ? { onCompactResult: opts.onCompactResult } : {}),
     ...(opts.llmCaller !== undefined ? { llmCaller: opts.llmCaller } : {}),

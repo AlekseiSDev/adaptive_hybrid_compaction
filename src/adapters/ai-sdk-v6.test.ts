@@ -95,10 +95,11 @@ describe('createAhcMiddleware — A6 LanguageModelV3Middleware', () => {
     if (result === undefined) return
     expect(result.tools).toBeDefined()
     const tools = result.tools ?? []
-    const recallToolPresent = tools.some(
-      (t) => t.type === 'function' && t.name === 'recall_tool_result',
-    )
-    expect(recallToolPresent).toBe(true)
+    const names = tools
+      .filter((t) => t.type === 'function')
+      .map((t) => t.name)
+    expect(names).toContain('recall_tool_summary')
+    expect(names).toContain('recall_tool_full')
   })
 
   test('two calls with same sessionId → scratchpad persists', async () => {
@@ -143,10 +144,123 @@ describe('createAhcMiddleware — A6 LanguageModelV3Middleware', () => {
     if (second === undefined) return
     // Recall tool should still be present on the second call (scratchpad persistent).
     const secondTools = second.tools ?? []
-    const hasRecall = secondTools.some(
-      (t) => t.type === 'function' && t.name === 'recall_tool_result',
+    const secondNames = secondTools
+      .filter((t) => t.type === 'function')
+      .map((t) => t.name)
+    expect(secondNames).toContain('recall_tool_summary')
+    expect(secondNames).toContain('recall_tool_full')
+  })
+
+  test('recall-protocol note injected as second system message when scratchpad non-empty', async () => {
+    const heavy = 'C'.repeat(8000)
+    const prompt: LanguageModelV3Message[] = [
+      sys,
+      user('search foo'),
+      asstToolCall('tu_1'),
+      toolResult('tu_1', { large: heavy }),
+      user('search bar'),
+      asstToolCall('tu_2'),
+      toolResult('tu_2', 'small-1'),
+      user('search baz'),
+      asstToolCall('tu_3'),
+      toolResult('tu_3', 'small-2'),
+    ]
+    const mw = createAhcMiddleware({
+      flags: { TYPE_AWARE_OFFLOAD: true, RECALL_TOOL: true },
+      thresholds: { TIER3_TOKEN_BUDGET: 100_000 },
+      configuredClass: 'tool_heavy',
+    })
+    const result = await mw.transformParams?.({
+      type: 'generate',
+      params: baseParams(prompt),
+      model: stubModel(),
+    })
+    expect(result).toBeDefined()
+    if (result === undefined) return
+    const systemMessages = result.prompt.filter((m) => m.role === 'system')
+    expect(systemMessages.length).toBeGreaterThanOrEqual(2)
+    const protocolMsg = systemMessages.find(
+      (m) =>
+        typeof m.content === 'string' && m.content.includes('AHC recall protocol'),
     )
-    expect(hasRecall).toBe(true)
+    expect(protocolMsg).toBeDefined()
+    expect(typeof protocolMsg?.content === 'string' && protocolMsg.content)
+      .toContain('recall_tool_summary')
+  })
+
+  test('recall schemas NOT re-injected when runner already provided them', async () => {
+    // Simulates the AHC-aware gaia-tools path: runner has pre-registered
+    // recall_tool_summary / recall_tool_full (with execute). Middleware must
+    // not duplicate them — duplicate function names show up in the provider
+    // request body and confuse routing.
+    const heavy = 'D'.repeat(8000)
+    const prompt: LanguageModelV3Message[] = [
+      sys,
+      user('search foo'),
+      asstToolCall('tu_1'),
+      toolResult('tu_1', { large: heavy }),
+      user('search bar'),
+      asstToolCall('tu_2'),
+      toolResult('tu_2', 'small-1'),
+      user('search baz'),
+      asstToolCall('tu_3'),
+      toolResult('tu_3', 'small-2'),
+    ]
+    const runnerProvidedTools = [
+      {
+        type: 'function' as const,
+        name: 'recall_tool_summary',
+        description: 'runner-side',
+        inputSchema: { type: 'object' as const, properties: {}, required: [] },
+      },
+      {
+        type: 'function' as const,
+        name: 'recall_tool_full',
+        description: 'runner-side',
+        inputSchema: { type: 'object' as const, properties: {}, required: [] },
+      },
+    ]
+    const mw = createAhcMiddleware({
+      flags: { TYPE_AWARE_OFFLOAD: true, RECALL_TOOL: true },
+      thresholds: { TIER3_TOKEN_BUDGET: 100_000 },
+      configuredClass: 'tool_heavy',
+    })
+    const result = await mw.transformParams?.({
+      type: 'generate',
+      params: { prompt, tools: runnerProvidedTools },
+      model: stubModel(),
+    })
+    expect(result).toBeDefined()
+    if (result === undefined) return
+    const summaryCount = (result.tools ?? []).filter(
+      (t) => t.type === 'function' && t.name === 'recall_tool_summary',
+    ).length
+    const fullCount = (result.tools ?? []).filter(
+      (t) => t.type === 'function' && t.name === 'recall_tool_full',
+    ).length
+    expect(summaryCount).toBe(1)
+    expect(fullCount).toBe(1)
+  })
+
+  test('recall-protocol note NOT injected when scratchpad empty (no offload yet)', async () => {
+    // Trivial system+user — nothing to offload, scratchpad stays empty.
+    const mw = createAhcMiddleware({
+      flags: { TYPE_AWARE_OFFLOAD: true, RECALL_TOOL: true },
+    })
+    const result = await mw.transformParams?.({
+      type: 'generate',
+      params: baseParams([sys, user('hello')]),
+      model: stubModel(),
+    })
+    expect(result).toBeDefined()
+    if (result === undefined) return
+    const systemMessages = result.prompt.filter((m) => m.role === 'system')
+    // Only the original system message; no recall-protocol injection.
+    expect(systemMessages.length).toBe(1)
+    const anyHasRecall = systemMessages.some(
+      (m) => typeof m.content === 'string' && m.content.includes('AHC recall protocol'),
+    )
+    expect(anyHasRecall).toBe(false)
   })
 
   test('wrapStream / wrapGenerate left undefined → AI SDK calls underlying provider directly', () => {
@@ -183,7 +297,20 @@ describe('createAhcMiddleware — A6 LanguageModelV3Middleware', () => {
       role: 'assistant',
       content: [{ type: 'text', text: heavy }],
     }
-    const prompt: LanguageModelV3Message[] = [sys, user('first'), heavyAsst, user(heavy)]
+    // Two calls — second simulates a later turn by appending 3+ user messages.
+    // Necessary because throttle (decisions.md [2026-05-27]) requires
+    // MIN_TURNS_BETWEEN_FIRES turns of user-message growth between observer
+    // fires. Without the spacing throttle would skip the second extraction.
+    const prompt1: LanguageModelV3Message[] = [sys, user('first'), heavyAsst, user(heavy)]
+    const prompt2: LanguageModelV3Message[] = [
+      sys,
+      user('first'),
+      heavyAsst,
+      user(heavy),
+      user(heavy),
+      user(heavy),
+      user(heavy),
+    ]
 
     const seen: CompactResult[] = []
     const mw = createAhcMiddleware({
@@ -197,12 +324,12 @@ describe('createAhcMiddleware — A6 LanguageModelV3Middleware', () => {
 
     await mw.transformParams?.({
       type: 'generate',
-      params: baseParams(prompt),
+      params: baseParams(prompt1),
       model: stubModel(),
     })
     await mw.transformParams?.({
       type: 'generate',
-      params: baseParams(prompt),
+      params: baseParams(prompt2),
       model: stubModel(),
     })
 
@@ -228,7 +355,13 @@ describe('createAhcMiddleware — A6 LanguageModelV3Middleware', () => {
       role: 'assistant',
       content: [{ type: 'text', text: heavy }],
     }
-    const prompt: LanguageModelV3Message[] = [sys, user('first'), heavyAsst, user(heavy)]
+    // Each iteration grows the prompt by 3 user messages — enough turn growth
+    // to clear MIN_TURNS_BETWEEN_FIRES throttle window (decisions.md [2026-05-27]).
+    const buildPrompt = (turns: number): LanguageModelV3Message[] => {
+      const out: LanguageModelV3Message[] = [sys, user('first'), heavyAsst]
+      for (let i = 0; i < turns; i++) out.push(user(heavy))
+      return out
+    }
     const seen: CompactResult[] = []
     const mw = createAhcMiddleware({
       flags: { TASK_AWARE_EXTRACTION: true },
@@ -240,6 +373,7 @@ describe('createAhcMiddleware — A6 LanguageModelV3Middleware', () => {
     })
 
     for (let i = 0; i < 5; i++) {
+      const prompt = buildPrompt(1 + i * 3) // 1, 4, 7, 10, 13 user-heavy msgs
       await mw.transformParams?.({
         type: 'generate',
         params: baseParams(prompt),
