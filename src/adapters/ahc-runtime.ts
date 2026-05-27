@@ -36,7 +36,15 @@ import type {
 // Pricing tables (OPENROUTER_PRICING, ANTHROPIC_DIRECT_PRICING) live in
 // src/eval/llm.ts — eval-side concern, not part of this layer.
 
-export type AhcProvider = 'openrouter' | 'anthropic_direct' | 'google_direct'
+// 'openrouter' / 'litellm' both route through the OpenAI-compatible chat
+// completions interface (resolveLLMClient handles endpoint dispatch upstream).
+// They are functionally identical from this layer's POV; kept distinct so the
+// caller's intent surfaces in logs / pricing tables.
+export type AhcProvider =
+  | 'openrouter'
+  | 'litellm'
+  | 'anthropic_direct'
+  | 'google_direct'
 
 export type AhcRuntimeOptions = {
   provider: AhcProvider
@@ -103,14 +111,17 @@ function buildBaseModel(opts: AhcRuntimeOptions): LanguageModelV3 {
   // string). TS narrows opts.provider to the literal union, but we accept
   // runtime values from sweep YAML — validator throws first, but defense in
   // depth here for direct API callers (G/UI, tests).
-  if (opts.provider === 'openrouter') {
+  if (opts.provider === 'openrouter' || opts.provider === 'litellm') {
+    // 'openrouter' и 'litellm' оба идут через createOpenAI (OpenAI-compatible
+    // chat completions). Endpoint dispatch выполняет caller через
+    // resolveLLMClient(modelId) и передаёт baseURL/apiKey/model уже resolved.
+    // .chat() routes через OpenAI Chat Completions API; openai(modelId)
+    // hits the Responses API which OpenRouter rejects mid-stream after
+    // tool calls. См. decisions.md 2026-05-13 OpenRouter + @ai-sdk/openai.
     const openai = createOpenAI({
       apiKey: opts.apiKey,
       baseURL: opts.baseURL ?? OPENROUTER_DEFAULT_BASE_URL,
     })
-    // .chat() routes through OpenAI Chat Completions API; openai(modelId)
-    // hits the Responses API which OpenRouter rejects mid-stream after
-    // tool calls. See decisions.md 2026-05-13 OpenRouter + @ai-sdk/openai.
     return openai.chat(opts.model)
   }
   if (opts.provider === 'anthropic_direct') {
@@ -127,8 +138,11 @@ function buildBaseModel(opts: AhcRuntimeOptions): LanguageModelV3 {
     })
     return anthropic(opts.model)
   }
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-  if (opts.provider === 'google_direct') {
+  // Widen the union so the remaining branches accept JSON-sourced provider
+  // strings (sweep YAML may carry typos). TS would otherwise narrow to a
+  // never-checkable literal after the branches above.
+  const providerWide = opts.provider as string
+  if (providerWide === 'google_direct') {
     // Track H P4 (2026-05-14): direct Google AI Studio path for honest
     // Gemini cache_read measurement. OpenRouter passthrough strips
     // `usageMetadata.cachedContentTokenCount` from Gemini responses (probe
@@ -142,7 +156,7 @@ function buildBaseModel(opts: AhcRuntimeOptions): LanguageModelV3 {
     })
     return google.chat(opts.model)
   }
-  throw new Error(`createAhcRuntime: unsupported provider: ${String(opts.provider)}`)
+  throw new Error(`createAhcRuntime: unsupported provider: ${providerWide}`)
 }
 
 export function createAhcRuntime(opts: AhcRuntimeOptions): AhcRuntime {

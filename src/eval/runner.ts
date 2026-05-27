@@ -46,7 +46,11 @@ import { fullContextBaseline } from './baselines/full_context.js'
 import { mastraAgentBaseline } from './baselines/mastra_agent.js'
 import { mastraOmBaseline } from './baselines/mastra_om.js'
 import { CostTracker } from './cost.js'
-import { createOpenRouterClient, resolveActorModel } from './llm.js'
+import {
+  createOpenRouterClient,
+  resolveActorModel,
+  resolveLLMClient,
+} from './llm.js'
 import { ahcCoreBaseline } from './runners/ahc_core.js'
 import { noopAhcBaseline, noopBaseline } from './runners/stub.js'
 import { aggregateTurnEvents } from './telemetry.js'
@@ -191,41 +195,37 @@ export const defaultAdapterRegistry: AdapterRegistry = {
 }
 
 // Per decisions.md 2026-05-13 pivot — supersedes gemini-3-flash-preview.
-// OpenAI prompt cache fires automatically on OpenRouter (no cache_control
-// plumbing) — required for the cache-hit-rate metric AHC's value prop
-// hinges on.
+// OpenAI prompt cache fires automatically (no cache_control plumbing).
+// 2026-05-27: dual-mode routing via model-prefix (decisions.md). Default
+// `openai/gpt-5.4-mini` → LiteLLM proxy (request sends bare `gpt-5.4-mini`).
+// `openrouter/openai/gpt-5.4-mini` (via AHC_ACTOR_MODEL or sweep field) →
+// OpenRouter. Helper `resolveLLMClient(modelId)` инкапсулирует диспетч.
 const FULL_CONTEXT_DEFAULT_MODEL = 'openai/gpt-5.4-mini'
 
 function makeFullContextRunner(): Runner {
-  const apiKey = process.env['OPENROUTER_API_KEY']
-  if (!apiKey) {
-    throw new Error(
-      'OPENROUTER_API_KEY env var is required for baseline=full_context (real LLM wire)',
-    )
-  }
+  const modelId = resolveActorModel(FULL_CONTEXT_DEFAULT_MODEL)
+  const { apiKey, baseURL, modelForRequest } = resolveLLMClient(modelId)
   const llmClient = createOpenRouterClient({
     apiKey,
+    baseUrl: baseURL,
     appName: 'AHC',
     httpReferer: 'https://github.com/AlekseiSDev/adaptive_hybrid_compaction',
   })
   const baseline = fullContextBaseline({
     llmClient,
-    // H1: respect AHC_ACTOR_MODEL env override for cross-model symmetry.
-    model: resolveActorModel(FULL_CONTEXT_DEFAULT_MODEL),
+    model: modelForRequest,
     systemPrompt: DEFAULT_AGENT_SYSTEM_PROMPT,
   })
   return buildRunnerFromBaseline(baseline)
 }
 
 function makeMastraOmRunner(): Runner {
-  const apiKey = process.env['OPENROUTER_API_KEY']
-  if (!apiKey) {
-    throw new Error(
-      'OPENROUTER_API_KEY env var is required for baseline=mastra_om (Mastra wraps OpenRouter via OpenAI-compatible config)',
-    )
-  }
+  const modelId = resolveActorModel('openai/gpt-5.4-mini')
+  const { apiKey, baseURL, modelForRequest } = resolveLLMClient(modelId)
   const baseline = mastraOmBaseline({
     apiKey,
+    url: baseURL,
+    modelId: modelForRequest,
     systemPrompt: DEFAULT_AGENT_SYSTEM_PROMPT,
   })
   return buildRunnerFromBaseline(baseline)
@@ -240,19 +240,22 @@ function makeMastraOmRunner(): Runner {
 //     buildRunnerFromBaseline path с пустым tools (tools registration wiring
 //     стоит на месте через MastraAgentDeps.tools но не задействован на тексте).
 function makeMastraAgentRunner(): Runner {
-  const apiKey = process.env['OPENROUTER_API_KEY']
-  if (!apiKey) {
-    throw new Error(
-      'OPENROUTER_API_KEY env var is required for baseline=mastra-agent (Mastra wraps OpenRouter via OpenAI-compatible config)',
-    )
-  }
+  const modelId = resolveActorModel('openai/gpt-5.4-mini')
+  const { apiKey, baseURL, modelForRequest } = resolveLLMClient(modelId)
   const textBaseline = mastraAgentBaseline({
     apiKey,
+    url: baseURL,
+    modelId: modelForRequest,
     systemPrompt: DEFAULT_AGENT_SYSTEM_PROMPT,
   })
   const textRunner = buildRunnerFromBaseline(textBaseline)
-  const tauRunner = makeTauBenchMastraAgentRunner({ apiKey })
-  const gaiaRunner = makeGaiaMastraAgentRunner({ apiKey })
+  // Adapter factories accept the original (pre-resolve) actorModelId — they
+  // run resolveLLMClient internally so OpenRouter/LiteLLM dispatch is honored
+  // at the bench-specific call site (tau-bench actor model = TAU_ACTOR_DEFAULT,
+  // gaia = GAIA_MASTRA_ACTOR_DEFAULT). Pass empty opts → factories use their
+  // own defaults + env override.
+  const tauRunner = makeTauBenchMastraAgentRunner({})
+  const gaiaRunner = makeGaiaMastraAgentRunner({})
 
   return {
     name: 'mastra-agent',
@@ -276,27 +279,33 @@ function makeMastraAgentRunner(): Runner {
 const LITELLM_MODEL = 'claude-sonnet-4.6'
 
 function makeAhcCoreRunner(config: ConfigDef): Runner {
-  // E0: provider switch (`'openrouter'` default, `'anthropic_direct'` for E3
-  // cache-hit subset). E1: anthropic_direct path additionally supports LiteLLM
-  // forwarder (LITELLM_MASTER_KEY + LITELLM_BASE_URL), mirroring the
-  // makeAnthropicCompactRunner priority order so the corporate proxy that
-  // upstream-bills the Anthropic key works for both anthropic_compact baseline
-  // AND ahc_full × anthropic_direct config rows.
+  // Provider switch:
+  //   - `'openrouter'` (default) / `'litellm'` — generic LLM dispatch through
+  //     resolveLLMClient(modelId), naming-convention-driven (2026-05-27).
+  //   - `'google_direct'` — Track H P4 cache verification on Gemini direct API.
+  //   - `'anthropic_direct'` — E3 cache-hit subset через Anthropic SDK; supports
+  //     LiteLLM forwarder (preferred) or ANTHROPIC_API_KEY direct.
   const provider = config.provider ?? 'openrouter'
 
   let apiKey: string
   let baseURL: string | undefined
   let resolvedModelDefault: string | undefined
 
-  if (provider === 'openrouter') {
-    const key = process.env['OPENROUTER_API_KEY']
-    if (!key || key.length === 0) {
-      throw new Error(
-        'ahc_core runner with provider=openrouter requires OPENROUTER_API_KEY env var.',
-      )
-    }
-    apiKey = key
-    baseURL = 'https://openrouter.ai/api/v1'
+  if (provider === 'openrouter' || provider === 'litellm') {
+    // Naming convention: `openrouter/openai/...` → router, `openai/...` →
+    // LiteLLM (default). For back-compat with old YAMLs declaring
+    // `provider: 'openrouter'` explicitly: pin model to OpenRouter route by
+    // adding the `openrouter/` prefix if missing.
+    const requestedModelRaw =
+      (config.ahc_flags?.['model'] as string | undefined) ?? 'openai/gpt-5.4-mini'
+    const requestedModel =
+      provider === 'openrouter' && !requestedModelRaw.startsWith('openrouter/')
+        ? `openrouter/${requestedModelRaw}`
+        : requestedModelRaw
+    const resolved = resolveLLMClient(resolveActorModel(requestedModel))
+    apiKey = resolved.apiKey
+    baseURL = resolved.baseURL
+    resolvedModelDefault = resolved.modelForRequest
   } else if (provider === 'google_direct') {
     // Track H P4 (2026-05-14): @ai-sdk/google reads GOOGLE_GENERATIVE_AI_API_KEY
     // by default, but our project's .env uses GOOGLE_GENAI_API_KEY (alias).
@@ -346,15 +355,21 @@ function makeAhcCoreRunner(config: ConfigDef): Runner {
   const modelOverride = flagsFromConfig['model']
   // Strip ahc_core-runner-specific keys (`model`) from FeatureFlags pass-through.
   const { model: _omitModel, ...featureFlagsRaw } = flagsFromConfig
+  // For openrouter|litellm provider the modelOverride was already folded into
+  // resolveLLMClient above (resolvedModelDefault = post-resolve form). For
+  // google_direct / anthropic_direct paths modelOverride still flows through
+  // raw (those provider branches don't go through resolveLLMClient).
+  const baselineModel =
+    provider === 'openrouter' || provider === 'litellm'
+      ? resolvedModelDefault
+      : typeof modelOverride === 'string'
+        ? modelOverride
+        : resolvedModelDefault
   const baseline = ahcCoreBaseline({
     apiKey,
     provider,
     ...(baseURL !== undefined ? { baseURL } : {}),
-    ...(typeof modelOverride === 'string'
-      ? { model: modelOverride }
-      : resolvedModelDefault !== undefined
-        ? { model: resolvedModelDefault }
-        : {}),
+    ...(baselineModel !== undefined ? { model: baselineModel } : {}),
     // Other ahc_flags keys (TRAJECTORY_CLASSIFIER, REFLECTION, etc.) map to
     // FeatureFlags — pass through directly; createAhcMiddleware merges with defaults.
     ahcFlags: featureFlagsRaw,
@@ -413,17 +428,12 @@ function makeAnthropicCompactRunner(): Runner {
 }
 
 function makeTauBenchAgentRunner(config: ConfigDef): Runner {
-  const apiKey = process.env['OPENROUTER_API_KEY']
-  if (!apiKey || apiKey.length === 0) {
-    throw new Error('tau_bench_agent requires OPENROUTER_API_KEY')
-  }
+  // 2026-05-27 dual-mode: env-key dispatch moved into makeTauBenchRunner via
+  // resolveLLMClient(modelId). For `tau_bench_agent_ahc` baseline, ahc_flags
+  // from sweep YAML control AHC middleware behavior. For vanilla
+  // `tau_bench_agent`, ahcFlags stays undefined → actor unwrapped.
   const ahcFlagsRaw = config.ahc_flags ?? {}
-  // For `tau_bench_agent_ahc` baseline, ahc_flags from sweep YAML control
-  // AHC middleware behavior (TRAJECTORY_CLASSIFIER, REFLECTION, etc.).
-  // For vanilla `tau_bench_agent`, ahcFlags stays undefined → actor unwrapped.
   return makeTauBenchRunner({
-    apiKey,
-    baseURL: 'https://openrouter.ai/api/v1',
     ...(config.baseline === 'tau_bench_agent_ahc'
       ? { ahcFlags: ahcFlagsRaw }
       : {}),

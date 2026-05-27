@@ -165,7 +165,16 @@ function defaultLlmClient(
     }
     return createOpenRouterClient({ apiKey: openrouterKey, appName: 'AHC' })
   }
-  return createOpenRouterClient({ apiKey, appName: 'AHC' })
+  // provider ∈ {'openrouter', 'litellm'} — both route via OpenAI-compatible
+  // chat completions API; baseURL distinguishes endpoints (LiteLLM proxy URL
+  // vs OpenRouter default). resolveLLMClient(modelId) determined which
+  // upstream the caller hit; AHC internal LLM calls must go to the same
+  // endpoint so observer/digest/reflection costs land on the same key.
+  return createOpenRouterClient({
+    apiKey,
+    appName: 'AHC',
+    ...(baseURL !== undefined ? { baseUrl: baseURL } : {}),
+  })
 }
 
 export function ahcCoreBaseline(deps: AhcCoreBaselineDeps): Baseline {

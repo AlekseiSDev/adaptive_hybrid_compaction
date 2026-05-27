@@ -171,14 +171,16 @@ export type ConfigDef = {
   ahc_flags?: Record<string, unknown>
   /**
    * Optional provider override for `ahc_core` baseline. 'openrouter' (default)
-   * dispatches actor + AHC internal calls through OpenRouter; 'anthropic_direct'
-   * routes through @ai-sdk/anthropic for E3 cache-hit subset; 'google_direct'
-   * routes through @ai-sdk/google for Track H P4 Gemini cache-rate measurement
-   * (OpenRouter strips Gemini's cachedContentTokenCount, so direct API needed
-   * for honest cache numbers). Ignored for other baselines. Per decisions.md
-   * [2026-05-13] E0 — ConfigDef.provider field, extended Track H 2026-05-14.
+   * dispatches actor + AHC internal calls through OpenRouter; 'litellm' routes
+   * через jay-canvas LiteLLM proxy (direct provider keys, no markup — see
+   * decisions.md 2026-05-27 dual-mode routing); 'anthropic_direct' routes через
+   * @ai-sdk/anthropic for E3 cache-hit subset; 'google_direct' routes через
+   * @ai-sdk/google for Track H P4 Gemini cache-rate measurement (OpenRouter
+   * strips Gemini's cachedContentTokenCount, so direct API needed for honest
+   * cache numbers). Ignored for other baselines. Per decisions.md [2026-05-13]
+   * E0 — ConfigDef.provider field, extended Track H 2026-05-14, dual-mode 2026-05-27.
    */
-  provider?: 'openrouter' | 'anthropic_direct' | 'google_direct'
+  provider?: 'openrouter' | 'litellm' | 'anthropic_direct' | 'google_direct'
   /**
    * Optional threshold overrides for `ahc_core` baseline. Track H P1 added
    * for the lme-multiturn sweep where natural Tier-3 size (~7.8K tok with

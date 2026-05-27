@@ -789,11 +789,13 @@ describe('default registries', () => {
 
     // B5: `ahc_flags`-only routes to the real ahc_core runner. Without
     // OPENROUTER_API_KEY the factory throws — assert that path is taken.
+    // 2026-05-27: error now surfaces from resolveLLMClient (dual-mode
+    // routing) → message mentions `openrouter/` prefix instead of `ahc_core`.
     const prevKey = process.env['OPENROUTER_API_KEY']
     delete process.env['OPENROUTER_API_KEY']
     try {
       expect(() => defaultRunnerRegistry.resolve({ id: 'x', ahc_flags: {} })).toThrow(
-        /ahc_core.*OPENROUTER_API_KEY/,
+        /OPENROUTER_API_KEY.*openrouter\//,
       )
     } finally {
       if (prevKey !== undefined) process.env['OPENROUTER_API_KEY'] = prevKey
@@ -894,6 +896,8 @@ describe('default registries', () => {
   })
 
   test('runner registry: provider:openrouter explicit still reads OPENROUTER_API_KEY (E0 default)', () => {
+    // 2026-05-27 dual-mode: provider=openrouter ensures the model id carries
+    // the `openrouter/` prefix → resolveLLMClient demands OPENROUTER_API_KEY.
     const prevOR = process.env['OPENROUTER_API_KEY']
     delete process.env['OPENROUTER_API_KEY']
     try {
@@ -903,7 +907,7 @@ describe('default registries', () => {
           ahc_flags: {},
           provider: 'openrouter',
         }),
-      ).toThrow(/provider=openrouter.*OPENROUTER_API_KEY/)
+      ).toThrow(/OPENROUTER_API_KEY.*openrouter\//)
     } finally {
       if (prevOR !== undefined) process.env['OPENROUTER_API_KEY'] = prevOR
     }
