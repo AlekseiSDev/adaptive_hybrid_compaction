@@ -1,0 +1,46 @@
+{
+  "task_id": "at_image_qa_jc_ig_018",
+  "category": "image_qa",
+  "source": "real",
+  "turns": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "Стол письменный\t5 Стол ученический\t4 Стол для комплектации\t1 Офисные стулья\t12 Стулья ученические\t8 Шкаф для одежды\t1 Унитаз\t1 Шкаф для белья\t2 Шкаф для документов\t2 Шкаф вытяжной\t1 Шкаф для ключей\t1 Металлический стеллаж\t12 Верстак\t1 Компьютер\t3 Принтер\t1 Проектор/телевизор\t1 Офисный телефон\t2 Офисный диван\t1 Сейф\t1 Кондиционер\t3 Кулер для воды\t1 СВЧ-печь\t1 Холодильник\t1 Весы для белья\t1 Счетчики\t1 Мешки для белья \t10 Тележка для белья\t2 Дозаторы для жидких средств\t5 Раковина\t1 Ящик для ветоши\t2 Поддоны\t4 Штабелер ручной\t1 Вентилятор промышленный\t1 Рация\t3 Магнитно-маркерная доска\t1 Набор уборочного инвентаря (учебный)\t1 Набор канцелярских принадлежностей\t1 . начерти мне поэтажный план в 3д ракурс сверху и распределить это все по комнатам 1 1 комната для персонала. 2 поэтажные склады (бельевые) 3 поэтажные склады дезенфицирующих и моющих средств. 4 центратльный склад. 5 офис службы. 6 санитарные гигиенические помещения службы. 7 учебная комната"
+        }
+      ],
+      "expected_tool_calls": [
+        {
+          "tool_name": "image_gen",
+          "required": true,
+          "args_match": "subset"
+        }
+      ]
+    }
+  ],
+  "tools_available": [
+    {
+      "name": "image_gen",
+      "description": "Generate an image from a text prompt. Returns image URL plus short caption.",
+      "input_schema": {
+        "type": "object",
+        "description": "Generate an image from a text prompt. Returns image URL plus short caption. (concrete shape: TOOL_INPUT_SCHEMAS.image_gen)"
+      }
+    }
+  ],
+  "evaluation": {
+    "strategy": "llm_judge",
+    "rubric_id": "image_qa",
+    "expected_summary": "Готово — поэтажный план в 3D-ракурсе сверху, инвентарь распределён по всем 7 комнатам:\n\n![3D-изометрический поэтажный план с 7 комнатами и распределённым инвентарём](https://placeholder.example.com/generated.png)"
+  },
+  "provenance": {
+    "anonymized_at": "2026-05-27",
+    "anonymization_steps": [
+      "source: user-owned jay-canvas production traces; no third-party PII per author review"
+    ],
+    "original_session_hash": "moved_from_ED:education_4@f65cf304c5",
+    "review_signoff": "migrated from jay-canvas (IG25) on 2026-05-27 by D6 migrator"
+  }
+}

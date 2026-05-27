@@ -1,0 +1,19 @@
+{
+  "task_id": "at_image_qa_jc_ie_006",
+  "fixtures": [
+    {
+      "tool_name": "image_gen",
+      "output_parts": [
+        {
+          "type": "text",
+          "text": "Generated image: <inline>\nCaption: https://284baef4-3d14-4ca5-8247-4811f0d6b14b.selstorage.ru/50b51e8e-c961-447f-8654-0c2848b30caf_Frame_14.png Image #1: h"
+        },
+        {
+          "type": "image",
+          "path": "attachments/at_image_qa_jc_ie_006/image_gen_0_img.png",
+          "alt": "image_gen bake output"
+        }
+      ]
+    }
+  ]
+}

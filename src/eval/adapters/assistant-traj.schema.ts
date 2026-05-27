@@ -9,7 +9,11 @@ import { z } from 'zod'
 const CATEGORIES = ['image_qa', 'code_iter', 'research_write', 'mixed'] as const
 const SOURCES = ['real', 'opensource', 'synthetic'] as const
 
-const TaskIdRegex = /^at_(?<category>image_qa|code_iter|research_write|mixed)_\d{3}$/
+// D6: AT-v3 jay-canvas imports use `at_<cat>_jc_<section>_<NNN>` shape so
+// `original_session_hash` lineage is encoded into the id; original AT-v1/v2
+// `at_<cat>_<NNN>` shape stays valid for legacy / opensource tasks.
+const TaskIdRegex =
+  /^at_(?<category>image_qa|code_iter|research_write|mixed)(?:_jc_[a-z]{1,4})?_\d{3}$/
 
 const TextPartSchema = z.object({ type: z.literal('text'), text: z.string() })
 const ImagePartSchema = z.object({
@@ -104,10 +108,18 @@ const ProvenanceSchema = z.object({
   anonymization_steps: z.array(z.string()).optional(),
   original_session_hash: z.string().optional(),
   review_signoff: z.string().optional(),
+  // D6: AT-v2 legacy tasks (single-turn opensource subset) marked true so
+  // loadTasks() filters them by default. Drop the field to reactivate.
+  deprecated: z.boolean().optional(),
 })
 
 const AssistantTrajTaskBaseSchema = z.object({
-  task_id: z.string().regex(TaskIdRegex, 'task_id must match at_<category>_<NNN>'),
+  task_id: z
+    .string()
+    .regex(
+      TaskIdRegex,
+      'task_id must match at_<category>_<NNN> or at_<category>_jc_<section>_<NNN>',
+    ),
   category: z.enum(CATEGORIES),
   source: z.enum(SOURCES),
   turns: z.array(TaskTurnSchema).min(1),
@@ -117,6 +129,11 @@ const AssistantTrajTaskBaseSchema = z.object({
   // Track J — optional pointer to sidecar fixture file. Absent ⇒ default
   // lookup `benchmarks/assistant_traj/tool_fixtures/<task_id>.json`.
   tool_fixtures_ref: z.string().min(1).optional(),
+  // D6: per-task execution mode. 'reroll' = adapter подаёт user-turns по
+  // одному, agent сам пишет assistant + tools. 'replay-history' = текущее
+  // AT-v2 поведение (последний user turn как single-shot). Default derived
+  // in adapter: turns.length > 1 → 'reroll', else 'replay-history'.
+  execution_mode: z.enum(['reroll', 'replay-history']).optional(),
 })
 
 // Cross-field invariants (§2 + §4 + J §10.3):

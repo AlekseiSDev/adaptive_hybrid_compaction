@@ -1,0 +1,23 @@
+{
+  "task_id": "at_image_qa_jc_ie_003",
+  "fixtures": [
+    {
+      "tool_name": "image_gen",
+      "output_parts": [
+        {
+          "type": "text",
+          "text": "Generated image: https://fb2679aa-8d64-4a3c-8ef7-ba93abea130b.selstorage.ru/2f9aaa48-b441-47c1-be64-5f267433996d_5363150a-d0ca-4e76-8280-8bdf2e25d754.png\nCaption: (captured from jay-canvas)"
+        }
+      ]
+    },
+    {
+      "tool_name": "image_gen",
+      "output_parts": [
+        {
+          "type": "text",
+          "text": "Generated image: https://fb2679aa-8d64-4a3c-8ef7-ba93abea130b.selstorage.ru/f6b2e2c3-a4b0-4cdf-84a4-4d5c27a46481_cb8f22d2-bb42-42da-8ad7-ad0d5d2e0deb.png\nCaption: (captured from jay-canvas)"
+        }
+      ]
+    }
+  ]
+}

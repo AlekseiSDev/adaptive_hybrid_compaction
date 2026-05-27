@@ -1,0 +1,30 @@
+{
+  "task_id": "at_code_iter_jc_cd_004",
+  "category": "code_iter",
+  "source": "real",
+  "turns": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "сделай скрипт для роблокс студио чтобы через 10 секунд спавнил модель из replicatedstorage на том же месте где и стоит"
+        }
+      ]
+    }
+  ],
+  "tools_available": [],
+  "evaluation": {
+    "strategy": "llm_judge",
+    "rubric_id": "code_iter",
+    "expected_summary": "Положи этот скрипт в `Script` (серверный) внутри объекта, от позиции которого должна появиться модель — например, в `Part` в `Workspace`. Модель должна лежать в `ReplicatedStorage` и называться, к примеру, `MyModel`.\n\n```lua\n-- Server Script\nlocal ReplicatedStorage = game:GetService(\"ReplicatedStorage\")\n\nlocal MODEL_NAME = \"MyModel\"   -- имя модели в ReplicatedStorage\nlocal DELAY_SECONDS = 10\n\ntask.wait(DELAY_SECONDS)\n\nlocal template = ReplicatedStorage:FindFirstChild(MODEL_NAME)\nif not template then\n    warn((\"Model %q not found in ReplicatedStorage\"):format(MODEL_NAME))\n    return\nend\n\nlocal clone = template:Clone()\n\n-- Определяем позицию: берём CFrame хоста (Part или Model со скриптом)\nlocal host = script.Parent\nlocal targetCFrame\n\nif host:IsA(\"BasePart\") then\n    targetCFrame = host.CFrame\nelseif host:IsA(\"Model\") and host.PrimaryPart then\n    targetCFrame = host.PrimaryPart.CFrame\nelse\n    targetCFrame = CFrame.new(0, 5, 0) -- fallback\nend\n\n-- Ставим клон на то же место\nif clone:IsA(\"Model\") then\n    if not clone.PrimaryPart then\n        for _, d in ipairs(clone:GetDescendants()) do\n            if d:IsA(\"BasePart\") then\n                clone.PrimaryPart = d\n                break\n            end\n        end\n    end\n    if clone.PrimaryPart then\n        clone:PivotTo(targetCFrame)\n    end\nelseif clone:IsA(\"BasePart\") then\n    clone.CFrame = targetCFrame\nend\n\nclone.Parent = workspace\n```\n\nЧто делает скрипт: 1) ждёт 10 с через `task.wait(10)`; 2) находит `MyModel` в `ReplicatedStorage` и клонирует; 3) берёт `CFrame` родителя скрипта как целевую позицию; 4) ставит клон через `PivotTo`/`CFrame` и помещает в `workspace`. Если нужно фиксированно — `targetCFrame = CFrame.new(X, Y, Z)`."
+  },
+  "provenance": {
+    "anonymized_at": "2026-05-27",
+    "anonymization_steps": [
+      "source: user-owned jay-canvas production traces; no third-party PII per author review"
+    ],
+    "original_session_hash": "code_6@f65cf304c5",
+    "review_signoff": "migrated from jay-canvas (CD4) on 2026-05-27 by D6 migrator"
+  }
+}

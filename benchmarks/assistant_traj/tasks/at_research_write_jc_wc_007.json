@@ -1,0 +1,30 @@
+{
+  "task_id": "at_research_write_jc_wc_007",
+  "category": "research_write",
+  "source": "real",
+  "turns": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "Создай язык программирования «Guava Plus» — гибрид Python и Lua. Цель: простой, читаемый синтаксис (как в Python) с гибкостью и встроенными возможностями работы с данными (как в Lua).  1. **Синтаксис и ключевые слова (гибрид Python/Lua):** * Отступы для блоков (как в Python), без фигурных скобок. * `function` (как в Lua) для объявления функций. * `if ... then ... else ... end` (как в Lua) для условных конструкций. * `while ... do ... end` и `for ... do ... end` (как в Lua) для циклов. * Динамическая типизация (как в обоих языках). * Единая универсальная структура данных — `table` (как в Lua), заменяющая списки, словари и объекты. * Комментарии: `#` для однострочных (как в Python) и `--[[ ... ]]` для многострочных (как в Lua).  2. **Основные конструкции:** * **Переменные:** `x = 10`, `name = \"Привет\"` (без объявления типа). * **Таблицы (tables):**     * Пустая таблица: `my_table = {}`.     * Инициализация: `person = {name = \"Анна\", age = 25}`.     * Доступ: `print(person.name)` или `print(person[\"age\"])`. * **Функции:**     ```     function greet(name)         print(\"Привет, \" .. name .. \"!\")     end     ``` * **Условные операторы:**     ```     if x > 10 then         print(\"Больше 10\")     elseif x == 10 then         print(\"Ровно 10\")     else         print(\"Меньше 10\")     end     ``` * **Циклы:**     * `while`:         ```         while i < 10 do             print(i)             i = i + 1         end         ```     * `for` (числовой):         ```         for i = 1, 5 do             print(i)         end         ```  3. **Встроенные функции и модули (гибрид возможностей):** * `print()` (как в Python 3) — вывод на экран. * `len()` (как в Python) — длина таблицы/строки. * Конкатенация строк: `..` (как в Lua). * `type()` (как в Lua) — возвращает тип переменной. * Встроенный модуль `os` с функциями:     * `os.open_browser(url)` — открыть URL в браузере.     * `os.run_app(path)` — запустить приложение.     * `os.sleep(seconds)` — пауза.  4."
+        }
+      ]
+    }
+  ],
+  "tools_available": [],
+  "evaluation": {
+    "strategy": "llm_judge",
+    "rubric_id": "research_write",
+    "expected_summary": "# Спецификация языка программирования «Guava Plus»\n\n**Guava Plus** — динамический скриптовый язык, объединяющий читаемость Python и минимализм Lua. Цель — простой синтаксис для прототипирования и работы с данными.\n\n## 1. Общие принципы\n- **Динамическая типизация.** Переменные не объявляются: `x = 10`, `name = \"Привет\"`.\n- **Блоки через отступы** (Python-style) — фигурных скобок нет.\n- **Ключевые слова блоков** — из Lua: `function`, `if...then...else...end`, `while...do...end`, `for...do...end`.\n- **Комментарии:** `#` — однострочный; `--[[ ... ]]` — многострочный.\n\n## 2. Типы данных\n`number`, `string`, `boolean`, `nil`. **Универсальная `table`** — единственный составной тип, заменяет списки, словари и объекты.\n\n```guavaplus\nmy_table = {}\nperson = {name = \"Анна\", age = 25}\nprint(person.name)      # Анна\nprint(person[\"age\"])    # 25\nnums = {10, 20, 30}\nprint(nums[1])          # 10 (индексация с 1, как в Lua)\n```\n\n## 3. Операторы\n- Арифметика: `+ - * / %`\n- Сравнение: `== != < > <= >=`\n- Логика: `and`, `or`, `not`\n- Конкатенация строк: `..` (Lua-style)\n\n```guavaplus\ngreeting = \"Привет, \" .. \"мир\" .. \"!\"\n```\n\n## 4. Управляющие конструкции\n\n```guavaplus\nif x > 10 then\n    print(\"Больше 10\")\nelseif x == 10 then\n    print(\"Ровно 10\")\nelse\n    print(\"Меньше 10\")\nend\n\ni = 0\nwhile i < 10 do\n    print(i)\n    i = i + 1\nend\n\nfor i = 1, 5 do\n    print(i)\nend\n```\n\n## 5. Функции\n\n```guavaplus\nfunction greet(name)\n    print(\"Привет, \" .. name .. \"!\")\nend\ngreet(\"Аня\")\n```\n\nFirst-class values: можно передавать как аргументы и хранить в `table`.\n\n## 6. Встроенные функции\n| Функция | Назначение |\n|---|---|\n| `print(...)` | Вывод в stdout через запятую |\n| `len(x)` | Длина таблицы или строки |\n| `type(x)` | Тип переменной |\n| `tostring(x)` / `tonumber(x)` | Приведение типов |\n\n## 7. Модуль `os`\n```guavaplus\nos.open_browser(\"https://example.com\")\nos.run_app(\"/usr/bin/calc\")\nos.sleep(2)\n```\n\n## 8. Пример программы\n```guavaplus\n--[[ Демо: приветствие пользователей и подсчёт количества. ]]\nusers = {\n    {name = \"Анна\", age = 25},\n    {name = \"Иван\", age = 30},\n    {name = \"Олег\", age = 17}\n}\n\nfunction greet_all(list)\n    for i = 1, len(list) do\n        u = list[i]\n        if u.age >= 18 then\n            print(\"Здравствуйте, \" .. u.name .. \"!\")\n        else\n            print(\"Привет, \" .. u.name .. \"!\")\n        end\n    end\nend\n\ngreet_all(users)\nprint(\"Всего пользователей: \" .. tostring(len(users)))\n```"
+  },
+  "provenance": {
+    "anonymized_at": "2026-05-27",
+    "anonymization_steps": [
+      "source: user-owned jay-canvas production traces; no third-party PII per author review"
+    ],
+    "original_session_hash": "moved_from_CD:code_5@f65cf304c5",
+    "review_signoff": "migrated from jay-canvas (WC7) on 2026-05-27 by D6 migrator"
+  }
+}

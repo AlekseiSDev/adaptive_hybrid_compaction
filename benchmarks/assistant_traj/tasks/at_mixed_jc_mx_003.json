@@ -1,0 +1,30 @@
+{
+  "task_id": "at_mixed_jc_mx_003",
+  "category": "mixed",
+  "source": "real",
+  "turns": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "Есть ли cte в postgre?"
+        }
+      ]
+    }
+  ],
+  "tools_available": [],
+  "evaluation": {
+    "strategy": "llm_judge",
+    "rubric_id": "mixed",
+    "expected_summary": "Да, PostgreSQL полностью поддерживает **CTE** (Common Table Expression) через конструкцию `WITH`.\n\nОбычные CTE:\n```sql\nWITH recent_orders AS (\n  SELECT id, user_id, total\n  FROM orders\n  WHERE created_at > now() - interval '7 days'\n)\nSELECT user_id, sum(total)\nFROM recent_orders\nGROUP BY user_id;\n```\n\nРекурсивные CTE (`WITH RECURSIVE`) — для иерархий, графов, развёртывания деревьев:\n```sql\nWITH RECURSIVE subordinates AS (\n  SELECT id, manager_id, name FROM employees WHERE id = 1\n  UNION ALL\n  SELECT e.id, e.manager_id, e.name\n  FROM employees e\n  JOIN subordinates s ON e.manager_id = s.id\n)\nSELECT * FROM subordinates;\n```\n\nДополнительно:\n- поддерживаются изменяющие CTE (`INSERT`/`UPDATE`/`DELETE ... RETURNING` внутри `WITH`);\n- с PostgreSQL 12+ оптимизатор по умолчанию может встраивать CTE (inline), поведение переопределяется через `MATERIALIZED` / `NOT MATERIALIZED`."
+  },
+  "provenance": {
+    "anonymized_at": "2026-05-27",
+    "anonymization_steps": [
+      "source: user-owned jay-canvas production traces; no third-party PII per author review"
+    ],
+    "original_session_hash": "visual_followup_4@f65cf304c5",
+    "review_signoff": "migrated from jay-canvas (MX3) on 2026-05-27 by D6 migrator"
+  }
+}

@@ -37,6 +37,7 @@
   },
   "provenance": {
     "original_session_hash": "v2.8-20260508-postsanitize.json::IE4",
-    "review_signoff": "<draft: jay-canvas import; needs hand-extension + review>"
+    "review_signoff": "<draft: jay-canvas import; needs hand-extension + review>",
+    "deprecated": true
   }
 }

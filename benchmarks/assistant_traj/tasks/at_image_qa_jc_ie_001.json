@@ -1,0 +1,62 @@
+{
+  "task_id": "at_image_qa_jc_ie_001",
+  "category": "image_qa",
+  "source": "real",
+  "turns": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "Создай изображение .Вот требования к изображению:- что должно быть на изображении: https:&#x2F;&#x2F;284baef4-3d14-4ca5-8247-4811f0d6b14b.selstorage.ru&#x2F;806548a2-ba8d-4d57-9c87-c09774554582_4141414.png\nImage #1: https:&#x2F;&#x2F;284baef4-3d14-4ca5-8247-4811f0d6b14b.selstorage.ru&#x2F;8c6e16b1-e578-41a3-89c1-a93f4bf48f50_8d421716-117e-4d03-b15e-5a8b84f8ed82.png Recognised content of image [https:&#x2F;&#x2F;284baef4-3d14-4ca5-8247-4811f0d6b14b.selstorage.ru&#x2F;8c6e16b1-e578-41a3-89c1-a93f4bf48f50_8d421716-117e-4d03-b15e-5a8b84f8ed82.png]:\nCertainly! Here’s a comprehensive and detailed description of the image:\n\n---\n\n### Central Composition\n\n- **Primary Object:**  \n  The main focus of the image is an abstract artistic representation of an eye. The eye is stylized rather than realistic, and its iris&#x2F;pupil is replaced by the face of a clock.\n  \n- **Clock Details:**  \n  - The clock face is circular and positioned at the very center of the eye.  \n  - The numbers around the clock face are Roman numerals (I to XII) and are colored in a pale yellow-gold shade.\n  - The background insid... (litellm_truncated skipped 1034 chars) ...(mainly pink and purple) as the eye outlines and lashes, enhancing its integration into the overall image.\n\n### Background\n\n- **Background Color:**  \n  - The background is a solid, deep black, which makes the neon colors of the eye and clock pop prominently.  \n  - There is a faint glow or mist effect around the eye, especially where the colors are most concentrated, adding to the ethereal, luminous quality of the artwork.\n\n### Spatial Arrangement\n\n- **Central Position:**  \n  - The entire composition (eye + clock + text) is centered within the black background.\n  - The eyelashes (spikes) radiate equally on both sides, with the text &quot;ALARM&quot; positioned just beneath the lower right edge of the eye.\n  - The colored drips extend from the lower edge of the eye, adding a vertical element and directing focus downward.\n\n---\n\n**Overall Impression:**  \nThe image merges surreal, dreamy aesthetics (neon gradients, glowing effects) with bold, edgy street art influences (spiky lines, graffiti-style text). The blending of the clock within the eye and the dripping effects evoke a sense of urgency, time, and perhaps anxiety, underscored by the word &quot;ALARM.&quot; The luminescent colors contrast sharply with the deep black background, emphasizing the dramatic and eye-catching quality of the design.\n\n**Text in the Image:**  \n**&quot;ALARM&quot;**. Твой промпт должен быть понятным и полным, но не слишком длинным, пиши его только на английском и используй синтаксис Stable Diffusion. Если нужно использовать изображения из контекста, то передай их URL в поле &#39;images&#39;Не задавай уточняющих вопросов, создай изображение с помощью функции create_image и выведи в ответе ссылку на изображение."
+        }
+      ],
+      "expected_tool_calls": [
+        {
+          "tool_name": "image_edit",
+          "required": true,
+          "args_match": "subset"
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "Создай изображение из этого.Вот требования к изображению:- что должно быть на изображении: Убери слезу из глаза, поменяй срачок на человеческий, сделай белый цвет глаза, и измени его форму чтоб он не был похож как щас. Твой промпт должен быть понятным и полным, но не слишком длинным, пиши его только на английском и используй синтаксис Stable Diffusion. Если нужно использовать изображения из контекста, то передай их URL в поле &#39;images&#39;Не задавай уточняющих вопросов, создай изображение с помощью функции create_image и выведи в ответе ссылку на изображение."
+        }
+      ],
+      "expected_tool_calls": [
+        {
+          "tool_name": "image_edit",
+          "required": true,
+          "args_match": "subset"
+        }
+      ]
+    }
+  ],
+  "tools_available": [
+    {
+      "name": "image_edit",
+      "description": "Edit an existing image per a natural-language instruction. Returns new image URL plus short caption.",
+      "input_schema": {
+        "type": "object",
+        "description": "Edit an existing image per a natural-language instruction. Returns new image URL plus short caption. (concrete shape: TOOL_INPUT_SCHEMAS.image_edit)"
+      }
+    }
+  ],
+  "evaluation": {
+    "strategy": "llm_judge",
+    "rubric_id": "image_qa",
+    "expected_summary": "Готово — убрал слезу, заменил циферблат на обычный зрачок и радужку, сделал склеру белой и изменил форму глаза, чтобы он отличался от исходного:\n\n![edited](https://placeholder.example.com/eye-edit-2.png)"
+  },
+  "provenance": {
+    "anonymized_at": "2026-05-27",
+    "anonymization_steps": [
+      "source: user-owned jay-canvas production traces; no third-party PII per author review"
+    ],
+    "original_session_hash": "image_edit_1@f65cf304c5",
+    "review_signoff": "migrated from jay-canvas (IE1) on 2026-05-27 by D6 migrator"
+  }
+}

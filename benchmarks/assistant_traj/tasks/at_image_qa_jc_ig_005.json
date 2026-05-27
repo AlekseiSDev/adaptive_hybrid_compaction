@@ -1,0 +1,46 @@
+{
+  "task_id": "at_image_qa_jc_ig_005",
+  "category": "image_qa",
+  "source": "real",
+  "turns": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "Создай изображение .Вот требования к изображению:- что должно быть на изображении: Два друга, начальник Дима Совков (высокий мужчина средних лет) и сотрудник Артемий Морев (крупный лысый парень, с рыжей бородой), в выставочном зале компании Экспо-Торг. Вокруг образцы плит EGGER (Эггер), но написано не правильно должно быть - Еггерь. Стиль современной корпоративной фотографии. Один в пиджаке с планшетом, второй с образцом плиты. Высокое качество, изображение можно как в 3д, или анимированное, 4K. Название компании: Экспо-Торг. Твой промпт должен быть понятным и полным, но не слишком длинным, пиши его только на английском и используй синтаксис Stable Diffusion. Если нужно использовать изображения из контекста, то передай их URL в поле &#39;images&#39;Не задавай уточняющих вопросов, создай изображение с помощью функции create_image и выведи в ответе ссылку на изображение."
+        }
+      ],
+      "expected_tool_calls": [
+        {
+          "tool_name": "image_gen",
+          "required": true,
+          "args_match": "subset"
+        }
+      ]
+    }
+  ],
+  "tools_available": [
+    {
+      "name": "image_gen",
+      "description": "Generate an image from a text prompt. Returns image URL plus short caption.",
+      "input_schema": {
+        "type": "object",
+        "description": "Generate an image from a text prompt. Returns image URL plus short caption. (concrete shape: TOOL_INPUT_SCHEMAS.image_gen)"
+      }
+    }
+  ],
+  "evaluation": {
+    "strategy": "llm_judge",
+    "rubric_id": "image_qa",
+    "expected_summary": "Готово — корпоративный кадр в выставочном зале «Экспо-Торг»: Дима Совков с планшетом и Артемий Морев с образцом плиты, на образцах читается «Еггерь»:\n\n![Два мужчины в шоуруме Экспо-Торг рядом с плитами с надписью Еггерь](https://placeholder.example.com/generated.png)"
+  },
+  "provenance": {
+    "anonymized_at": "2026-05-27",
+    "anonymization_steps": [
+      "source: user-owned jay-canvas production traces; no third-party PII per author review"
+    ],
+    "original_session_hash": "image_gen_23@f65cf304c5",
+    "review_signoff": "migrated from jay-canvas (IG13) on 2026-05-27 by D6 migrator"
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "task_id": "at_image_qa_jc_ie_006",
+  "category": "image_qa",
+  "source": "real",
+  "turns": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "https://284baef4-3d14-4ca5-8247-4811f0d6b14b.selstorage.ru/50b51e8e-c961-447f-8654-0c2848b30caf_Frame_14.png Image #1: https://284baef4-3d14-4ca5-8247-4811f0d6b14b.selstorage.ru/76fdb593-ecf4-46f7-ae82-143456e22b16_ef5bb382-2bf2-4418-a0b0-cd72a218272e.png Бирка должна быть сзади на воротнике, как будто это новая вещь"
+        }
+      ],
+      "expected_tool_calls": [
+        {
+          "tool_name": "image_gen",
+          "required": true,
+          "args_match": "subset"
+        }
+      ]
+    }
+  ],
+  "tools_available": [
+    {
+      "name": "image_gen",
+      "description": "Generate an image from a text prompt. Returns image URL plus short caption.",
+      "input_schema": {
+        "type": "object",
+        "description": "Generate an image from a text prompt. Returns image URL plus short caption. (concrete shape: TOOL_INPUT_SCHEMAS.image_gen)"
+      }
+    }
+  ],
+  "evaluation": {
+    "strategy": "llm_judge",
+    "rubric_id": "image_qa",
+    "expected_summary": "Готово — человек в футболке, бирка с вашего референса аккуратно расположена сзади на воротнике, как у новой вещи:\n\n![tshirt-label](https://placeholder.example.com/tshirt-label.png)"
+  },
+  "provenance": {
+    "anonymized_at": "2026-05-27",
+    "anonymization_steps": [
+      "source: user-owned jay-canvas production traces; no third-party PII per author review"
+    ],
+    "original_session_hash": "moved_from_QA:qa_search_1@f65cf304c5",
+    "review_signoff": "migrated from jay-canvas (IE6) on 2026-05-27 by D6 migrator"
+  }
+}

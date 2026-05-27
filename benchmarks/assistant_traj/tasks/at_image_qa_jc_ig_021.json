@@ -1,0 +1,62 @@
+{
+  "task_id": "at_image_qa_jc_ig_021",
+  "category": "image_qa",
+  "source": "real",
+  "turns": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "Создай изображение .Вот требования к изображению:- что должно быть на изображении: https:&#x2F;&#x2F;284baef4-3d14-4ca5-8247-4811f0d6b14b.selstorage.ru&#x2F;5155c51c-d490-4030-b131-88fa616e0355_1315cdfd-cc7c-4d9f-8f38-42194c3e1dae_423b41ec-6246-4ba1-9a06-6590d6450cc4_(1).png\nhttps:&#x2F;&#x2F;284baef4-3d14-4ca5-8247-4811f0d6b14b.selstorage.ru&#x2F;0e101128-598f-4531-9ea7-ffbb84215bb2_25422e56-f7fa-4d63-a0aa-07acd5d74435_b1f88ace-0ebf-4aac-b031-bfb2d779f208.png\nнарисовать на фоне первой картинки персонажа с второй картинки который лежит на земле с закрытыми глазами. Твой промпт должен быть понятным и полным, но не слишком длинным, пиши его только на английском и используй синтаксис Stable Diffusion. Если нужно использовать изображения из контекста, то передай их URL в поле &#39;images&#39;Не задавай уточняющих вопросов, создай изображение с помощью функции create_image и выведи в ответе ссылку на изображение."
+        }
+      ],
+      "expected_tool_calls": [
+        {
+          "tool_name": "image_gen",
+          "required": true,
+          "args_match": "subset"
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "Создай изображение из этого.Вот требования к изображению:- что должно быть на изображении: Поменяй позу персонажа на сидячую.. Твой промпт должен быть понятным и полным, но не слишком длинным, пиши его только на английском и используй синтаксис Stable Diffusion. Если нужно использовать изображения из контекста, то передай их URL в поле &#39;images&#39;Не задавай уточняющих вопросов, создай изображение с помощью функции create_image и выведи в ответе ссылку на изображение."
+        }
+      ],
+      "expected_tool_calls": [
+        {
+          "tool_name": "image_gen",
+          "required": true,
+          "args_match": "subset"
+        }
+      ]
+    }
+  ],
+  "tools_available": [
+    {
+      "name": "image_gen",
+      "description": "Generate an image from a text prompt. Returns image URL plus short caption.",
+      "input_schema": {
+        "type": "object",
+        "description": "Generate an image from a text prompt. Returns image URL plus short caption. (concrete shape: TOOL_INPUT_SCHEMAS.image_gen)"
+      }
+    }
+  ],
+  "evaluation": {
+    "strategy": "llm_judge",
+    "rubric_id": "image_qa",
+    "expected_summary": "Поменял позу персонажа на сидячую, фон и стиль сохранил:\n\n![Тот же персонаж в сидячей позе на том же фоне](https://placeholder.example.com/generated-v2.png)"
+  },
+  "provenance": {
+    "anonymized_at": "2026-05-27",
+    "anonymization_steps": [
+      "source: user-owned jay-canvas production traces; no third-party PII per author review"
+    ],
+    "original_session_hash": "image_gen_12@f65cf304c5",
+    "review_signoff": "migrated from jay-canvas (IG7) on 2026-05-27 by D6 migrator"
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "task_id": "at_image_qa_jc_ig_023",
+  "fixtures": [
+    {
+      "tool_name": "image_gen",
+      "output_parts": [
+        {
+          "type": "text",
+          "text": "Generated image: https://fb2679aa-8d64-4a3c-8ef7-ba93abea130b.selstorage.ru/6a542a8e-2837-43c5-8b0a-9347f8efaf80_cc5d5be0-a1fb-4c83-a765-d3301e052981.png\nCaption: (captured from jay-canvas)"
+        }
+      ]
+    },
+    {
+      "tool_name": "image_gen",
+      "output_parts": [
+        {
+          "type": "text",
+          "text": "Generated image: https://fb2679aa-8d64-4a3c-8ef7-ba93abea130b.selstorage.ru/e1cd1128-7364-4710-afcd-7b1e18d9bad9_d86ef79a-49a9-46bb-bc88-e9dbf48b370a.png\nCaption: (captured from jay-canvas)"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "task_id": "at_mixed_jc_mx_002",
+  "fixtures": [
+    {
+      "tool_name": "image_gen",
+      "output_parts": [
+        {
+          "type": "text",
+          "text": "Generated image: <inline>\nCaption: A simple stock photograph of a notebook on a desk."
+        },
+        {
+          "type": "image",
+          "path": "attachments/at_mixed_jc_mx_002/image_gen_0_img.png",
+          "alt": "image_gen bake output"
+        }
+      ]
+    }
+  ]
+}

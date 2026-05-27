@@ -1,0 +1,33 @@
+{
+  "task_id": "at_image_qa_jc_ie_002",
+  "fixtures": [
+    {
+      "tool_name": "image_edit",
+      "output_parts": [
+        {
+          "type": "text",
+          "text": "Edited image: <inline>\nCaption: Создай изображение .Вот требования к изображению:- что должно быть на изображении: Image #1: https:&#x2F;&#x2F;284baef4-\nSource: https://placehold.co/256x256.png"
+        },
+        {
+          "type": "image",
+          "path": "attachments/at_image_qa_jc_ie_002/image_edit_0_img_edited.png",
+          "alt": "image_edit bake output"
+        }
+      ]
+    },
+    {
+      "tool_name": "image_edit",
+      "output_parts": [
+        {
+          "type": "text",
+          "text": "Edited image: <inline>\nCaption: Создай изображение .Вот требования к изображению:- что должно быть на изображении: Image #1: https:&#x2F;&#x2F;284baef4-\nSource: https://placehold.co/256x256.png"
+        },
+        {
+          "type": "image",
+          "path": "attachments/at_image_qa_jc_ie_002/image_edit_0_img_edited.png",
+          "alt": "image_edit bake output"
+        }
+      ]
+    }
+  ]
+}

@@ -64,7 +64,16 @@ async function readTaskFile(path: string): Promise<AssistantTrajTask> {
   return result.data
 }
 
-export async function loadAllAssistantTrajTasks(): Promise<AssistantTrajTask[]> {
+export type LoadTasksOptions = {
+  // D6: AT-v2 opensource quarantine. Default false — deprecated tasks excluded
+  // from sweep loads so the broken-attachment / placeholder-fixture cohort
+  // doesn't poison numbers. Set true to introspect / re-bake them.
+  includeDeprecated?: boolean
+}
+
+export async function loadAllAssistantTrajTasks(
+  options: LoadTasksOptions = {},
+): Promise<AssistantTrajTask[]> {
   const dir = tasksDir()
   let entries: string[]
   try {
@@ -74,7 +83,9 @@ export async function loadAllAssistantTrajTasks(): Promise<AssistantTrajTask[]> 
     throw err
   }
   const files = entries.filter((e) => e.endsWith('.json')).sort()
-  return Promise.all(files.map((f) => readTaskFile(join(dir, f))))
+  const all = await Promise.all(files.map((f) => readTaskFile(join(dir, f))))
+  if (options.includeDeprecated === true) return all
+  return all.filter((t) => t.provenance.deprecated !== true)
 }
 
 // Project on-disk turn content → in-memory core ContentPart[]. Image / file

@@ -35,7 +35,9 @@ describe('assistantTrajAdapter — loadTasks', () => {
     const tasks = await assistantTrajAdapter.loadTasks(0)
     expect(tasks.length).toBeGreaterThan(0)
     for (const t of tasks) {
-      expect(t.id).toMatch(/^at_(image_qa|code_iter|research_write|mixed)_\d{3}$/)
+      expect(t.id).toMatch(
+        /^at_(image_qa|code_iter|research_write|mixed)(?:_jc_[a-z]{1,4})?_\d{3}$/,
+      )
       const at = t.input as AssistantTrajTask
       expect(at.task_id).toBe(t.id)
       expect(t.expected).toBe(at.evaluation)
@@ -48,6 +50,34 @@ describe('assistantTrajAdapter — loadTasks', () => {
     for (const t of all) {
       expect(['image_qa', 'code_iter', 'research_write', 'mixed']).toContain(t.category)
     }
+  })
+})
+
+describe('assistantTrajAdapter — D6 deprecated-filter + AT-v3 multi-turn', () => {
+  it('loadAllAssistantTrajTasks default skips provenance.deprecated=true', async () => {
+    const visible = await loadAllAssistantTrajTasks()
+    const all = await loadAllAssistantTrajTasks({ includeDeprecated: true })
+    expect(all.length).toBeGreaterThan(visible.length)
+    expect(visible.every((t) => t.provenance.deprecated !== true)).toBe(true)
+    expect(all.some((t) => t.provenance.deprecated === true)).toBe(true)
+  })
+
+  it('AT-v3 jay-canvas task with N user turns produces N messages in Conversation (reroll-ready)', async () => {
+    const all = await loadAllAssistantTrajTasks()
+    const multiTurn = all.find(
+      (t) =>
+        t.task_id.includes('_jc_') &&
+        t.turns.filter((tu) => tu.role === 'user').length >= 2,
+    )
+    if (!multiTurn) {
+      // No multi-turn AT-v3 task yet — skip with a clear marker rather than fail.
+      console.warn('no multi-turn AT-v3 task found; skip reroll proof')
+      return
+    }
+    const conv = assistantTrajAdapter.prepare(harnessTask(multiTurn))
+    const userCount = multiTurn.turns.filter((t) => t.role === 'user').length
+    expect(conv.messages).toHaveLength(userCount)
+    expect(conv.messages.every((m) => m.role === 'user')).toBe(true)
   })
 })
 

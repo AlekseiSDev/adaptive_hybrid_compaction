@@ -1,0 +1,46 @@
+{
+  "task_id": "at_image_qa_jc_ie_005",
+  "category": "image_qa",
+  "source": "real",
+  "turns": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "Создай изображение .Вот требования к изображению:- что должно быть на изображении: I selected this file https:&#x2F;&#x2F;284baef4-3d14-4ca5-8247-4811f0d6b14b.selstorage.ru&#x2F;7651dbd6-7616-4979-b747-476286e7b680_S-.jpg\nExact same camera angle, field of view, perspective and building geometry as the input photo. Keep the concrete slab, landscape, tools, and sky unchanged. Do not move or resize any openings.\n\nMaterial transformation only: Replace ALL wall surfaces with OSB (Oriented Strand Board) blocks — exterior facade, columns&amp;#x2F;pilasters, and ALL interior partition walls visible inside the rooms. Block course height is 400 mm. Exterior blocks width&amp;#x2F;thickness is 300 mm; interior partition blocks width&amp;#x2F;thickness is 150 mm. OSB texture must be realistic and continuous; seams between blocks are ultra-thin, barely visible and flush (almost seamless), avoid any pronounced grid.\n\nOpenings must remain raw and EMPTY: no windows, no frames, no doors, no glass, no mullions. Keep interiors empty.\n\nLighting and mood: warm golden hour sunset with orange‑pink sky and long soft shadows; natural color palette. Photorealistic architectural exterior photograph, high resolution, sharp focus.\n\nDo not add or remove objects, vegetation, or construction items. Do not change composition, proportions, or building configuration.. Твой промпт должен быть понятным и полным, но не слишком длинным, пиши его только на английском и используй синтаксис Stable Diffusion. Если нужно использовать изображения из контекста, то передай их URL в поле &#39;images&#39;Не задавай уточняющих вопросов, создай изображение с помощью функции create_image и выведи в ответе ссылку на изображение."
+        }
+      ],
+      "expected_tool_calls": [
+        {
+          "tool_name": "image_gen",
+          "required": true,
+          "args_match": "subset"
+        }
+      ]
+    }
+  ],
+  "tools_available": [
+    {
+      "name": "image_gen",
+      "description": "Generate an image from a text prompt. Returns image URL plus short caption.",
+      "input_schema": {
+        "type": "object",
+        "description": "Generate an image from a text prompt. Returns image URL plus short caption. (concrete shape: TOOL_INPUT_SCHEMAS.image_gen)"
+      }
+    }
+  ],
+  "evaluation": {
+    "strategy": "llm_judge",
+    "rubric_id": "image_qa",
+    "expected_summary": "Готово — сохранил ракурс, геометрию здания и окружение; все стены перестроены из OSB-блоков (экстерьер 300 мм, внутренние перегородки 150 мм, курс 400 мм), проёмы оставлены пустыми, тёплый закатный свет:\n\n![osb-house](https://placeholder.example.com/osb-house.png)"
+  },
+  "provenance": {
+    "anonymized_at": "2026-05-27",
+    "anonymization_steps": [
+      "source: user-owned jay-canvas production traces; no third-party PII per author review"
+    ],
+    "original_session_hash": "image_edit_11@f65cf304c5",
+    "review_signoff": "migrated from jay-canvas (IE5) on 2026-05-27 by D6 migrator"
+  }
+}

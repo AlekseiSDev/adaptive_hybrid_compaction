@@ -1,0 +1,46 @@
+{
+  "task_id": "at_research_write_jc_ed_003",
+  "category": "research_write",
+  "source": "real",
+  "turns": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "# ЗАДАНИЕ 1: ПОВТОРЕНИЕ R (БЕЗ ГРАФИКОВ)  df <- mtcars  # Подготовка факторов df$vs <- factor(df$vs) df$am <- factor(df$am, labels = c(\"automatics\", \"manual\")) df$gear <- ordered(df$gear) df$carb <- ordered(df$carb)  # Основные выборки mpg_col <- df$mpg small_df <- df[, 1:(ncol(df)-4)] target_cols <- df[, c(\"mpg\", \"hp\", \"am\")] rows_select <- df[c(1:10, 20:30), ]  # Фильтрация auto_cars <- subset(df, am == \"automatics\", select = c(mpg, hp, qsec)) qsec_low <- df[df$qsec <= mean(df$qsec), ] auto_names <- rownames(df[df$am == \"automatics\", ])  # Агрегация (те самые расчеты средних) sums_7 <- colSums(df[, 1:7]) means_7 <- colMeans(df[, 1:7]) aggr_carb <- aggregate(cbind(mpg, hp) ~ carb, data = df[df$carb %in% c(1, 4), ], FUN = mean) aggr_am <- aggregate(cbind(mpg, hp, qsec) ~ am, data = df, FUN = mean)  # Частотные таблицы hp_table <- table(cut(df$hp, breaks = 4)) qsec_prop <- prop.table(table(cut(df$qsec, breaks = 5)))  print(\"Задание 1 выполнено\")"
+        }
+      ],
+      "expected_tool_calls": [
+        {
+          "tool_name": "code_interpreter",
+          "required": true,
+          "args_match": "subset"
+        }
+      ]
+    }
+  ],
+  "tools_available": [
+    {
+      "name": "code_interpreter",
+      "description": "Execute Python 3 code in a sandbox. Returns stdout, stderr, and exit code.",
+      "input_schema": {
+        "type": "object",
+        "description": "Execute Python 3 code in a sandbox. Returns stdout, stderr, and exit code. (concrete shape: TOOL_INPUT_SCHEMAS.code_interpreter)"
+      }
+    }
+  ],
+  "evaluation": {
+    "strategy": "llm_judge",
+    "rubric_id": "research_write",
+    "expected_summary": "Ниже — результат исполнения скрипта на датасете `mtcars` (32 автомобиля × 11 переменных).\n\n## 1. Подготовка факторов\n- `df$vs` — `factor` (уровни `0`, `1`).\n- `df$am` — `factor` с метками `\"automatics\"` (0) и `\"manual\"` (1).\n- `df$gear`, `df$carb` — `ordered` факторы.\n\n## 2. Срезы\n- `mpg_col` — числовой вектор длины 32.\n- `small_df` — 32 строки × 7 столбцов (`mpg, cyl, disp, hp, drat, wt, qsec`).\n- `target_cols` — data.frame 32×3: `mpg`, `hp`, `am`.\n- `rows_select` — строки 1–10 и 20–30 (21 строка).\n\n## 3. Фильтрация\n- `auto_cars` — машины с `am == \"automatics\"` (19 строк), столбцы `mpg`, `hp`, `qsec`.\n- `qsec_low` — `qsec <= mean(qsec)` (~17.85), ~16 строк.\n- `auto_names` — имена 19 моделей с автоматикой (Hornet 4 Drive, Hornet Sportabout, Valiant, Duster 360, Merc 240D/230/280/280C/450SE/450SL/450SLC, Cadillac Fleetwood, Lincoln Continental, Chrysler Imperial, Toyota Corona, Dodge Challenger, AMC Javelin, Camaro Z28, Pontiac Firebird).\n\n## 4. Агрегации\n**`sums_7` (суммы по столбцам 1..7):**\n| mpg | cyl | disp | hp | drat | wt | qsec |\n|---|---|---|---|---|---|---|\n| 642.9 | 198 | 7383.1 | 4694 | 115.09 | 102.95 | 571.16 |\n\n**`means_7`:**\n| mpg | cyl | disp | hp | drat | wt | qsec |\n|---|---|---|---|---|---|---|\n| 20.09 | 6.19 | 230.72 | 146.69 | 3.60 | 3.22 | 17.85 |\n\n**`aggr_carb`** (среднее `mpg`, `hp` для `carb` ∈ {1, 4}):\n| carb | mpg | hp |\n|---|---|---|\n| 1 | 25.34 | 86.0 |\n| 4 | 15.79 | 187.0 |\n\n**`aggr_am`** (среднее по трансмиссии):\n| am | mpg | hp | qsec |\n|---|---|---|---|\n| automatics | 17.15 | 160.26 | 18.18 |\n| manual | 24.39 | 126.85 | 17.36 |\n\n## 5. Частотные таблицы\n**`hp_table`** — 4 равных интервала:\n| Интервал | Частота |\n|---|---|\n| (52.8, 135] | 14 |\n| (135, 217] | 12 |\n| (217, 299] | 5 |\n| (299, 335] | 1 |\n\n**`qsec_prop`** — 5 равных интервалов:\n| Интервал | Доля |\n|---|---|\n| (14.5, 15.8] | 0.094 |\n| (15.8, 17.1] | 0.281 |\n| (17.1, 18.4] | 0.344 |\n| (18.4, 19.7] | 0.188 |\n| (19.7, 22.9] | 0.094 |\n\n## 6. Финальный вывод\n```\n[1] \"Задание 1 выполнено\"\n```"
+  },
+  "provenance": {
+    "anonymized_at": "2026-05-27",
+    "anonymization_steps": [
+      "source: user-owned jay-canvas production traces; no third-party PII per author review"
+    ],
+    "original_session_hash": "education_5@f65cf304c5",
+    "review_signoff": "migrated from jay-canvas (ED3) on 2026-05-27 by D6 migrator"
+  }
+}

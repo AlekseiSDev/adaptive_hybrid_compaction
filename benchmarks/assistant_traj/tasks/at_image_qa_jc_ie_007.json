@@ -1,0 +1,46 @@
+{
+  "task_id": "at_image_qa_jc_ie_007",
+  "category": "image_qa",
+  "source": "real",
+  "turns": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "https://284baef4-3d14-4ca5-8247-4811f0d6b14b.selstorage.ru/2cba9b33-4282-4c20-bc2a-32fd9f4f7b50_898bc6.webp Отредактируй это фото: добавь рядом с основным объектом мужчину лет 40 в тёмных солнечных очках, с букетом цветов в руке. Сохрани исходную композицию и стиль."
+        }
+      ],
+      "expected_tool_calls": [
+        {
+          "tool_name": "image_edit",
+          "required": true,
+          "args_match": "subset"
+        }
+      ]
+    }
+  ],
+  "tools_available": [
+    {
+      "name": "image_edit",
+      "description": "Edit an existing image per a natural-language instruction. Returns new image URL plus short caption.",
+      "input_schema": {
+        "type": "object",
+        "description": "Edit an existing image per a natural-language instruction. Returns new image URL plus short caption. (concrete shape: TOOL_INPUT_SCHEMAS.image_edit)"
+      }
+    }
+  ],
+  "evaluation": {
+    "strategy": "llm_judge",
+    "rubric_id": "image_qa",
+    "expected_summary": "Готово — добавил рядом с основным объектом мужчину около 40 лет в тёмных солнечных очках с букетом цветов, композиция и стиль исходного кадра сохранены:\n\n![edited](https://placeholder.example.com/man-flowers.png)"
+  },
+  "provenance": {
+    "anonymized_at": "2026-05-27",
+    "anonymization_steps": [
+      "source: user-owned jay-canvas production traces; no third-party PII per author review"
+    ],
+    "original_session_hash": "moved_from_A:conversational_5@f65cf304c5",
+    "review_signoff": "migrated from jay-canvas (IE7) on 2026-05-27 by D6 migrator"
+  }
+}

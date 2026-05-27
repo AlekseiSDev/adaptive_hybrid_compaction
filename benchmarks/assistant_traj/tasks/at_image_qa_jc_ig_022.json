@@ -1,0 +1,46 @@
+{
+  "task_id": "at_image_qa_jc_ig_022",
+  "category": "image_qa",
+  "source": "real",
+  "turns": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "Создай изображение .Вот требования к изображению:- что должно быть на изображении: I selected this file https:&#x2F;&#x2F;284baef4-3d14-4ca5-8247-4811f0d6b14b.selstorage.ru&#x2F;3f846a24-9ef1-4edc-b8a8-0ca11fc04697_e38a6f13-ea84-432f-980f-d679192637b6.jpg\nоживи фото. Твой промпт должен быть понятным и полным, но не слишком длинным, пиши его только на английском и используй синтаксис Stable Diffusion. Если нужно использовать изображения из контекста, то передай их URL в поле &#39;images&#39;Не задавай уточняющих вопросов, создай изображение с помощью функции create_image и выведи в ответе ссылку на изображение."
+        }
+      ],
+      "expected_tool_calls": [
+        {
+          "tool_name": "image_gen",
+          "required": true,
+          "args_match": "subset"
+        }
+      ]
+    }
+  ],
+  "tools_available": [
+    {
+      "name": "image_gen",
+      "description": "Generate an image from a text prompt. Returns image URL plus short caption.",
+      "input_schema": {
+        "type": "object",
+        "description": "Generate an image from a text prompt. Returns image URL plus short caption. (concrete shape: TOOL_INPUT_SCHEMAS.image_gen)"
+      }
+    }
+  ],
+  "evaluation": {
+    "strategy": "llm_judge",
+    "rubric_id": "image_qa",
+    "expected_summary": "Вот стилизованная «ожившая» версия вашего фото:\n\n![Стилизованное оживлённое фото](https://placeholder.example.com/generated.png)\n\nЭто статичное изображение в мультяшном стиле — полноценное видео-оживление (движение, мимика) здесь не сделаю, но если нужно — подскажу, какой инструмент подойдёт для анимации."
+  },
+  "provenance": {
+    "anonymized_at": "2026-05-27",
+    "anonymization_steps": [
+      "source: user-owned jay-canvas production traces; no third-party PII per author review"
+    ],
+    "original_session_hash": "image_gen_13@f65cf304c5",
+    "review_signoff": "migrated from jay-canvas (IG8) on 2026-05-27 by D6 migrator"
+  }
+}

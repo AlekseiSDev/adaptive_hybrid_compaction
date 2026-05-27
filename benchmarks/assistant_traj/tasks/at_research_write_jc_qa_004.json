@@ -1,0 +1,46 @@
+{
+  "task_id": "at_research_write_jc_qa_004",
+  "category": "research_write",
+  "source": "real",
+  "turns": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "Какой сегодня курс доллара к рублю?"
+        }
+      ],
+      "expected_tool_calls": [
+        {
+          "tool_name": "google_search",
+          "required": true,
+          "args_match": "subset"
+        }
+      ]
+    }
+  ],
+  "tools_available": [
+    {
+      "name": "google_search",
+      "description": "Web search via Google. Returns top-N results as title+snippet+URL list.",
+      "input_schema": {
+        "type": "object",
+        "description": "Web search via Google. Returns top-N results as title+snippet+URL list. (concrete shape: TOOL_INPUT_SCHEMAS.google_search)"
+      }
+    }
+  ],
+  "evaluation": {
+    "strategy": "llm_judge",
+    "rubric_id": "research_write",
+    "expected_summary": "Сегодня курс доллара — около **92,5 ₽** за 1 USD (официальный курс ЦБ РФ на дату запроса; на межбанке колеблется в диапазоне 92,3–92,8 ₽)."
+  },
+  "provenance": {
+    "anonymized_at": "2026-05-27",
+    "anonymization_steps": [
+      "source: user-owned jay-canvas production traces; no third-party PII per author review"
+    ],
+    "original_session_hash": "qa_search_currency@f65cf304c5",
+    "review_signoff": "migrated from jay-canvas (QA4) on 2026-05-27 by D6 migrator"
+  }
+}

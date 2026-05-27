@@ -1,0 +1,46 @@
+{
+  "task_id": "at_mixed_jc_dbg_001",
+  "category": "mixed",
+  "source": "real",
+  "turns": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "Создай изображение .Вот требования к изображению:- что должно быть на изображении: Проанализируй следующих персонажей из цикла книг &quot;Сказания Земноморья&quot;: 1) Аррен 2) Тень Аррена 3) Терру 4) Тенар 5) Ястреб (Гёд) 6) Паук 7) Печварри 8) Харе 9) Калессин\n\nСсылайся именно на книги. Выпиши подробное описание по каждому персонажу для создания промта на русском языке, для дальнейшей визуализации. Описывай: их внешность, повадки, одежду, стабильное настроение, черты лица, характер и прочее.. Твой промпт должен быть понятным и полным, но не слишком длинным, пиши его только на английском и используй синтаксис Stable Diffusion. Если нужно использовать изображения из контекста, то передай их URL в поле &#39;images&#39;Не задавай уточняющих вопросов, создай изображение с помощью функции create_image и выведи в ответе ссылку на изображение."
+        }
+      ],
+      "expected_tool_calls": [
+        {
+          "tool_name": "image_gen",
+          "required": true,
+          "args_match": "subset"
+        }
+      ]
+    }
+  ],
+  "tools_available": [
+    {
+      "name": "image_gen",
+      "description": "Generate an image from a text prompt. Returns image URL plus short caption.",
+      "input_schema": {
+        "type": "object",
+        "description": "Generate an image from a text prompt. Returns image URL plus short caption. (concrete shape: TOOL_INPUT_SCHEMAS.image_gen)"
+      }
+    }
+  ],
+  "evaluation": {
+    "strategy": "llm_judge",
+    "rubric_id": "mixed",
+    "expected_summary": "Собрал краткие описания ключевых персонажей «Сказаний Земноморья» У. Ле Гуин (Аррен, Тень Аррена, Терру, Тенар, Ястреб/Гед, Паук, Печварри, Харе, Калессин) и передал их одним промптом в генератор изображений.\n\n![Персонажи Земноморья: Аррен, Тень, Терру, Тенар, Гед, Паук, Печварри, Харе и дракон Калессин](https://placeholder.example.com/earthsea-characters.png)"
+  },
+  "provenance": {
+    "anonymized_at": "2026-05-27",
+    "anonymization_steps": [
+      "source: user-owned jay-canvas production traces; no third-party PII per author review"
+    ],
+    "original_session_hash": "excessive_google_search_opus_image_card@f65cf304c5",
+    "review_signoff": "migrated from jay-canvas (DBG1) on 2026-05-27 by D6 migrator"
+  }
+}

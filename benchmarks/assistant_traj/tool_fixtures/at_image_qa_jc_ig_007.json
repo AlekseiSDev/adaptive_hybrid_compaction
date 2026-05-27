@@ -1,0 +1,14 @@
+{
+  "task_id": "at_image_qa_jc_ig_007",
+  "fixtures": [
+    {
+      "tool_name": "image_gen",
+      "output_parts": [
+        {
+          "type": "text",
+          "text": "Generated image: https://fb2679aa-8d64-4a3c-8ef7-ba93abea130b.selstorage.ru/2f31398d-86d8-44fd-b4a0-a8b5aacb37c7_5454eaa3-c409-4193-aca5-78ecbc36b10d.png\nCaption: (captured from jay-canvas)"
+        }
+      ]
+    }
+  ]
+}

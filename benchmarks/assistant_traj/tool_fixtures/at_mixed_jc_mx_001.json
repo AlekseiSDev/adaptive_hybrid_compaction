@@ -1,0 +1,14 @@
+{
+  "task_id": "at_mixed_jc_mx_001",
+  "fixtures": [
+    {
+      "tool_name": "image_gen",
+      "output_parts": [
+        {
+          "type": "text",
+          "text": "Generated image: https://fb2679aa-8d64-4a3c-8ef7-ba93abea130b.selstorage.ru/5d5983b9-e28f-4642-857d-d341747cbfa6_7753ffca-0c09-4be2-8f59-2d517c89675d.png\nCaption: (captured from jay-canvas)"
+        }
+      ]
+    }
+  ]
+}

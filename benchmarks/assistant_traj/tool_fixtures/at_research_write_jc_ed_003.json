@@ -1,0 +1,14 @@
+{
+  "task_id": "at_research_write_jc_ed_003",
+  "fixtures": [
+    {
+      "tool_name": "code_interpreter",
+      "output_parts": [
+        {
+          "type": "text",
+          "text": "STDOUT:\nbake stub output\n\n\nSTDERR:\n\n\nExit: 0"
+        }
+      ]
+    }
+  ]
+}

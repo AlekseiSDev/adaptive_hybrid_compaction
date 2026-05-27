@@ -1,0 +1,46 @@
+{
+  "task_id": "at_image_qa_jc_ig_014",
+  "category": "image_qa",
+  "source": "real",
+  "turns": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "Создай изображение .Вот требования к изображению:- что должно быть на изображении: Современный образовательный плакат для стенда в кабинете микроэлектроники. В центре — детализированная стилизованная плата Arduino Uno с выносками на ключевые элементы: микроконтроллер, USB-порт, разъём питания, цифровые&#x2F;аналоговые пины, кнопка сброса. Светлый фон с полупрозрачными дорожками печатной платы в качестве декоративного элемента. Вокруг платы размещены минималистичные иконки датчиков, исполнительных устройств и символов программирования. Стиль инфографики, высокая контрастность, профессиональная компоновка, подходит для крупноформатной печати. Оставлено чистое пространство для последующего добавления текста.. Твой промпт должен быть понятным и полным, но не слишком длинным, пиши его только на английском и используй синтаксис Stable Diffusion. Если нужно использовать изображения из контекста, то передай их URL в поле &#39;images&#39;Не задавай уточняющих вопросов, создай изображение с помощью функции create_image и выведи в ответе ссылку на изображение."
+        }
+      ],
+      "expected_tool_calls": [
+        {
+          "tool_name": "image_gen",
+          "required": true,
+          "args_match": "subset"
+        }
+      ]
+    }
+  ],
+  "tools_available": [
+    {
+      "name": "image_gen",
+      "description": "Generate an image from a text prompt. Returns image URL plus short caption.",
+      "input_schema": {
+        "type": "object",
+        "description": "Generate an image from a text prompt. Returns image URL plus short caption. (concrete shape: TOOL_INPUT_SCHEMAS.image_gen)"
+      }
+    }
+  ],
+  "evaluation": {
+    "strategy": "llm_judge",
+    "rubric_id": "image_qa",
+    "expected_summary": "Держи современный образовательный плакат с платой Arduino Uno в центре, выносками на ключевые элементы и чистым пространством под текст:\n\n![Плакат Arduino Uno с выносками для кабинета микроэлектроники](https://placeholder.example.com/generated.png)"
+  },
+  "provenance": {
+    "anonymized_at": "2026-05-27",
+    "anonymization_steps": [
+      "source: user-owned jay-canvas production traces; no third-party PII per author review"
+    ],
+    "original_session_hash": "moved_from_IE:image_edit_9@f65cf304c5",
+    "review_signoff": "migrated from jay-canvas (IG21) on 2026-05-27 by D6 migrator"
+  }
+}

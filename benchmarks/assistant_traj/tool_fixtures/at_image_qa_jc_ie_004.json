@@ -1,0 +1,19 @@
+{
+  "task_id": "at_image_qa_jc_ie_004",
+  "fixtures": [
+    {
+      "tool_name": "image_edit",
+      "output_parts": [
+        {
+          "type": "text",
+          "text": "Edited image: <inline>\nCaption: Создай изображение .Вот требования к изображению:- что должно быть на изображении: I selected this file https:&#x2F;&#x2\nSource: https://placehold.co/256x256.png"
+        },
+        {
+          "type": "image",
+          "path": "attachments/at_image_qa_jc_ie_004/image_edit_0_img_edited.png",
+          "alt": "image_edit bake output"
+        }
+      ]
+    }
+  ]
+}

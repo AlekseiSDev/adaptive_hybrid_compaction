@@ -1,0 +1,46 @@
+{
+  "task_id": "at_image_qa_jc_ig_002",
+  "category": "image_qa",
+  "source": "real",
+  "turns": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "Создай изображение .Вот требования к изображению:- что должно быть на изображении: Image #1: https:&#x2F;&#x2F;284baef4-3d14-4ca5-8247-4811f0d6b14b.selstorage.ru&#x2F;816ed909-a8f7-4eb9-beb0-2a97b83b108d_f212af56-c1ae-4610-b0dc-a3bf9194924b.png\nImage #1: https:&#x2F;&#x2F;284baef4-3d14-4ca5-8247-4811f0d6b14b.selstorage.ru&#x2F;7f5e3441-9d14-4805-a760-dc6ab9170b89_4ec0936a-4f97-4ecb-aa76-36452e0491a8.png\n\n\nЗадача сделать такое же по стилю изображение с ВОСЕМЬЮ пунктами процессов\n1. Ведение календаря\n2. Организация мероприятий и выездов \n3. Документооборот, контроль задач и поручений\n4. Взаимодействие с ЦИО, Субъектами РФ, ФОИВами, Правительством\n5. Работа с гражданами\n6. Подготовка аналитических отчетов по курируемым направления\n7. Оформление пропусков и командировок\n8. Обеспечение работы секретариата\n\nВАЖНО и обязательно учесть что тут 8мь пунктов НЕЛЬЗЯ ТЕРЯТЬ НИ ОДИН. Твой промпт должен быть понятным и полным, но не слишком длинным, пиши его только на английском и используй синтаксис Stable Diffusion. Если нужно использовать изображения из контекста, то передай их URL в поле &#39;images&#39;Не задавай уточняющих вопросов, создай изображение с помощью функции create_image и выведи в ответе ссылку на изображение."
+        }
+      ],
+      "expected_tool_calls": [
+        {
+          "tool_name": "image_gen",
+          "required": true,
+          "args_match": "subset"
+        }
+      ]
+    }
+  ],
+  "tools_available": [
+    {
+      "name": "image_gen",
+      "description": "Generate an image from a text prompt. Returns image URL plus short caption.",
+      "input_schema": {
+        "type": "object",
+        "description": "Generate an image from a text prompt. Returns image URL plus short caption. (concrete shape: TOOL_INPUT_SCHEMAS.image_gen)"
+      }
+    }
+  ],
+  "evaluation": {
+    "strategy": "llm_judge",
+    "rubric_id": "image_qa",
+    "expected_summary": "Готово — стиль первой картинки сохранён, все 8 пунктов процессов отрисованы:\n\n![Инфографика в стиле оригинала с 8 пунктами процессов](https://placeholder.example.com/generated.png)"
+  },
+  "provenance": {
+    "anonymized_at": "2026-05-27",
+    "anonymization_steps": [
+      "source: user-owned jay-canvas production traces; no third-party PII per author review"
+    ],
+    "original_session_hash": "image_gen_15@f65cf304c5",
+    "review_signoff": "migrated from jay-canvas (IG10) on 2026-05-27 by D6 migrator"
+  }
+}

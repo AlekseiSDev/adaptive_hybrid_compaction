@@ -1,0 +1,19 @@
+{
+  "task_id": "at_image_qa_jc_ig_016",
+  "fixtures": [
+    {
+      "tool_name": "image_gen",
+      "output_parts": [
+        {
+          "type": "text",
+          "text": "Generated image: <inline>\nCaption: создай лэпбук - Название лэпбука (на обложку): «Социальная карта района: кто помогает людям с инвалидностью»  Структура "
+        },
+        {
+          "type": "image",
+          "path": "attachments/at_image_qa_jc_ig_016/image_gen_0_img.png",
+          "alt": "image_gen bake output"
+        }
+      ]
+    }
+  ]
+}

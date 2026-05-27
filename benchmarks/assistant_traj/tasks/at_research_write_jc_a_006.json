@@ -1,0 +1,39 @@
+{
+  "task_id": "at_research_write_jc_a_006",
+  "category": "research_write",
+  "source": "real",
+  "turns": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "Ты-директор по набору персонала. По каким ключевым навыкам ты будешь искать директора по маркетингу."
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "хорошо, какие hard skill должны быть у руководителя групп проектов"
+        }
+      ]
+    }
+  ],
+  "tools_available": [],
+  "evaluation": {
+    "strategy": "llm_judge",
+    "rubric_id": "research_write",
+    "expected_summary": "Руководитель группы проектов — другой профиль, с сильным операционным и методологическим уклоном. Hard skills, которые я проверяю:\n\n### 1. Методологии и процессы управления проектами\n- PMI / PMBOK — процессные группы, стандарты (PMP или IPMA уровень C/B желательно).\n- Agile: Scrum, Kanban, SAFe, LeSS — и понимание, когда какой применять.\n- Гибридные модели (Stage-Gate + Agile), управление портфелем проектов.\n\n### 2. Планирование и контроль\n- Декомпозиция (WBS), сетевое планирование, критический путь, метод освоенного объёма (EVM).\n- Ресурсное планирование и загрузка команд.\n- Управление рисками (реестр, количественный и качественный анализ).\n- Change control board, impact analysis.\n\n### 3. Бюджет и финансы проектов\n- CapEx/OpEx, TCO, NPV/IRR/payback.\n- Контроль бюджета и план-факт, прогноз отклонений (EAC/ETC).\n- Работа с закупками и подрядчиками, тендеры.\n\n### 4. Инструменты\n- Jira, Confluence, MS Project, Primavera, Smartsheet, Power BI/Tableau.\n- Настройка PPM-систем и дашбордов.\n- Базовый SQL/Excel для план-фактного анализа.\n\n### 5. Стейкхолдер- и KPI-менеджмент\n- Работа со спонсорами и C-level.\n- KPI проекта (on-time / on-budget / on-scope / benefit realization).\n- RAID-логи, steerco-материалы, регулярная отчётность.\n\n### 6. Лидерство проектных менеджеров\n- Наставничество PM, career matrix, оценка performance.\n\n**Ключевое отличие от CMO:** для CMO важна стратегия бренда и рост выручки, для руководителя группы проектов — **дисциплина исполнения и предсказуемость сроков/бюджета при масштабируемом портфеле**. Фокус интервью: реальные проектные кейсы, провалы и восстановление, работа с конфликтующими стейкхолдерами."
+  },
+  "provenance": {
+    "anonymized_at": "2026-05-27",
+    "anonymization_steps": [
+      "source: user-owned jay-canvas production traces; no third-party PII per author review"
+    ],
+    "original_session_hash": "conversational_3@f65cf304c5",
+    "review_signoff": "migrated from jay-canvas (A6) on 2026-05-27 by D6 migrator"
+  }
+}

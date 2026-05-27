@@ -1,0 +1,14 @@
+{
+  "task_id": "at_image_qa_jc_ie_007",
+  "fixtures": [
+    {
+      "tool_name": "image_edit",
+      "output_parts": [
+        {
+          "type": "text",
+          "text": "Edited image: https://fb2679aa-8d64-4a3c-8ef7-ba93abea130b.selstorage.ru/e798a9e8-c7e4-4db8-bfa3-e85ac501232b_be433660-77ee-47db-bd9c-cba363ec481c.png\nCaption: (captured from jay-canvas)\nSource: (captured)"
+        }
+      ]
+    }
+  ]
+}

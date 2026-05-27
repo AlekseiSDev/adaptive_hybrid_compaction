@@ -1,0 +1,62 @@
+{
+  "task_id": "at_image_qa_jc_ie_002",
+  "category": "image_qa",
+  "source": "real",
+  "turns": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "Создай изображение .Вот требования к изображению:- что должно быть на изображении: Image #1: https:&#x2F;&#x2F;284baef4-3d14-4ca5-8247-4811f0d6b14b.selstorage.ru&#x2F;997a3bc9-a6b1-452f-ba55-734bb4a45b2f_ce9b9a7b-eb15-4387-8867-288ed6323135.png Recognised content of image [https:&#x2F;&#x2F;284baef4-3d14-4ca5-8247-4811f0d6b14b.selstorage.ru&#x2F;997a3bc9-a6b1-452f-ba55-734bb4a45b2f_ce9b9a7b-eb15-4387-8867-288ed6323135.png]:\nCertainly! Here is a **comprehensive and detailed description** of the image:\n\n---\n\n### **Imagery &amp; Design Elements**\n\n- **General Shape &amp; Border**: The image is circular, outlined by a thick dark blue ring.\n- **Background**: The background within the circle is plain white.\n\n### **Central Composition**\n\n- **Main Objects Arranged Together**:\n  1. **Measuring Caliper** (right, largest):  \n     - Color: Light gray-blue with dark blue outline.  \n     - Position: Leaning diagonally from the upper right to the lower left, dominating the right half ... (litellm_truncated skipped 1071 chars) ...d the circle—three beneath the open book and four around the periphery of the composition.\n\n- **Mathematical&#x2F;Measurement Objects**:\n  - **Pentagon with &#39;K&#39; inside** (left): White pentagon outlined in dark blue, with a bold &#39;K&#39; in the center.\n  - **Ruler Icon in Square** (right): Yellow square with a ruler drawn inside by dark blue lines.\n\n### **Text**\n- At the bottom inside the circular border—  \n  - **Text**: “СНО АРШИН”\n  - **Font&#x2F;Color**: Bold, sans-serif, capitalized, dark blue. The text is curved to follow the lower edge of the circle.\n  - **Language**: Cyrillic\n\n### **Color Palette**\n- **Dominant Colors**:  \n  - Dark navy blue (used for outlines, text, some objects)\n  - Gold&#x2F;yellow (used for certain rulers, gears, square)\n  - Light gray&#x2F;blue-gray (used for the caliper)\n  - White (background and some objects)\n- **Highlight&#x2F;Accent Colors**:  \n  - Occasional use of white within objects for contrast.\n\n---\n\n**Summary:**  \nThe image is a detailed emblem or logo for an engineering, technical or academic society (“СНО АРШИН”), incorporating elements symbolizing measurement, mathematics, and engineering (caliper, rulers, compasses, gears, books). The design is symmetrical and balanced with a clean, technical color scheme dominated by navy blue, yellow, and white, and features Cyrillic text along the lower border.\n\nУ штангенциркуля отсутствует одна внешняя губка. Исправь это. Твой промпт должен быть понятным и полным, но не слишком длинным, пиши его только на английском и используй синтаксис Stable Diffusion. Если нужно использовать изображения из контекста, то передай их URL в поле &#39;images&#39;Не задавай уточняющих вопросов, создай изображение с помощью функции create_image и выведи в ответе ссылку на изображение."
+        }
+      ],
+      "expected_tool_calls": [
+        {
+          "tool_name": "image_edit",
+          "required": true,
+          "args_match": "subset"
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "Создай изображение из этого.Вот требования к изображению:- что должно быть на изображении: Теперь добавь золотой акцент на ключевые элементы.. Твой промпт должен быть понятным и полным, но не слишком длинным, пиши его только на английском и используй синтаксис Stable Diffusion. Если нужно использовать изображения из контекста, то передай их URL в поле &#39;images&#39;Не задавай уточняющих вопросов, создай изображение с помощью функции create_image и выведи в ответе ссылку на изображение."
+        }
+      ],
+      "expected_tool_calls": [
+        {
+          "tool_name": "image_edit",
+          "required": true,
+          "args_match": "subset"
+        }
+      ]
+    }
+  ],
+  "tools_available": [
+    {
+      "name": "image_edit",
+      "description": "Edit an existing image per a natural-language instruction. Returns new image URL plus short caption.",
+      "input_schema": {
+        "type": "object",
+        "description": "Edit an existing image per a natural-language instruction. Returns new image URL plus short caption. (concrete shape: TOOL_INPUT_SCHEMAS.image_edit)"
+      }
+    }
+  ],
+  "evaluation": {
+    "strategy": "llm_judge",
+    "rubric_id": "image_qa",
+    "expected_summary": "Добавил золотые акценты на ключевые элементы эмблемы — шестерни, линейку в квадрате и контур штангенциркуля:\n\n![edited](https://placeholder.example.com/emblem-gold.png)"
+  },
+  "provenance": {
+    "anonymized_at": "2026-05-27",
+    "anonymization_steps": [
+      "source: user-owned jay-canvas production traces; no third-party PII per author review"
+    ],
+    "original_session_hash": "image_edit_3@f65cf304c5",
+    "review_signoff": "migrated from jay-canvas (IE2) on 2026-05-27 by D6 migrator"
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "task_id": "at_image_qa_jc_ig_013",
+  "category": "image_qa",
+  "source": "real",
+  "turns": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "Создай изображение .Вот требования к изображению:- что должно быть на изображении: Stable Diffusion prompt (English, ready to use):\n{\n&amp;quot;prompt&amp;quot;: &amp;quot;Photorealistic comedic caricature edit based on the reference image: exaggerate facial features — make the subject heavier with extremely bulging wide eyes, enlarged nose and ears, very chubby round cheeks, while preserving realistic skin pores and natural skin tones; keep original pose, clothing (black velour jacket with gold geometric trim) and backward cap, maintain hotel-room background and polished wooden table; dramatic cinematic studio lighting, shallow depth of field, ultra-detailed high-resolution texture, tasteful color grading, natural shadows, no text, no logos, no watermark&amp;quot;,\n&amp;quot;images&amp;quot;: [&amp;quot;\n&amp;quot;],\n&amp;quot;sampler&amp;quot;: &amp;quot;Euler a&amp;quot;,\n&amp;quot;steps&amp;quot;: 28,\n&amp;quot;cfg_scale&amp;quot;: 7.5,\n&amp;quot;width&amp;quot;: 1536,\n&amp;quot;height&amp;quot;: 1152,\n&amp;quot;aspect&amp;quot;: &amp;quot;4:3&amp;quot;,\n&amp;quot;quality&amp;quot;: 2\n}. Твой промпт должен быть понятным и полным, но не слишком длинным, пиши его только на английском и используй синтаксис Stable Diffusion. Если нужно использовать изображения из контекста, то передай их URL в поле &#39;images&#39;Не задавай уточняющих вопросов, создай изображение с помощью функции create_image и выведи в ответе ссылку на изображение."
+        }
+      ],
+      "expected_tool_calls": [
+        {
+          "tool_name": "image_gen",
+          "required": true,
+          "args_match": "subset"
+        }
+      ]
+    }
+  ],
+  "tools_available": [
+    {
+      "name": "image_gen",
+      "description": "Generate an image from a text prompt. Returns image URL plus short caption.",
+      "input_schema": {
+        "type": "object",
+        "description": "Generate an image from a text prompt. Returns image URL plus short caption. (concrete shape: TOOL_INPUT_SCHEMAS.image_gen)"
+      }
+    }
+  ],
+  "evaluation": {
+    "strategy": "llm_judge",
+    "rubric_id": "image_qa",
+    "expected_summary": "Вот фотореалистичная комедийная карикатура, сделанная по вашему SD-промпту — утрированные черты, сохранены поза, одежда и интерьер:\n\n![Фотореалистичная карикатура по SD-промпту](https://placeholder.example.com/generated.png)"
+  },
+  "provenance": {
+    "anonymized_at": "2026-05-27",
+    "anonymization_steps": [
+      "source: user-owned jay-canvas production traces; no third-party PII per author review"
+    ],
+    "original_session_hash": "moved_from_IE:image_edit_7@f65cf304c5",
+    "review_signoff": "migrated from jay-canvas (IG20) on 2026-05-27 by D6 migrator"
+  }
+}

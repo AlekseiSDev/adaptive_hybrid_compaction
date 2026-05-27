@@ -1,0 +1,30 @@
+{
+  "task_id": "at_mixed_jc_mx_005",
+  "category": "mixed",
+  "source": "real",
+  "turns": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "Когда будет готово?"
+        }
+      ]
+    }
+  ],
+  "tools_available": [],
+  "evaluation": {
+    "strategy": "llm_judge",
+    "rubric_id": "mixed",
+    "expected_summary": "Уточните, пожалуйста, о каком именно запросе речь — у меня сейчас нет активной задачи в работе. В целом время ответа зависит от типа запроса:\n\n- короткий текстовый ответ — несколько секунд;\n- генерация изображения — от десятков секунд до пары минут;\n- генерация видео или музыки — от нескольких минут;\n- длинный анализ документа — зависит от объёма.\n\nЕсли вы имели в виду конкретный результат (изображение, видео, отчёт), пришлите повторно само задание — я запущу его и сразу покажу готовый результат."
+  },
+  "provenance": {
+    "anonymized_at": "2026-05-27",
+    "anonymization_steps": [
+      "source: user-owned jay-canvas production traces; no third-party PII per author review"
+    ],
+    "original_session_hash": "visual_followup_6@f65cf304c5",
+    "review_signoff": "migrated from jay-canvas (MX5) on 2026-05-27 by D6 migrator"
+  }
+}
