@@ -16,7 +16,11 @@ import {
 } from './adapters/assistant-traj.js'
 import { defaultLlmJudge } from './adapters/assistant-traj.judge.js'
 import { gaiaAdapter, gaiaGrader } from './adapters/gaia-med.js'
-import { makeGaiaMastraAgentRunner, resolveGaiaRunner } from './adapters/gaia-med/index.js'
+import {
+  makeGaiaMastraAgentRunner,
+  resolveGaiaAnthropicCompactRunner,
+  resolveGaiaRunner,
+} from './adapters/gaia-med/index.js'
 import {
   createLoCoMoGrader,
   defaultLocomoJudge,
@@ -446,6 +450,12 @@ export const defaultRunnerRegistry: RunnerRegistry = {
     if (config.baseline === 'gaia_bench_agent' || config.baseline === 'gaia_bench_agent_ahc') {
       // Track K (K3). Agentic single-shot runner over 5 GAIA tools.
       return resolveGaiaRunner(config)
+    }
+    if (config.baseline === 'gaia_bench_agent_anthropic_compact') {
+      // Track K-tail-4 (2026-05-27). Anthropic /compact + tools — native SDK
+      // (не AI SDK) для прохождения beta context_management knobs. Model per-
+      // config через `actor_model:` field (haiku-4-5 / sonnet-4-6).
+      return resolveGaiaAnthropicCompactRunner(config)
     }
     // `ahc_flags`-only configs (no explicit `baseline`) route to the real
     // ahc_core runner — A6 middleware over AI SDK v6 provider, per B5.

@@ -23,10 +23,24 @@ import {
   GAIA_MASTRA_ACTOR_DEFAULT_MODEL,
   runGaiaTaskMastra,
 } from './mastra-agent-runner.js'
+import {
+  GAIA_ANTHROPIC_COMPACT_DEFAULT_MODEL,
+  runGaiaTaskAnthropicCompact,
+  type GaiaAnthropicCompactModel,
+} from './anthropic-compact-runner.js'
 
 export { runGaiaTask, GAIA_ACTOR_DEFAULT_MODEL } from './agent-runner.js'
 export type { RunGaiaTaskDeps, GaiaTaskResult } from './agent-runner.js'
 export { runGaiaTaskMastra, GAIA_MASTRA_ACTOR_DEFAULT_MODEL } from './mastra-agent-runner.js'
+export {
+  runGaiaTaskAnthropicCompact,
+  GAIA_ANTHROPIC_COMPACT_DEFAULT_MODEL,
+} from './anthropic-compact-runner.js'
+export type {
+  RunGaiaTaskAnthropicCompactDeps,
+  GaiaTaskResultAnthropicCompact,
+  GaiaAnthropicCompactModel,
+} from './anthropic-compact-runner.js'
 export type { RunGaiaTaskMastraDeps, GaiaTaskResultMastra } from './mastra-agent-runner.js'
 
 export type MakeGaiaBenchRunnerOpts = {
@@ -175,5 +189,98 @@ export function resolveGaiaRunner(config: ConfigDef): Runner {
     apiKey,
     ...(ahcFlags !== undefined ? { ahcFlags } : {}),
     ...(ahcThresholds !== undefined ? { ahcThresholds } : {}),
+  })
+}
+
+// Track K-tail-4 (2026-05-27): Anthropic /compact agent variant для GAIA.
+// Uses native Anthropic SDK (см. anthropic-compact-runner.ts) — separate from
+// AI SDK v6 path (vanilla/AHC) because beta context_management knobs require
+// raw SDK access. Auth priority (mirrors makeAnthropicCompactRunner на AT):
+// LITELLM_MASTER_KEY + LITELLM_BASE_URL → ANTHROPIC_API_KEY (direct console
+// billing). CLAUDE_CODE_OAUTH_TOKEN не используется здесь — Pro/Max subscription
+// rate-limited на programmatic use, не подходит для bench sweeps. Model per-
+// config через `actor_model` field в sweep YAML (haiku-4-5 / sonnet-4-6).
+export type MakeGaiaAnthropicCompactRunnerOpts = {
+  apiKey: string
+  baseURL?: string
+  model?: GaiaAnthropicCompactModel
+  maxSteps?: number
+}
+
+export function makeGaiaAnthropicCompactRunner(
+  opts: MakeGaiaAnthropicCompactRunnerOpts,
+): Runner {
+  const model = opts.model ?? GAIA_ANTHROPIC_COMPACT_DEFAULT_MODEL
+  return {
+    name: 'gaia_bench_agent_anthropic_compact',
+    async execute(_conv: Conversation, ctx: RunnerContext): Promise<RunnerResponse> {
+      const task = ctx.task.input as GaiaTask
+      const result = await runGaiaTaskAnthropicCompact(task, {
+        apiKey: opts.apiKey,
+        ...(opts.baseURL !== undefined ? { baseURL: opts.baseURL } : {}),
+        model,
+        actorSystem: GAIA_DRIVER_SYSTEM,
+        ...(opts.maxSteps !== undefined ? { maxSteps: opts.maxSteps } : {}),
+        ...(ctx.instrumentation !== undefined ? { emit: ctx.instrumentation } : {}),
+      })
+      return {
+        text: result.finalText,
+        turns: [],
+        errors: result.errors.map((e) => ({
+          turn_index: e.turn_index,
+          kind: e.kind,
+          message: e.message,
+        })),
+        totals: result.totals,
+        cost_usd: result.cost_usd,
+        // Diagnostic side-channel — gaiaGrader lifts to Score.secondary.
+        bench_extras: {
+          n_steps: result.n_steps,
+          n_tool_calls: result.n_tool_calls,
+          n_compactions: result.n_compactions,
+        },
+      }
+    },
+  }
+}
+
+// Resolver для baseline=`gaia_bench_agent_anthropic_compact`. Auth priority
+// mirrors makeAnthropicCompactRunner на AT path: LiteLLM forwarder (preferred —
+// проектный proxy upstream-billet a corporate Anthropic key) → ANTHROPIC_API_KEY
+// direct console billing. CLAUDE_CODE_OAUTH_TOKEN не поддерживается здесь
+// (Pro/Max subscription rate-limited на programmatic bench use).
+export function resolveGaiaAnthropicCompactRunner(config: ConfigDef): Runner {
+  const litellmKey = process.env['LITELLM_MASTER_KEY']
+  const litellmUrl = process.env['LITELLM_BASE_URL']
+  const directKey = process.env['ANTHROPIC_API_KEY']
+  const hasLitellm =
+    litellmKey !== undefined &&
+    litellmKey.length > 0 &&
+    litellmUrl !== undefined &&
+    litellmUrl.length > 0
+  const hasDirect = directKey !== undefined && directKey.length > 0
+  if (!hasLitellm && !hasDirect) {
+    throw new Error(
+      'baseline=gaia_bench_agent_anthropic_compact requires one of: ' +
+        'LITELLM_MASTER_KEY + LITELLM_BASE_URL (proxy, preferred) or ' +
+        'ANTHROPIC_API_KEY (console direct). Neither is set.',
+    )
+  }
+  // Sweep YAML `actor_model: claude-haiku-4-5-20251001` etc. lands as
+  // config.actor_model (a known optional field per ConfigDef schema).
+  const modelRaw = config.actor_model
+  // LiteLLM path uses dot-form aliases (claude-sonnet-4.6, claude-haiku-4.5).
+  // Direct path uses dash-form (claude-sonnet-4-6, claude-haiku-4-5-20251001).
+  // Pass model as-is — caller specifies форму подходящую её auth path в YAML.
+  if (hasLitellm) {
+    return makeGaiaAnthropicCompactRunner({
+      apiKey: litellmKey,
+      baseURL: litellmUrl,
+      ...(modelRaw !== undefined ? { model: modelRaw } : {}),
+    })
+  }
+  return makeGaiaAnthropicCompactRunner({
+    apiKey: directKey ?? '',
+    ...(modelRaw !== undefined ? { model: modelRaw } : {}),
   })
 }
