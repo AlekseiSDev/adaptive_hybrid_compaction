@@ -145,11 +145,12 @@ Active:
 
 ## Track K — `gaia-med` bench
 
-**Closed (К-tail-3).** K1-K4 + три K-tail итерации завершены. Headline:
-**AHC v3 (K-tail-3) acc=0.44 на n=25**, обгоняя vanilla (0.32) и Mastra (0.40)
-одновременно при cost 62% ниже Mastra. Numbers + provenance в
-`baselines_frozen.md` gaia-med section. Decision rationale в `decisions.md`
-2026-05-27 entry "Two-stage recall + content-aware digest".
+**Closed (К-tail-4).** K1-K4 + четыре K-tail итерации завершены. Headline:
+**Anthropic /compact sonnet-4.6 acc=0.60** взял highest acc, но AHC v3
+(K-tail-3) **acc=0.44 при $0.93 cost** даёт лучший **cost-per-correct**
+($0.084 vs sonnet $1.054 — AHC 12× efficient per success). Numbers +
+provenance в `baselines_frozen.md` gaia-med section. Decision rationale —
+`decisions.md` 2026-05-27 entries для K-tail-3 + K-tail-4.
 
 K-tail итерации:
 - **К-tail-1**: Mastra Memory integration — defaults 30K/40K observer/reflector
@@ -164,6 +165,16 @@ K-tail итерации:
   (parallel tool calls в offloader, dedupe recall schema injection,
   `visit_webpage` Content-Type whitelist). Tightened thresholds 64K/100K.
   AHC 0.20 → **0.44**, +5 tasks на L2 (multi-tool reasoning).
+- **К-tail-4**: Anthropic /compact + tools на GAIA-med как 4-й baseline.
+  Native Anthropic SDK (AI SDK обойдён — beta knobs не пробрасываются).
+  Тот же `GAIA_DRIVER_SYSTEM` + `gaiaTools()`. **Sonnet 4.6 acc=0.60 @
+  $15.82** — headline accuracy на bench'е (единственный baseline разломавший
+  L3 ceiling, 1/4). **Haiku 4.5 не поддерживает `compact_20260112`**
+  (Anthropic API 400, vendor ограничение Sonnet+/Opus only). **0 compaction
+  fires на n=25** — vendor's default 100K threshold выше per-call context
+  на multi-tool GAIA tasks (cumulative до 940K, но per-call не пересекает
+  100K). Sonnet's acc — model strength, не /compact strategy. AHC v3
+  ($0.93) сохраняет 12× cost-per-correct advantage над sonnet ($15.82).
 
 Persistent caveat:
 - **Mastra opaque to Langfuse.** `@mastra/core` не expose'ит

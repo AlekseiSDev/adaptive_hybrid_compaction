@@ -156,6 +156,36 @@ Append-only. Новые записи внизу.
   через `scripts/probe-rehydration-deeper.ts`) поймали bug'и (a)/(b)/(c) до
   full run'а. См. `baselines_frozen.md` gaia-med section + `decisions.md
   2026-05-27 two-stage recall`.
+- **[2026-05-27] K-tail-4 — Anthropic /compact + tools as 4th GAIA baseline
+  (Sonnet 4.6 acc 0.60 @ $15.82, 0 compaction fires)** — добавили 4-й
+  baseline на GAIA-med: Anthropic's server-side `compact_20260112` agent с
+  tools, через native Anthropic SDK. Тот же `GAIA_DRIVER_SYSTEM`, тот же
+  `gaiaTools()` (5 GAIA-tools), AI SDK обойдён (beta knobs
+  `betas: ['compact-2026-01-12']` + `context_management.edits[].type` не
+  пробрасываются reliably через provider plug). New stand-alone agentic
+  runner `src/eval/adapters/gaia-med/anthropic-compact-runner.ts`
+  (290 lines) mirror'ит `mastra-agent-runner.ts` shape. Auth priority:
+  LITELLM proxy preferred → ANTHROPIC_API_KEY direct fallback.
+  Two findings из pilot + n=25. (1) **Haiku 4.5 не поддерживает
+  `compact_20260112`** — Anthropic API 400: `'claude-haiku-4-5-20251001'
+  does not support the 'compact_20260112' context management strategy`.
+  Feature — Sonnet+/Opus only. Дроп haiku из sweep'а, оставлен только
+  Sonnet 4.6. (2) **0 compaction events fired на n=25** — cumulative input
+  grew до 940K на heaviest tasks, но per-call `messages.create` input не
+  пересекал default 100K trigger threshold. Vendor's threshold слишком
+  высокий под структуру multi-tool GAIA tasks — /compact feature на этом
+  bench'e фактически inactive. **Numbers**: acc=0.600 (15/25) — headline
+  acc на GAIA-med. Per-level: L1 5/7 / L2 9/14 / L3 1/4 (единственный
+  baseline разломавший L3 ceiling). Cost $15.82 — 17× дороже AHC K-tail-3
+  ($0.93). По cost-per-correct AHC побеждает 12×: AHC $0.084/correct vs
+  sonnet $1.054/correct. Sonnet's acc gain — model strength
+  (gpt-5.4-mini→sonnet-4.6 upgrade), не /compact strategy. Implication
+  для report'а: AHC's value prop (middleware-side compaction с
+  threshold-tuning) сохраняется на agentic benches — vendor's static
+  100K threshold даёт zero effect когда per-call context остаётся под
+  порогом; AHC's tunable 64K порог fires реально и достигает comparable
+  accuracy за порядки величин меньшую цену. См. `baselines_frozen.md`
+  gaia-med section ✠✠✠✠ footnote + `decisions.md 2026-05-27 K-tail-4`.
 
 ### Dataset / Benches
 
