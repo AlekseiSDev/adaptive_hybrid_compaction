@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, test } from 'vitest'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { gaiaTools } from '../gaia-tools/index.js'
 import { makeGaiaMastraAgentRunner } from './index.js'
 import type { GaiaTask } from '../gaia-med.schema.js'
@@ -45,19 +45,29 @@ describe('gaiaTools shape compat with Mastra ToolsInput (Track I H1)', () => {
 })
 
 describe('makeGaiaMastraAgentRunner — factory shape', () => {
+  beforeEach(() => {
+    // 2026-05-27 dual-mode: factory calls resolveLLMClient at construction →
+    // requires either OPENROUTER_API_KEY (for `openrouter/` models) or
+    // LITELLM_MASTER_KEY + LITELLM_BASE_URL (for default LiteLLM path).
+    vi.stubEnv('LITELLM_MASTER_KEY', 'sk-test')
+    vi.stubEnv('LITELLM_BASE_URL', 'http://localhost:4400/v1')
+  })
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
   test('runner.name === "mastra-agent" (matches baseline string)', () => {
-    const runner = makeGaiaMastraAgentRunner({ apiKey: 'placeholder' })
+    const runner = makeGaiaMastraAgentRunner({})
     expect(runner.name).toBe('mastra-agent')
   })
 
   test('runner.execute exists', () => {
-    const runner = makeGaiaMastraAgentRunner({ apiKey: 'placeholder' })
+    const runner = makeGaiaMastraAgentRunner({})
     expect(typeof runner.execute).toBe('function')
   })
 
   test('factory respects custom actorModelId', () => {
     const runner = makeGaiaMastraAgentRunner({
-      apiKey: 'p',
       actorModelId: 'openai/gpt-4o-mini',
     })
     expect(runner.name).toBe('mastra-agent')

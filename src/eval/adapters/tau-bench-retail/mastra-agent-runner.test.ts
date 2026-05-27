@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, test } from 'vitest'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { makeTauBenchMastraAgentRunner } from './index.js'
 import { runTauEpisodeMastra } from './mastra-agent-runner.js'
 import { retailTools } from './tools.js'
@@ -63,13 +63,22 @@ describe('retailTools shape compat with Mastra ToolsInput (I2 investigation H1)'
 })
 
 describe('makeTauBenchMastraAgentRunner — factory shape', () => {
+  beforeEach(() => {
+    // 2026-05-27 dual-mode: factory calls resolveLLMClient at construction.
+    vi.stubEnv('LITELLM_MASTER_KEY', 'sk-test')
+    vi.stubEnv('LITELLM_BASE_URL', 'http://localhost:4400/v1')
+  })
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
   test('runner.name === "mastra-agent" (matches baseline string)', () => {
-    const runner = makeTauBenchMastraAgentRunner({ apiKey: 'placeholder' })
+    const runner = makeTauBenchMastraAgentRunner({})
     expect(runner.name).toBe('mastra-agent')
   })
 
   test('runner.execute exists и принимает Conversation + RunnerContext', () => {
-    const runner = makeTauBenchMastraAgentRunner({ apiKey: 'placeholder' })
+    const runner = makeTauBenchMastraAgentRunner({})
     expect(typeof runner.execute).toBe('function')
   })
 })

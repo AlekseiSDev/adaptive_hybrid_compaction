@@ -14,7 +14,11 @@ import { readdir, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { FeatureFlags } from '../../../core/index.js'
 import { buildSystemPrompt } from '../../../core/prompts.js'
-import { createOpenRouterClient } from '../../llm.js'
+import {
+  createOpenRouterClient,
+  resolveActorModel,
+  resolveLLMClient,
+} from '../../llm.js'
 import type {
   BenchAdapter,
   Conversation,
@@ -103,8 +107,6 @@ export const taubenchGrader: Grader = {
 }
 
 export type MakeTauBenchRunnerOpts = {
-  apiKey: string
-  baseURL?: string
   actorModelId?: string
   userSimModelId?: string
   ahcFlags?: Partial<FeatureFlags>
@@ -112,21 +114,37 @@ export type MakeTauBenchRunnerOpts = {
 }
 
 export function makeTauBenchRunner(opts: MakeTauBenchRunnerOpts): Runner {
-  const baseURL = opts.baseURL ?? 'https://openrouter.ai/api/v1'
-  const openai = createOpenAI({ apiKey: opts.apiKey, baseURL })
   // E1: AHC_ACTOR_MODEL env var overrides defaults at runner construction.
   // Explicit opts.actorModelId still wins (sweep YAML / test path).
-  const envActor = process.env['AHC_ACTOR_MODEL']
-  const actorModelId =
-    opts.actorModelId ??
-    (envActor && envActor.length > 0 ? envActor : TAU_ACTOR_DEFAULT_MODEL)
-  const userSimModelId = opts.userSimModelId ?? TAU_USER_SIM_DEFAULT_MODEL
-  const actorModel = openai.chat(actorModelId)
-  const userSimModel = openai.chat(userSimModelId)
-  // AHC internal calls use OpenRouter for digest/observer/reflection — same
-  // base provider, separate path from AI SDK (the LLMClient interface).
+  // 2026-05-27 dual-mode: resolveLLMClient(modelId) dispatches OpenRouter
+  // vs LiteLLM through naming convention (decisions.md). Both models resolve
+  // independently so actor & user-sim can route to different providers.
+  const actorModelId = resolveActorModel(opts.actorModelId ?? TAU_ACTOR_DEFAULT_MODEL)
+  const userSimModelIdRaw = opts.userSimModelId ?? TAU_USER_SIM_DEFAULT_MODEL
+  const actorResolved = resolveLLMClient(actorModelId)
+  const userSimResolved = resolveLLMClient(userSimModelIdRaw)
+  const actorOpenai = createOpenAI({
+    apiKey: actorResolved.apiKey,
+    baseURL: actorResolved.baseURL,
+  })
+  const userSimOpenai =
+    actorResolved.baseURL === userSimResolved.baseURL &&
+    actorResolved.apiKey === userSimResolved.apiKey
+      ? actorOpenai
+      : createOpenAI({
+          apiKey: userSimResolved.apiKey,
+          baseURL: userSimResolved.baseURL,
+        })
+  const actorModel = actorOpenai.chat(actorResolved.modelForRequest)
+  const userSimModel = userSimOpenai.chat(userSimResolved.modelForRequest)
+  // AHC internal calls (digest/observer/reflection) route through the same
+  // endpoint as the main actor — keep costs / cache behavior consistent.
   const ahcInternalLlmClient = opts.ahcFlags
-    ? createOpenRouterClient({ apiKey: opts.apiKey, appName: 'AHC' })
+    ? createOpenRouterClient({
+        apiKey: actorResolved.apiKey,
+        baseUrl: actorResolved.baseURL,
+        appName: 'AHC',
+      })
     : undefined
 
   const runnerName = opts.ahcFlags ? 'tau_bench_agent_ahc' : 'tau_bench_agent'
@@ -144,8 +162,8 @@ export function makeTauBenchRunner(opts: MakeTauBenchRunnerOpts): Runner {
         actorModel,
         userSimModel,
         actorSystem,
-        actorModelId,
-        userSimModelId,
+        actorModelId: actorResolved.modelForRequest,
+        userSimModelId: userSimResolved.modelForRequest,
         ...(opts.ahcFlags !== undefined ? { ahcFlags: opts.ahcFlags } : {}),
         ...(ahcInternalLlmClient !== undefined ? { ahcInternalLlmClient } : {}),
         ...(opts.maxSteps !== undefined ? { maxSteps: opts.maxSteps } : {}),
@@ -174,8 +192,6 @@ export function makeTauBenchRunner(opts: MakeTauBenchRunnerOpts): Runner {
 }
 
 export type MakeTauBenchMastraAgentRunnerOpts = {
-  apiKey: string
-  baseURL?: string
   actorModelId?: string
   userSimModelId?: string
   maxSteps?: number
@@ -187,15 +203,18 @@ export type MakeTauBenchMastraAgentRunnerOpts = {
 export function makeTauBenchMastraAgentRunner(
   opts: MakeTauBenchMastraAgentRunnerOpts,
 ): Runner {
-  const baseURL = opts.baseURL ?? 'https://openrouter.ai/api/v1'
-  const openai = createOpenAI({ apiKey: opts.apiKey, baseURL })
-  const envActor = process.env['AHC_ACTOR_MODEL']
-  const actorModelId =
-    opts.actorModelId ??
-    (envActor && envActor.length > 0 ? envActor : TAU_ACTOR_DEFAULT_MODEL)
-  const userSimModelId = opts.userSimModelId ?? TAU_USER_SIM_DEFAULT_MODEL
+  // 2026-05-27 dual-mode: resolveLLMClient handles OpenRouter vs LiteLLM
+  // dispatch via model-prefix naming convention.
+  const actorModelId = resolveActorModel(opts.actorModelId ?? TAU_ACTOR_DEFAULT_MODEL)
+  const userSimModelIdRaw = opts.userSimModelId ?? TAU_USER_SIM_DEFAULT_MODEL
+  const actorResolved = resolveLLMClient(actorModelId)
+  const userSimResolved = resolveLLMClient(userSimModelIdRaw)
   // user-sim runs через AI SDK provider (vanilla — matching tau_bench_agent).
-  const userSimModel = openai.chat(userSimModelId)
+  const userSimOpenai = createOpenAI({
+    apiKey: userSimResolved.apiKey,
+    baseURL: userSimResolved.baseURL,
+  })
+  const userSimModel = userSimOpenai.chat(userSimResolved.modelForRequest)
 
   return {
     name: 'mastra-agent',
@@ -205,15 +224,15 @@ export function makeTauBenchMastraAgentRunner(
       const actorSystem = buildSystemPrompt({ benchContext: wiki })
       const result = await runTauEpisodeMastra(episode, {
         actorModel: {
-          apiKey: opts.apiKey,
-          providerId: 'openrouter',
-          modelId: actorModelId,
-          url: baseURL,
+          apiKey: actorResolved.apiKey,
+          providerId: actorResolved.provider,
+          modelId: actorResolved.modelForRequest,
+          url: actorResolved.baseURL,
         },
         userSimModel,
         actorSystem,
-        actorModelId,
-        userSimModelId,
+        actorModelId: actorResolved.modelForRequest,
+        userSimModelId: userSimResolved.modelForRequest,
         ...(opts.maxSteps !== undefined ? { maxSteps: opts.maxSteps } : {}),
         ...(ctx.instrumentation !== undefined ? { emit: ctx.instrumentation } : {}),
         ...(ctx.tracer !== undefined ? { tracer: ctx.tracer } : {}),

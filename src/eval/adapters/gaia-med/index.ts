@@ -6,7 +6,11 @@
 
 import { createOpenAI } from '@ai-sdk/openai'
 import type { FeatureFlags, Thresholds } from '../../../core/index.js'
-import { createOpenRouterClient } from '../../llm.js'
+import {
+  createOpenRouterClient,
+  resolveActorModel,
+  resolveLLMClient,
+} from '../../llm.js'
 import type {
   ConfigDef,
   Conversation,
@@ -32,6 +36,7 @@ import {
 export { runGaiaTask, GAIA_ACTOR_DEFAULT_MODEL } from './agent-runner.js'
 export type { RunGaiaTaskDeps, GaiaTaskResult } from './agent-runner.js'
 export { runGaiaTaskMastra, GAIA_MASTRA_ACTOR_DEFAULT_MODEL } from './mastra-agent-runner.js'
+export type { RunGaiaTaskMastraDeps, GaiaTaskResultMastra } from './mastra-agent-runner.js'
 export {
   runGaiaTaskAnthropicCompact,
   GAIA_ANTHROPIC_COMPACT_DEFAULT_MODEL,
@@ -41,11 +46,8 @@ export type {
   GaiaTaskResultAnthropicCompact,
   GaiaAnthropicCompactModel,
 } from './anthropic-compact-runner.js'
-export type { RunGaiaTaskMastraDeps, GaiaTaskResultMastra } from './mastra-agent-runner.js'
 
 export type MakeGaiaBenchRunnerOpts = {
-  apiKey: string
-  baseURL?: string
   actorModelId?: string
   ahcFlags?: Partial<FeatureFlags>
   ahcThresholds?: Partial<Thresholds>
@@ -53,18 +55,24 @@ export type MakeGaiaBenchRunnerOpts = {
 }
 
 export function makeGaiaBenchRunner(opts: MakeGaiaBenchRunnerOpts): Runner {
-  const baseURL = opts.baseURL ?? 'https://openrouter.ai/api/v1'
-  const openai = createOpenAI({ apiKey: opts.apiKey, baseURL })
-  const envActor = process.env['AHC_ACTOR_MODEL']
-  const actorModelId =
-    opts.actorModelId ??
-    (envActor !== undefined && envActor.length > 0
-      ? envActor
-      : GAIA_ACTOR_DEFAULT_MODEL)
-  const actorModel = openai.chat(actorModelId)
+  // 2026-05-27 dual-mode: resolveLLMClient dispatches OpenRouter vs LiteLLM via
+  // model-prefix naming convention (decisions.md).
+  const actorModelId = resolveActorModel(opts.actorModelId ?? GAIA_ACTOR_DEFAULT_MODEL)
+  const actorResolved = resolveLLMClient(actorModelId)
+  const openai = createOpenAI({
+    apiKey: actorResolved.apiKey,
+    baseURL: actorResolved.baseURL,
+  })
+  const actorModel = openai.chat(actorResolved.modelForRequest)
   // AHC internal LLM client (digest/observer/reflection) only when AHC active.
+  // Internal calls route through the same endpoint as the actor — keep costs
+  // / cache behavior consistent.
   const ahcInternalLlmClient = opts.ahcFlags
-    ? createOpenRouterClient({ apiKey: opts.apiKey, appName: 'AHC' })
+    ? createOpenRouterClient({
+        apiKey: actorResolved.apiKey,
+        baseUrl: actorResolved.baseURL,
+        appName: 'AHC',
+      })
     : undefined
 
   const runnerName = opts.ahcFlags
@@ -78,7 +86,7 @@ export function makeGaiaBenchRunner(opts: MakeGaiaBenchRunnerOpts): Runner {
       const result = await runGaiaTask(task, {
         actorModel,
         actorSystem: GAIA_DRIVER_SYSTEM,
-        actorModelId,
+        actorModelId: actorResolved.modelForRequest,
         ...(opts.ahcFlags !== undefined ? { ahcFlags: opts.ahcFlags } : {}),
         ...(opts.ahcThresholds !== undefined ? { ahcThresholds: opts.ahcThresholds } : {}),
         ...(ahcInternalLlmClient !== undefined ? { ahcInternalLlmClient } : {}),
@@ -112,8 +120,6 @@ export function makeGaiaBenchRunner(opts: MakeGaiaBenchRunnerOpts): Runner {
 // mastra-agent` × `bench: gaia-med`. Parallel к makeGaiaBenchRunner
 // (vanilla / AHC) — separate factory keeps Mastra wiring clean.
 export type MakeGaiaMastraAgentRunnerOpts = {
-  apiKey: string
-  baseURL?: string
   actorModelId?: string
   maxSteps?: number
 }
@@ -121,13 +127,12 @@ export type MakeGaiaMastraAgentRunnerOpts = {
 export function makeGaiaMastraAgentRunner(
   opts: MakeGaiaMastraAgentRunnerOpts,
 ): Runner {
-  const baseURL = opts.baseURL ?? 'https://openrouter.ai/api/v1'
-  const envActor = process.env['AHC_ACTOR_MODEL']
-  const actorModelId =
-    opts.actorModelId ??
-    (envActor !== undefined && envActor.length > 0
-      ? envActor
-      : GAIA_MASTRA_ACTOR_DEFAULT_MODEL)
+  // 2026-05-27 dual-mode: model-prefix naming convention selects OpenRouter
+  // vs LiteLLM.
+  const actorModelId = resolveActorModel(
+    opts.actorModelId ?? GAIA_MASTRA_ACTOR_DEFAULT_MODEL,
+  )
+  const actorResolved = resolveLLMClient(actorModelId)
 
   return {
     name: 'mastra-agent',
@@ -135,15 +140,15 @@ export function makeGaiaMastraAgentRunner(
       const task = ctx.task.input as GaiaTask
       const result = await runGaiaTaskMastra(task, {
         actorModel: {
-          apiKey: opts.apiKey,
-          providerId: 'openrouter',
-          modelId: actorModelId,
-          url: baseURL,
+          apiKey: actorResolved.apiKey,
+          providerId: actorResolved.provider,
+          modelId: actorResolved.modelForRequest,
+          url: actorResolved.baseURL,
         },
         // System prompt = GAIA_DRIVER_SYSTEM faithful — same that
         // gaia_bench_agent uses → apples-to-apples cross-baseline.
         actorSystem: GAIA_DRIVER_SYSTEM,
-        actorModelId,
+        actorModelId: actorResolved.modelForRequest,
         ...(opts.maxSteps !== undefined ? { maxSteps: opts.maxSteps } : {}),
         ...(ctx.instrumentation !== undefined ? { emit: ctx.instrumentation } : {}),
       })
@@ -169,11 +174,9 @@ export function makeGaiaMastraAgentRunner(
 
 // Resolve baseline+config → Runner на bench=`gaia-med`. Called from
 // src/eval/runner.ts dispatch. Per K_gaia.md §5.2 Option A.
+// 2026-05-27: dispatch lives entirely in resolveLLMClient (model-prefix
+// naming). Env-key validation moved to that helper.
 export function resolveGaiaRunner(config: ConfigDef): Runner {
-  const apiKey = process.env['OPENROUTER_API_KEY']
-  if (apiKey === undefined || apiKey.length === 0) {
-    throw new Error('OPENROUTER_API_KEY env required for bench=gaia-med')
-  }
   // AHC config: either explicit `baseline: ahc_full` (not used here yet),
   // or `ahc_flags`-only config (per existing pattern in defaultRunnerRegistry).
   // Vanilla `full_context` baseline → no AHC wrapping.
@@ -186,7 +189,6 @@ export function resolveGaiaRunner(config: ConfigDef): Runner {
   // variant (`gaia_bench_agent_ahc`).
   const ahcThresholds = config.thresholds
   return makeGaiaBenchRunner({
-    apiKey,
     ...(ahcFlags !== undefined ? { ahcFlags } : {}),
     ...(ahcThresholds !== undefined ? { ahcThresholds } : {}),
   })
