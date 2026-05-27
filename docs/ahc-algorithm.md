@@ -99,23 +99,31 @@ classifier.update(history) ───────► trajectory_class
     ▼                                    │
   dispatch ─────────────────────────────┘
     │
-    ├──► conversational  : task-aware Observer (Tier-3 → Tier-2 observations)
-    ├──► tool_heavy      : type-aware Offloader (Tier-3 tool_results → scratchpad + pointers)
-    └──► mixed           : both, с дифференцированными thresholds
+    ├──► conversational  : Observer only
+    ├──► tool_heavy      : Offloader only
+    └──► mixed           : Offloader → Observer (sequential, дифференцированные thresholds)
     │
     ▼
-maybe inject recall_tool_result tool (if scratchpad non-empty)
+[Reflection if Tier-2 > REFLECTION_THRESHOLD]
+    │
+    ▼
+maybe inject recall_tool_summary + recall_tool_full (if scratchpad non-empty)
     │
     ▼
 assemble_context(Tier-1 + Tier-2 + Tier-3-clipped) ───► LLM call
 ```
 
+Порядок на mixed — Offloader первым, чтобы Observer работал уже над компактифицированным Tier-3 (а не extract'ил факты из tool outputs, которые сейчас уйдут в pointer'ы). См. `compact.ts` (offloader блок `plan.runOffloader` → observer блок `plan.runObserver`).
+
 ### 2.3 Trajectory Classifier
 
 Rules-based, **без LLM-вызова**. Фичи: `tool_call_density`,
-`avg_tool_result_size`, `recent_tool_density`, `user_turn_ratio`, `multimodal_flag`.
-Возвращает класс с confidence-уровнем; класс пишется в Tier-2 metadata. Цена —
-единицы микросекунд.
+`avg_tool_result_size`, `recent_tool_density`, `user_turn_ratio`,
+`multimodal_flag`, `cumulative_tokens`, `turns_total`. Возвращает класс с
+confidence-уровнем; класс пишется в Tier-2 metadata. Цена — единицы микросекунд.
+Для устойчивости класс проходит через hysteresis (`HYSTERESIS_THRESHOLD=2`
+последовательных turn'а до смены) — иначе на границе density classifier
+осциллирует между `mixed` и `tool_heavy`.
 
 Альтернатива «STITCH-style intent indexing с lightweight Haiku-call каждый turn»
 (arXiv:2601.10702, даёт +35.6% на CAME-Bench в их измерениях) — рассмотрена и
@@ -124,14 +132,19 @@ intent-anchoring получаем неявно из current user message в Obse
 
 ### 2.4 Task-Aware Observer
 
-Активен на conversational / mixed. Триггер — Tier-3 > size threshold;
+Активен на conversational / mixed. Триггер — Tier-3 > `OBSERVER_THRESHOLD`
+(дефолт 30K tokens, конфигурируется per-sweep — например 64K на GAIA);
 экстрагирует query-anchored observations (что нужно current query, что уже
-известно) и кладёт их append-only в Tier-2. Tier-3 после этого clip'ается с
-retention последних K turns.
+известно) и кладёт их append-only в Tier-2. Tier-3 после этого clip'ается до
+**token budget** `TIER3_TOKEN_BUDGET` (~0.2 × `OBSERVER_THRESHOLD`), с
+preservation atomic groups и inflight tool_use на хвосте. Изначальный «retain
+last K turns» pattern заменён на token-based clipping в decisions.md
+[2026-05-26]; K_RECENT параметр удалён.
 
-Async-вариант (`ASYNC_OBSERVER` flag, default on) делает буферизацию extraction'а
-в idle window между turns — Mastra Operative Memory называет это activation hooks.
-Когда буфер готов, sync-операция компакции возвращает заранее посчитанный результат.
+Async-вариант (`ASYNC_OBSERVER` flag) — design-only в текущем MVP: модуль
+`asyncBuffer.ts` существует и unit-tested, но не интегрирован в `compact.ts` —
+observer всегда синхронный. Default `false`. Mastra Operative Memory называет
+аналогичный pattern activation hooks; включение отложено за пределы MVP scope.
 
 ### 2.5 Type-Aware Tool Offloader
 
@@ -141,34 +154,71 @@ Async-вариант (`ASYNC_OBSERVER` flag, default on) делает буфер
 
 Принцип решения:
 
-- если `size(tool_result) > T_size` ИЛИ
-  `cumulative_tool_result_bytes > T_cum` — atomic group выгружается в scratchpad
-  store, в Tier-3 (а после clip'а — в Tier-2) остаётся **pointer placeholder**
-  с компактным digest'ом: `[Tool result #42 offloaded: schema_summary, size,
-  key_facts_extracted]`.
-- если есть хотя бы один offloaded item — в available tools агента инжектируется
-  `recall_tool_result(id)` (§2.6).
+- если `size(tool_result) > T_size` (на mixed — `T_size_mixed`, более агрессивно)
+  ИЛИ `cumulative_tool_result_bytes > T_cum` — atomic group выгружается в
+  scratchpad store, в Tier-3 (а после clip'а — в Tier-2) остаётся **pointer
+  placeholder** формата:
+  `[Offloaded #G## tool=<name> size=<bytes>B — summary: recall_tool_summary(G##); raw: recall_tool_full(G##)]`.
+  Digest **не инлайнится** в placeholder — он живёт за `recall_tool_summary`
+  (§2.6); placeholder лишь анонсирует доступ. Это решение из K-tail-3
+  (decisions.md [2026-05-26]): inline-digest раздувал Tier-2 поинтерами по 200–500B
+  каждый, теперь pointer ≈ 80B и digest подгружается только когда actor его
+  реально просит.
+- параллельные tool calls в одном tool message обрабатываются per-part:
+  per-message replacement (старая реализация) затирал sibling parts. См.
+  `offloader.ts:partReplacements`.
+- последние `ALWAYS_KEEP_LAST_GROUPS=2` atomic groups никогда не offload'ятся
+  — это hot context для текущего шага рассуждения.
+- если есть хотя бы один offloaded item — в available tools агента инжектируются
+  **два** recall tools (§2.6).
+
+Digest для скрытого summary строится одной из 4 стратегий (порядок выбора в
+`digest.ts:generateDigest`):
+
+1. `CONTENT_AWARE_DIGEST` (основной, default on в production sweep'ах) —
+   per-tool projectors для известных GAIA tools (`web_search` → top URLs +
+   snippets head 300 chars; `visit_webpage` → title + head/tail excerpt;
+   `python_exec` → stdout/stderr heads; `text_editor` → path + content head;
+   `describe_image` → description с условным head-tail). Без LLM-вызова.
+2. `SCHEMA_AWARE_DIGEST` (opt-in, fallback на unknown tools при content-aware) —
+   schema-driven field projection.
+3. `llm_summarize` (если передан `llmCaller` и SCHEMA off) — 80-token LLM call.
+4. `rule_based` (terminal fallback) — head 300 + tail 300 chars.
 
 Scratchpad — in-memory `Map<group_id, full_atomic_group>` (MVP); pointer roundtrip
-(`offload(group) → pointer → recall(id) → original group`) проверяется
-unit-test'ом.
+(`offload(group) → pointer → recall_full(id) → original group`) проверяется
+unit-test'ом (`scratchpad.test.ts`, `offloader.test.ts`).
 
 Альтернатива «token-level compression через LLMLingua» рассмотрена и отвергнута:
 ломает структурные delimiter'ы tool-calls, требует small-LM dependency, не
 cache-friendly (полностью переписывает токены каждый turn).
 
-### 2.6 Recall Tool
+### 2.6 Recall Tools — two-stage rehydration
 
-`recall_tool_result(id)` — tool, инжектируемый в available tools агента когда
-scratchpad non-empty. Семантика: на следующем turn'е, если агент вызывает
-`recall(id)`, atomic group из scratchpad заинжектится в Tier-3 как обычное
-сообщение, и LLM получит полный оригинал.
+Когда scratchpad non-empty, в Tier-1 инжектируются **два tools** (K-tail-3,
+decisions.md [2026-05-26]):
 
-Решение о догрузке — **делегировано агенту**. Auto-rehydration вернула бы context
-bloat обратно; делегирование агенту — то же что Memex idea (in-context summary
-+ external KV store с dereference, arXiv:2603.04257), но без RL-fine-tuning'а
-собственной политики — нужный нам zero-config контур. Шаблонно соседствует с
-MemGPT page-in/page-out, но без OS-level overhead Letta.
+- **`recall_tool_summary(recall_id, reason)`** — возвращает content-aware
+  digest (§2.5) offloaded группы. Cheap. Actor зовёт первым: для большинства
+  использований digest содержит достаточно (top URLs + key facts + numeric IDs),
+  и raw body не нужен.
+- **`recall_tool_full(recall_id, reason)`** — возвращает оригинальный atomic
+  group полностью, инжектируется в Tier-3 как обычное tool_result сообщение.
+  Expensive (вернёт обратно тысячи токенов). Actor зовёт fallback'ом если
+  summary недостаточен.
+
+Семантика: оба tool'а зовут scratchpad'у `get(recall_id)`. Решение о догрузке
+— **делегировано агенту**: auto-rehydration вернула бы context bloat обратно;
+делегирование агенту — то же что Memex idea (in-context summary + external KV
+store с dereference, arXiv:2603.04257), но без RL-fine-tuning'а собственной
+политики — нужный нам zero-config контур. Шаблонно соседствует с MemGPT
+page-in/page-out, но без OS-level overhead Letta.
+
+**Two-stage** вместо single recall — фикс K-tail-3 (2026-05-26): single-tier
+digest либо был lossy (actor не получал нужный fact и заново звал оригинальный
+tool, удваивая стоимость), либо нёс слишком много для cheap-default'а
+(раздувал каждый pointer). Two-tier escalation: actor платит summary-cost
+почти всегда + full-cost только когда без оригинала действительно не обойтись.
 
 ### 2.7 Reflection Layer
 
@@ -187,17 +237,27 @@ degradation измерена публично — Codex measurement в issue #14
 после 1st compact → 6.9% после 2nd. У нас reflection — escape valve, не основной
 механизм.
 
-### 2.8 Calibration Protocol
+### 2.8 Calibration Protocol — design only
 
-Тюнятся 2–3 параметра: `T_size` (per-group offload threshold), `T_cum` (cumulative
-budget), `K` (Tier-3 retention turns). Calibration trace — короткий формат:
-`{trajectory, expected_outcome}`. Pipeline — leave-one-out на ≤10 трассах;
-sensitivity-analysis к размеру calibration set — обязательная часть paper'а
-(защита от overfitting'а на маленькой выборке).
+Заявленный протокол: тюнятся 4 параметра — `T_size` / `T_size_mixed` (per-group
+offload thresholds), `T_cum` (cumulative budget), `OBSERVER_THRESHOLD`
+(observer-trigger size) / `TIER3_TOKEN_BUDGET`. Calibration trace — короткий
+формат: `{trajectory, expected_outcome}`; pipeline предполагался leave-one-out
+на ≤10 трассах с sensitivity-analysis к размеру calibration set.
 
-Без калибровки работают defaults; калибровка opt-in. Anthropic Managed Agents
-blog даёт эмпирический хинт, что delta между правильным и неправильным timing
-compaction — 10–20% accuracy, что и определяет ROI калибровки.
+**Статус в MVP: design only, не имплементировано.** `CALIBRATION_AUTO` flag
+существует как placeholder (default false), автоматического calibration loop'а
+в репо нет. Tuning thresholds сделан **вручную** через iteration log в
+`decisions.md` (`OBSERVER_THRESHOLD` 8000→30000→64000, `REFLECTION_THRESHOLD`
+40000→100000, T_size_mixed появился в A2 как разъезд от T_size) — каждый
+сдвиг параметра обоснован short-run sweep'ом на 3-task corpus с явным
+trade-off note.
+
+Anthropic Managed Agents blog даёт эмпирический хинт, что delta между правильным
+и неправильным timing compaction — 10–20% accuracy. Reading: ROI на full
+automated calibration pipeline в зоне MVP не превзошёл стоимость имплементации;
+manual iteration log оказался достаточным наблюдаемым process'ом — отложено
+из MVP scope.
 
 ### 2.9 Cache Invariance Contract
 
@@ -227,7 +287,7 @@ memory-фреймворки не дают cache-aware API.
 | 3-tier shape (Tier-1 / Tier-2 append-only / Tier-3 mutable) | Mastra Operative Memory + cache-prefix guidelines («Don't Break the Cache», arXiv:2601.06007) | Append-only Tier-2 + immutable Tier-1 как обязательный data layout |
 | Cache invariance contract | «Don't Break the Cache» + Anthropic prompt-caching docs | Bit-exact bytes по Tier-1 + Tier-2_stable между turn'ами как unit-tested инвариант |
 | Type-Aware Tool Offloader | Microsoft Agent Framework `MessageGroup` + IBM Materials Science pointer-pattern + Cognition Devin sub-agent pattern | Atomic group detection + pointer-replacement при size threshold + scratchpad store + agent-aware digest |
-| Recall Tool | Memex (arXiv:2603.04257) + MemGPT page-in/page-out | Селективная регидрация offloaded items по решению агента, не auto-injection |
+| Recall Tools (two-stage: summary + full) | Memex (arXiv:2603.04257) + MemGPT page-in/page-out + own K-tail-3 iteration | Селективная регидрация offloaded items по решению агента + cost-tiered escalation (cheap digest → raw body) |
 | Task-Aware Observer | Mastra `observationalMemory` + STITCH intent indexing (arXiv:2601.10702) | Query-anchored projection Tier-3 → Tier-2; current query как intent-anchor для retention decision |
 | Trajectory Classifier | Anthropic Managed Agents writeup + Cognition Sonnet-4.5 lessons | Adaptive routing per-trajectory; classifier работает на cheap-features без LLM-call |
 | Reflection layer | RecSum / ReSum / AgentFold lineage | Deep recompression как редкий escape valve, не hot path |
@@ -246,14 +306,27 @@ memory-фреймворки не дают cache-aware API.
   salient_entities`. AHC извлекает intent неявно из current user message внутри
   Task-Aware Observer — без extra-call, ценой более грубой intent-detection.
   Trade-off зафиксирован в `decisions.md`.
-- **Schema-aware tool digest — opt-in под флагом** `SCHEMA_AWARE_DIGEST`
-  (default off). Schema-aware compression обещает −60–80% tool_result tokens
-  при наличии tool schema, но в AI SDK v6 tool-definitions schema implicit /
-  частичная — выигрыш меньше, surface больше; отдали в opt-in.
+- **Digest path: `CONTENT_AWARE_DIGEST` как primary, schema-aware → fallback.**
+  K-tail-3 (decisions.md [2026-05-26]) переключил основной digest path с
+  schema-aware на per-tool projectors (`web_search`/`visit_webpage`/
+  `python_exec`/`text_editor`/`describe_image`) — каждый знает return-shape
+  своего инструмента и проецирует high-signal поля. Schema-aware
+  (`SCHEMA_AWARE_DIGEST` flag, default off) — fallback для unknown tools или
+  когда content-aware projector не подходит. LLM-summarize и rule-based
+  truncation — два уровня ниже как terminal fallbacks. Pure-rule path
+  свёрнут в `headTail()`-helper, схематично остался у §2.5 как нижний слой.
+- **Async observer — design only.** Модуль есть, в hot path не подключён;
+  observer всегда синхронный в MVP (см. §2.4). Trade-off: один extra-step
+  latency на каждое observer-fire, но zero состояния между turns и upgradable
+  путь к async без breaking change в Tier-2 контракте.
+- **Calibration pipeline — design only.** Параметры тюнятся вручную через
+  decisions.md iteration log; автоматического calibration loop'а в MVP нет
+  (см. §2.8).
 - **Adaptive trigger без attention-decay replay.** Calibration-Driven Compaction
   Trigger предполагал offline replay для нахождения «pointer-of-no-return»
   (точка где accuracy начинает падать). AHC ограничивается simple size-threshold
-  + cumulative-threshold; калибровке подвергаются только `T_size / T_cum / K`.
+  + cumulative-threshold; tuning ограничен `T_size / T_size_mixed / T_cum /
+  OBSERVER_THRESHOLD`.
 
 ---
 
