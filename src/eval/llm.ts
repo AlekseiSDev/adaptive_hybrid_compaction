@@ -112,6 +112,23 @@ export const ANTHROPIC_DIRECT_PRICING: Record<string, ModelPricing> = Object.fre
     cache_read_factor: 0.1,
     cache_write_factor: 1.25,
   },
+  // Haiku 4.5 — added 2026-05-27 for K-tail-4 (Anthropic /compact on GAIA-med).
+  // Both alias forms supported по той же логике что и Sonnet. Pilot 2026-05-27
+  // показал, что vendor /compact feature на haiku возвращает 400 (Sonnet+ only),
+  // но pricing entry оставлен — sweep YAML может использовать haiku как
+  // tool-aware actor без /compact strategy в follow-up'ах.
+  'claude-haiku-4-5': {
+    input_per_million_usd: 1.0,
+    output_per_million_usd: 5.0,
+    cache_read_factor: 0.1,
+    cache_write_factor: 1.25,
+  },
+  'claude-haiku-4-5-20251001': {
+    input_per_million_usd: 1.0,
+    output_per_million_usd: 5.0,
+    cache_read_factor: 0.1,
+    cache_write_factor: 1.25,
+  },
 })
 
 export function costFromUsage(model: string, usage: OpenRouterUsage): number {

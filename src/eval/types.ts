@@ -199,6 +199,14 @@ export type ConfigDef = {
    * Added 2026-05-27 — Step B of the observer-overhead PR.
    */
   internal_model?: string
+  /**
+   * Optional actor model override для baselines, у которых модель задаётся
+   * per-config (e.g. `gaia_bench_agent_anthropic_compact` — runs the same
+   * Anthropic /compact agent over claude-haiku-4-5 OR claude-sonnet-4-6 в одном
+   * sweep'е). Other baselines обычно используют свои env-defaults и игнорят
+   * это поле. Added 2026-05-27 — K-tail-4 (Anthropic /compact на GAIA).
+   */
+  actor_model?: string
 }
 
 export type RunnerContext = {
