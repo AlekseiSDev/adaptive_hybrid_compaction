@@ -16,7 +16,14 @@ import type { LanguageModelV3 } from '@ai-sdk/provider'
 import { generateText, stepCountIs, wrapLanguageModel } from 'ai'
 import { createAhcMiddleware } from '../../../adapters/ai-sdk-v6.js'
 import { SessionScratchpadRegistry } from '../../../adapters/sessionScratchpad.js'
-import type { FeatureFlags, HysteresisState, Thresholds } from '../../../core/index.js'
+import type {
+  CoreEvent,
+  FeatureFlags,
+  HysteresisState,
+  PointerPlaceholder,
+  Thresholds,
+  Tier2,
+} from '../../../core/index.js'
 import {
   costFromUsage,
   OPENROUTER_PRICING,
@@ -101,6 +108,19 @@ export async function runGaiaTask(
 
   let actorModel: LanguageModelV3 = deps.actorModel
   let internalCostUsd = 0
+  // Lifted to outer scope so the recall execute closures in gaiaTools can
+  // read scratchpad / Tier-2 pointers from the same per-task registries the
+  // middleware writes to. AHC-mode only; non-AHC path leaves them undefined.
+  let recallScratchpad: SessionScratchpadRegistry | undefined
+  let recallTier2Registry: Map<string, Tier2> | undefined
+  let recallSessionId: string | undefined
+  // Same CoreEvent emitter is shared between middleware (compact path) and
+  // gaiaTools recall executes — keeps the events array unified.
+  const coreEmit = (e: CoreEvent): void => {
+    const mapped = mapCoreEventToInstrumentation(e)
+    events.push(mapped)
+    deps.emit?.(mapped)
+  }
   if (deps.ahcFlags) {
     if (!deps.ahcInternalLlmClient) {
       throw new Error(
@@ -109,7 +129,11 @@ export async function runGaiaTask(
     }
     const scratchpadRegistry = new SessionScratchpadRegistry()
     const hysteresisStateOverride = new Map<string, HysteresisState>()
+    const tier2Registry = new Map<string, Tier2>()
     const sessionId = `gaia_${String(task.idx).padStart(3, '0')}`
+    recallScratchpad = scratchpadRegistry
+    recallTier2Registry = tier2Registry
+    recallSessionId = sessionId
     const baseLlmCaller = wrapLlmClientAsLLMCaller(
       deps.ahcInternalLlmClient,
       actorModelId,
@@ -129,17 +153,22 @@ export async function runGaiaTask(
       sessionId: () => sessionId,
       scratchpadRegistry,
       hysteresisStateOverride,
-      emit: (e) => {
-        const mapped = mapCoreEventToInstrumentation(e)
-        events.push(mapped)
-        deps.emit?.(mapped)
-      },
+      tier2Registry,
+      emit: coreEmit,
     })
     actorModel = wrapLanguageModel({ model: deps.actorModel, middleware })
   }
 
   const maxSteps = deps.maxSteps ?? DEFAULT_MAX_STEPS
-  const tools = gaiaTools(workspaceDir)
+  const tools =
+    recallScratchpad !== undefined && recallSessionId !== undefined && recallTier2Registry !== undefined
+      ? gaiaTools(workspaceDir, {
+          scratchpad: recallScratchpad.get(recallSessionId),
+          getPointers: (): readonly PointerPlaceholder[] =>
+            recallTier2Registry.get(recallSessionId)?.pointers ?? [],
+          emit: coreEmit,
+        })
+      : gaiaTools(workspaceDir)
   const userMessage = renderGaiaPrompt(task)
 
   let finalText = ''
