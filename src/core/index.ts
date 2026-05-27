@@ -25,7 +25,11 @@ export {
   type OffloadResult,
 } from './offloader.js'
 export { generateDigest, type DigestDeps, type DigestStrategy, type ToolSchema } from './digest.js'
-export { recallToolDefinition, injectRecallTool } from './recallTool.js'
+export {
+  recallSummaryToolDefinition,
+  recallFullToolDefinition,
+  injectRecallTool,
+} from './recallTool.js'
 export { serializeForCache, canonicalJSON, type CachePrefix } from './serializeForCache.js'
 export {
   clipTier3KeepingTail,

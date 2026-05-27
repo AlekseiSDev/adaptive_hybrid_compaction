@@ -3,7 +3,7 @@ import { defaultFeatureFlags, type FeatureFlags } from './featureFlags.js'
 import * as core from './index.js'
 
 describe('FeatureFlags defaults', () => {
-  test('defaultFeatureFlags exposes all 8 flags with REFLECTION=true (§8 spec)', () => {
+  test('defaultFeatureFlags exposes all 9 flags with REFLECTION=true (§8 spec)', () => {
     const expectedKeys: readonly (keyof FeatureFlags)[] = [
       'TASK_AWARE_EXTRACTION',
       'TYPE_AWARE_OFFLOAD',
@@ -11,6 +11,7 @@ describe('FeatureFlags defaults', () => {
       'ASYNC_OBSERVER',
       'RECALL_TOOL',
       'SCHEMA_AWARE_DIGEST',
+      'CONTENT_AWARE_DIGEST',
       'REFLECTION',
       'CALIBRATION_AUTO',
     ]

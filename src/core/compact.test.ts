@@ -4,7 +4,7 @@ import { defaultFeatureFlags } from './featureFlags.js'
 import { defaultThresholds } from './thresholds.js'
 import { byteLengthOfContent, charsOver4TokenCounter } from './tokenCounter.js'
 import { createInMemoryScratchpad } from './scratchpad.js'
-import { recallToolDefinition } from './recallTool.js'
+import { recallSummaryToolDefinition, recallFullToolDefinition } from './recallTool.js'
 import type { AtomicGroup, Message, Tier1, Tier2, Tier3 } from './types.js'
 import type { LLMCaller } from './llm.js'
 
@@ -76,7 +76,8 @@ describe('compact() orchestrator — A5', () => {
     })
     expect(result.newTier2.observations.length).toBeGreaterThan(0)
     expect(scratchpad.size()).toBe(0)
-    expect(result.newTier1.toolDefinitions).not.toContain(recallToolDefinition)
+    expect(result.newTier1.toolDefinitions).not.toContain(recallSummaryToolDefinition)
+    expect(result.newTier1.toolDefinitions).not.toContain(recallFullToolDefinition)
     expect(result.events.some((e) => e.kind === 'compaction' && e.type === 'observer')).toBe(true)
   })
 
@@ -117,7 +118,8 @@ describe('compact() orchestrator — A5', () => {
     })
     expect(result.newTier2.pointers.length).toBeGreaterThan(0)
     expect(scratchpad.size()).toBeGreaterThan(0)
-    expect(result.newTier1.toolDefinitions).toContain(recallToolDefinition)
+    expect(result.newTier1.toolDefinitions).toContain(recallSummaryToolDefinition)
+    expect(result.newTier1.toolDefinitions).toContain(recallFullToolDefinition)
     expect(result.events.some((e) => e.kind === 'compaction' && e.type === 'offload')).toBe(true)
   })
 
@@ -216,6 +218,7 @@ describe('compact() orchestrator — A5', () => {
     expect(result.events.filter((e) => e.kind === 'compaction')).toEqual([])
     expect(result.events.some((e) => e.kind === 'classifier_signal')).toBe(true)
     // Assembled = tier1 + tier3 (no synthetic note, no recall injection)
-    expect(result.newTier1.toolDefinitions).not.toContain(recallToolDefinition)
+    expect(result.newTier1.toolDefinitions).not.toContain(recallSummaryToolDefinition)
+    expect(result.newTier1.toolDefinitions).not.toContain(recallFullToolDefinition)
   })
 })

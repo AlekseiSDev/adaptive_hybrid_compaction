@@ -7,6 +7,7 @@ export const FLAG_KEYS = [
   'ASYNC_OBSERVER',
   'RECALL_TOOL',
   'SCHEMA_AWARE_DIGEST',
+  'CONTENT_AWARE_DIGEST',
   'REFLECTION',
   'CALIBRATION_AUTO',
 ] as const satisfies readonly (keyof FeatureFlags)[];
@@ -20,6 +21,7 @@ export const DEMO_DEFAULTS: FeatureFlags = {
   ASYNC_OBSERVER: true,
   RECALL_TOOL: true,
   SCHEMA_AWARE_DIGEST: true,
+  CONTENT_AWARE_DIGEST: true,
   REFLECTION: true,
   CALIBRATION_AUTO: false,
 };

@@ -14,6 +14,7 @@ const tr: Message = {
 }
 const group: AtomicGroup = {
   group_id: 'g_1',
+  tool_use_id: 'tu_1',
   tool_use: tu,
   tool_result: tr,
   turn_index: 0,

@@ -1,5 +1,9 @@
 import { describe, expect, test } from 'vitest'
-import { injectRecallTool, recallToolDefinition } from './recallTool.js'
+import {
+  injectRecallTool,
+  recallSummaryToolDefinition,
+  recallFullToolDefinition,
+} from './recallTool.js'
 import { createInMemoryScratchpad } from './scratchpad.js'
 import { defaultFeatureFlags } from './featureFlags.js'
 import type { AtomicGroup, Message, Tier1 } from './types.js'
@@ -13,21 +17,30 @@ const baseTier1 = (): Tier1 => ({
 
 const fakeGroup = (id: string): AtomicGroup => ({
   group_id: id,
+  tool_use_id: id,
   tool_use: { role: 'assistant', content: [{ type: 'tool_use', tool_use_id: id, name: 't', input: {} }] },
   tool_result: { role: 'tool', content: [{ type: 'tool_result', tool_use_id: id, output: {} }] },
   turn_index: 0,
 })
 
-describe('recallToolDefinition', () => {
-  test('has stable reference across imports (cache-prefix safe)', async () => {
+describe('recall tool definitions (summary + full)', () => {
+  test('have stable references across imports (cache-prefix safe)', async () => {
     const a = await import('./recallTool.js')
     const b = await import('./recallTool.js')
-    expect(a.recallToolDefinition).toBe(b.recallToolDefinition)
+    expect(a.recallSummaryToolDefinition).toBe(b.recallSummaryToolDefinition)
+    expect(a.recallFullToolDefinition).toBe(b.recallFullToolDefinition)
   })
 
-  test('is frozen — runtime mutation throws (or is silently no-op in non-strict)', () => {
-    const def = recallToolDefinition as unknown as Record<string, unknown>
-    expect(Object.isFrozen(def)).toBe(true)
+  test('are frozen', () => {
+    expect(Object.isFrozen(recallSummaryToolDefinition)).toBe(true)
+    expect(Object.isFrozen(recallFullToolDefinition)).toBe(true)
+  })
+
+  test('have distinct names', () => {
+    const summaryName = (recallSummaryToolDefinition as unknown as { name: string }).name
+    const fullName = (recallFullToolDefinition as unknown as { name: string }).name
+    expect(summaryName).toBe('recall_tool_summary')
+    expect(fullName).toBe('recall_tool_full')
   })
 })
 
@@ -47,13 +60,14 @@ describe('injectRecallTool', () => {
     expect(out).toBe(tier1)
   })
 
-  test('appends recall tool definition when both conditions met', () => {
+  test('appends both recall tool definitions when conditions met', () => {
     const tier1 = baseTier1()
     const pad = createInMemoryScratchpad<AtomicGroup>()
     pad.put('g_1', fakeGroup('g_1'))
     const out = injectRecallTool(tier1, pad, { ...defaultFeatureFlags, RECALL_TOOL: true })
     expect(out).not.toBe(tier1)
-    expect(out.toolDefinitions).toHaveLength(1)
-    expect(out.toolDefinitions[0]).toBe(recallToolDefinition)
+    expect(out.toolDefinitions).toHaveLength(2)
+    expect(out.toolDefinitions[0]).toBe(recallSummaryToolDefinition)
+    expect(out.toolDefinitions[1]).toBe(recallFullToolDefinition)
   })
 })

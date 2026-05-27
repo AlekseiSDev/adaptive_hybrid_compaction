@@ -56,6 +56,13 @@ export type Tier2 = {
 
 export type AtomicGroup = {
   group_id: string
+  // Specific tool_use_id this group corresponds to. Needed because a single
+  // assistant message can hold N parallel tool_use parts, and the matching
+  // tool message can hold N tool_result parts — so `tool_use` / `tool_result`
+  // references alone don't disambiguate which call this group is about.
+  // K-tail-3 fix (2026-05-27): added so offloader can replace only the
+  // matching part within a multi-result tool message, preserving the others.
+  tool_use_id: string
   tool_use: Message
   tool_result: Message
   reasoning_chunk?: Message

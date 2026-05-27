@@ -67,6 +67,7 @@ function buildAtomicGroup(ref: ToolUseRef, resultMessage: Message, messages: Mes
   const reasoning = findReasoningChunk(ref, messages)
   const base: AtomicGroup = {
     group_id: hashAtomicGroupId(ref.toolUseId, ref.turnIndex),
+    tool_use_id: ref.toolUseId,
     tool_use: ref.message,
     tool_result: resultMessage,
     turn_index: ref.turnIndex,

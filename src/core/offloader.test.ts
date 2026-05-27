@@ -20,6 +20,7 @@ const resultMsg = (id: string, output: unknown, turn = 0, step = 2): Message => 
 
 const group = (id: string, output: unknown, turn = 0): AtomicGroup => ({
   group_id: `g_${id}`,
+  tool_use_id: id,
   tool_use: useMsg(id, turn),
   tool_result: resultMsg(id, output, turn),
   turn_index: turn,
@@ -138,6 +139,132 @@ describe('compactWithOffload', () => {
     const secondLastResult = result.tier3New.recent[5]
     expect(lastResult?.metadata?.is_offloaded_pointer).toBeUndefined()
     expect(secondLastResult?.metadata?.is_offloaded_pointer).toBeUndefined()
+  })
+
+  // K-tail-3 fix (2026-05-27): parallel tool calls land in one assistant
+  // message (with multiple tool_use parts) and one tool message (with
+  // multiple tool_result parts). The offloader must replace ONLY the matching
+  // tool_result part within the tool message, preserving sibling parts.
+  // Regression for bug: previous impl keyed replacements by Message, dropping
+  // all-but-one part when both siblings offloaded — caused provider 400
+  // "No tool output found for function call <id>" on real gaia trajectories.
+  test('parallel tool calls — both siblings offload, both pointer parts kept', async () => {
+    const parallelUse: Message = {
+      role: 'assistant',
+      content: [
+        { type: 'tool_use', tool_use_id: 'p_A', name: 'search', input: { q: 'a' } },
+        { type: 'tool_use', tool_use_id: 'p_B', name: 'search', input: { q: 'b' } },
+      ],
+      metadata: { turn_index: 0, step_index: 1 },
+    }
+    const parallelResults: Message = {
+      role: 'tool',
+      content: [
+        { type: 'tool_result', tool_use_id: 'p_A', output: bigOutput },
+        { type: 'tool_result', tool_use_id: 'p_B', output: bigOutput },
+      ],
+      metadata: { turn_index: 0, step_index: 2 },
+    }
+    // Add two trailing groups so groups_after_this >= 2 for the parallel pair.
+    const trailUse1 = useMsg('t1', 1)
+    const trailRes1 = resultMsg('t1', { ok: true }, 1)
+    const trailUse2 = useMsg('t2', 2)
+    const trailRes2 = resultMsg('t2', { ok: true }, 2)
+    const recent: Message[] = [
+      parallelUse,
+      parallelResults,
+      trailUse1,
+      trailRes1,
+      trailUse2,
+      trailRes2,
+    ]
+    const pad = createInMemoryScratchpad<AtomicGroup>()
+    const result = await compactWithOffload({ recent, inflight: [] }, pad, ctx(), {
+      byteCounter: byteLengthOfContent,
+    })
+
+    // Both parallel groups offloaded.
+    expect(result.pointersAdded).toHaveLength(2)
+    expect(pad.size()).toBe(2)
+    const recallIdsAdded = result.pointersAdded.map((p) => p.recall_id).sort()
+    expect(pad.get(recallIdsAdded[0] ?? '')).not.toBeNull()
+    expect(pad.get(recallIdsAdded[1] ?? '')).not.toBeNull()
+
+    // The transformed tool message still has TWO tool_result parts —
+    // one stub per sibling, NOT a single-part message that drops one.
+    const transformed = result.tier3New.recent[1]
+    expect(transformed?.metadata?.is_offloaded_pointer).toBe(true)
+    expect(transformed?.content).toHaveLength(2)
+    const ids = transformed?.content
+      .filter((p): p is Extract<Message['content'][number], { type: 'tool_result' }> =>
+        p.type === 'tool_result',
+      )
+      .map((p) => p.tool_use_id)
+      .sort()
+    expect(ids).toEqual(['p_A', 'p_B'])
+    // Both outputs are pointer stubs (string starting with "[Offloaded #").
+    for (const p of transformed?.content ?? []) {
+      if (p.type === 'tool_result') {
+        expect(typeof p.output).toBe('string')
+        expect(p.output as string).toContain('[Offloaded #')
+      }
+    }
+  })
+
+  test('parallel tool calls — one sibling offloads, the other stays raw', async () => {
+    const parallelUse: Message = {
+      role: 'assistant',
+      content: [
+        { type: 'tool_use', tool_use_id: 'pA', name: 'search', input: {} },
+        { type: 'tool_use', tool_use_id: 'pB', name: 'search', input: {} },
+      ],
+      metadata: { turn_index: 0, step_index: 1 },
+    }
+    const parallelResults: Message = {
+      role: 'tool',
+      content: [
+        // A is oversized → offload
+        { type: 'tool_result', tool_use_id: 'pA', output: bigOutput },
+        // B is small → keep raw
+        { type: 'tool_result', tool_use_id: 'pB', output: { tiny: 1 } },
+      ],
+      metadata: { turn_index: 0, step_index: 2 },
+    }
+    // Two trailing groups so the parallel pair has groups_after_this >= 2.
+    const trail1Use = useMsg('q1', 1)
+    const trail1Res = resultMsg('q1', { ok: true }, 1)
+    const trail2Use = useMsg('q2', 2)
+    const trail2Res = resultMsg('q2', { ok: true }, 2)
+    const recent: Message[] = [
+      parallelUse,
+      parallelResults,
+      trail1Use,
+      trail1Res,
+      trail2Use,
+      trail2Res,
+    ]
+    const pad = createInMemoryScratchpad<AtomicGroup>()
+    const result = await compactWithOffload({ recent, inflight: [] }, pad, ctx(), {
+      byteCounter: byteLengthOfContent,
+    })
+
+    expect(result.pointersAdded).toHaveLength(1)
+    expect(pad.size()).toBe(1)
+    const transformed = result.tier3New.recent[1]
+    expect(transformed?.content).toHaveLength(2)
+    // Find each part by id — A should be stub, B should be original payload.
+    const partA = transformed?.content.find(
+      (p): p is Extract<Message['content'][number], { type: 'tool_result' }> =>
+        p.type === 'tool_result' && p.tool_use_id === 'pA',
+    )
+    const partB = transformed?.content.find(
+      (p): p is Extract<Message['content'][number], { type: 'tool_result' }> =>
+        p.type === 'tool_result' && p.tool_use_id === 'pB',
+    )
+    expect(typeof partA?.output).toBe('string')
+    expect(partA?.output as string).toContain('[Offloaded #')
+    // pB remains raw — its original tiny object survives unchanged.
+    expect(partB?.output).toEqual({ tiny: 1 })
   })
 
   test('inflight tool_use (no result) never offloaded', async () => {

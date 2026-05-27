@@ -89,6 +89,7 @@ describe('Canonical types — compile-time witness', () => {
 
     const atomicGroup: AtomicGroup = {
       group_id: 'g_1',
+      tool_use_id: 'tu_1',
       tool_use: toolUseMessage,
       tool_result: toolResultMessage,
       reasoning_chunk: { role: 'assistant', content: [textPart] },

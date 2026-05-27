@@ -138,15 +138,18 @@ describe('AI SDK v6 adapter E2E — 8-turn trajectory with one offload + recall'
     const offloadEvents = events.filter((e) => e.kind === 'compaction' && e.type === 'offload')
     expect(offloadEvents.length).toBeGreaterThanOrEqual(1)
 
-    // 2. Recall tool present in tools on at least one of the calls after offload.
-    const recallSeen = state.seenTools.some((names) => names.includes('recall_tool_result'))
+    // 2. Both recall tools present in tools on at least one of the calls after offload.
+    const recallSeen = state.seenTools.some(
+      (names) =>
+        names.includes('recall_tool_summary') && names.includes('recall_tool_full'),
+    )
     expect(recallSeen).toBe(true)
 
     // 3. Tool_use_id consistency: scratchpad pointer for tu_1 appears in the prompt sent
-    //    to the provider on a later call (as a "[Offloaded tool_result #tu_1..." string).
+    //    to the provider on a later call (as an "[Offloaded #tu_1..." stub).
     const allSerialized = state.seenPrompts.map((p) => JSON.stringify(p)).join('\n')
     expect(allSerialized).toContain('tu_1')
-    // The pointer placeholder text from the offloader includes "Offloaded tool_result".
-    expect(allSerialized).toContain('Offloaded tool_result')
+    expect(allSerialized).toContain('Offloaded')
+    expect(allSerialized).toContain('recall_tool_summary')
   })
 })
