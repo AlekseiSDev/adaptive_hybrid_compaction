@@ -1,0 +1,44 @@
+name: main_e1_gaia_ahc_v3
+# Track K-tail-3 (2026-05-27) — AHC v3 на gaia-med с recall-protocol fix +
+# two-stage rehydration (summary + full) + content-aware digest.
+#
+# Что нового vs K-tail-2 (main_e1_gaia_ahc.yaml, acc=0.20):
+#   1. Centralized recall-protocol injection в system prompt (actor узнаёт
+#      о pointer'ах и tools).
+#   2. Two-stage rehydration: recall_tool_summary (cheap, content-aware) +
+#      recall_tool_full (raw fallback). Wired execute через gaiaTools.
+#   3. CONTENT_AWARE_DIGEST: per-tool projectors (web_search / visit_webpage /
+#      python_exec / text_editor / describe_image) — quality summary вместо
+#      80-token LLM digest.
+#   4. Side fixes (validated в 5 probe trajectories):
+#      • parallel tool calls в offloader (Map<msg> overwrote siblings)
+#      • dedupe recall tool injection (middleware + runner registered both)
+#      • visit_webpage Content-Type filter (throws on PDF/binary)
+#
+# Thresholds (user 2026-05-27): 64K Tier-3 / 100K Tier-2 reflection.
+# Lower than K-tail-2 (was 100K/200K) — теперь Observer должен реально
+# срабатывать на heavier tasks (max input across turns 111K на K-tail-2).
+# TIER3_TOKEN_BUDGET auto-mirrors OBSERVER (D3, 2026-05-22).
+#
+# Live deps:
+#   - OPENROUTER_API_KEY
+#   - WEB_SEARCH_AUTOSELECT=true + SEARXNG_URL=http://localhost:8080
+#   - LANGFUSE_ENABLED=true (опционально)
+
+benches:
+  - gaia-med
+configs:
+  - id: gaia_ahc_v3_64k_100k
+    baseline: gaia_bench_agent_ahc
+    ahc_flags:
+      TASK_AWARE_EXTRACTION: true
+      TYPE_AWARE_OFFLOAD: true
+      TRAJECTORY_CLASSIFIER: true
+      RECALL_TOOL: true
+      CONTENT_AWARE_DIGEST: true
+    thresholds:
+      OBSERVER_THRESHOLD: 64000
+      REFLECTION_THRESHOLD: 100000
+      TIER3_TOKEN_BUDGET: 64000
+seeds: [42]
+budget_usd: 10
