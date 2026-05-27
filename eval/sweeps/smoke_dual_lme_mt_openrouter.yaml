@@ -1,0 +1,29 @@
+name: smoke_dual_lme_mt_openrouter
+# Dual-mode routing smoke (2026-05-27) — lme-multiturn × OpenRouter endpoint.
+# Verifies resolveLLMClient `openrouter/` prefix path (strip prefix, send
+# `openai/gpt-5.4-mini` to https://openrouter.ai/api/v1).
+#
+# AHC core: ahc_flags.model carries `openrouter/` prefix → resolved to
+# OpenRouter route.
+# Mastra: requires AHC_ACTOR_MODEL=openrouter/openai/gpt-5.4-mini env override
+# (mastra-agent baselines don't read config.ahc_flags.model — global env only).
+#
+# Live deps: OPENROUTER_API_KEY in .env.
+# Run: AHC_ACTOR_MODEL=openrouter/openai/gpt-5.4-mini \
+#        pnpm tsx scripts/eval.ts --sweep eval/sweeps/smoke_dual_lme_mt_openrouter.yaml \
+#        --max-tasks-per-cell=1 --skip-auth-check
+
+benches:
+  - lme-multiturn
+
+configs:
+  # `openrouter/google/gemini-3-flash-preview` — strip openrouter/ prefix →
+  # request `google/gemini-3-flash-preview` (exists in OpenRouter + pricing).
+  - id: ahc_lme_openrouter
+    ahc_flags:
+      model: openrouter/google/gemini-3-flash-preview
+  - id: mastra_lme_openrouter
+    baseline: mastra-agent
+
+seeds: [42]
+budget_usd: 2

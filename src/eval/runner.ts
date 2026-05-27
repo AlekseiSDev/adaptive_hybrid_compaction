@@ -292,17 +292,13 @@ function makeAhcCoreRunner(config: ConfigDef): Runner {
   let resolvedModelDefault: string | undefined
 
   if (provider === 'openrouter' || provider === 'litellm') {
-    // Naming convention: `openrouter/openai/...` → router, `openai/...` →
-    // LiteLLM (default). For back-compat with old YAMLs declaring
-    // `provider: 'openrouter'` explicitly: pin model to OpenRouter route by
-    // adding the `openrouter/` prefix if missing.
+    // Naming convention is single source of truth: `openrouter/...` prefix
+    // → OpenRouter; otherwise → LiteLLM. `provider` field здесь — historical
+    // label (kept for back-compat in old YAMLs), не override routing. Чтобы
+    // переключить endpoint, измените `ahc_flags.model` или AHC_ACTOR_MODEL env.
     const requestedModelRaw =
       (config.ahc_flags?.['model'] as string | undefined) ?? 'openai/gpt-5.4-mini'
-    const requestedModel =
-      provider === 'openrouter' && !requestedModelRaw.startsWith('openrouter/')
-        ? `openrouter/${requestedModelRaw}`
-        : requestedModelRaw
-    const resolved = resolveLLMClient(resolveActorModel(requestedModel))
+    const resolved = resolveLLMClient(resolveActorModel(requestedModelRaw))
     apiKey = resolved.apiKey
     baseURL = resolved.baseURL
     resolvedModelDefault = resolved.modelForRequest

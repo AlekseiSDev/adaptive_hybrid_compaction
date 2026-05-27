@@ -1,0 +1,32 @@
+name: smoke_dual_gaia_openrouter
+# Dual-mode routing smoke (2026-05-27) — gaia-med × OpenRouter endpoint.
+# Configs identical to smoke_dual_gaia_litellm; switch driven entirely by
+# AHC_ACTOR_MODEL env override (gaia AHC + Mastra dispatch paths read env,
+# not config.ahc_flags.model).
+#
+# Live deps: OPENROUTER_API_KEY, plus web_search provider.
+# Run: AHC_ACTOR_MODEL=openrouter/openai/gpt-5.4-mini \
+#        pnpm tsx scripts/eval.ts --sweep eval/sweeps/smoke_dual_gaia_openrouter.yaml \
+#        --max-tasks-per-cell=1 --skip-auth-check
+
+benches:
+  - gaia-med
+
+configs:
+  - id: ahc_gaia_openrouter
+    baseline: gaia_bench_agent_ahc
+    ahc_flags:
+      TASK_AWARE_EXTRACTION: true
+      TYPE_AWARE_OFFLOAD: true
+      TRAJECTORY_CLASSIFIER: true
+      RECALL_TOOL: true
+      CONTENT_AWARE_DIGEST: true
+    thresholds:
+      OBSERVER_THRESHOLD: 64000
+      REFLECTION_THRESHOLD: 100000
+      TIER3_TOKEN_BUDGET: 64000
+  - id: mastra_gaia_openrouter
+    baseline: mastra-agent
+
+seeds: [42]
+budget_usd: 3

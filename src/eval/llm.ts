@@ -191,6 +191,13 @@ export function resolveActorModel(defaultModelId: string): string {
 // LiteLLM is the default — direct provider keys via jay-canvas/llm-proxy, no
 // markup. OpenRouter remains opt-in via `openrouter/` prefix (fallback when
 // LiteLLM key limits constrain large sweeps).
+//
+// **Gemini exception**: `google/gemini-...` is auto-routed to OpenRouter even
+// without explicit `openrouter/` prefix. LiteLLM's openai-compat layer for
+// Gemini drops `thought_signature` on tool_use parts, breaking agentic benches
+// (GAIA, tau-bench) with 400 errors. OpenRouter ships its own Gemini wrapper
+// that handles this correctly. Verified 2026-05-27 smoke probe: GAIA × LiteLLM
+// gemini-3-flash → 400; GAIA × OpenRouter google/gemini-3-flash-preview → OK.
 export type LLMClientResolution = {
   apiKey: string
   baseURL: string
@@ -199,9 +206,13 @@ export type LLMClientResolution = {
 }
 
 const PROVIDER_PREFIX_RE = /^(openai|google|gemini|anthropic|groq|xai)\//
+const GEMINI_FORCE_OPENROUTER_RE = /^google\/gemini/
 
 export function resolveLLMClient(modelId: string): LLMClientResolution {
-  if (modelId.startsWith('openrouter/')) {
+  const effectiveModelId = GEMINI_FORCE_OPENROUTER_RE.test(modelId) && !modelId.startsWith('openrouter/')
+    ? `openrouter/${modelId}`
+    : modelId
+  if (effectiveModelId.startsWith('openrouter/')) {
     const apiKey = process.env['OPENROUTER_API_KEY']
     if (!apiKey || apiKey.length === 0) {
       throw new Error(
@@ -211,7 +222,7 @@ export function resolveLLMClient(modelId: string): LLMClientResolution {
     return {
       apiKey,
       baseURL: 'https://openrouter.ai/api/v1',
-      modelForRequest: modelId.slice('openrouter/'.length),
+      modelForRequest: effectiveModelId.slice('openrouter/'.length),
       provider: 'openrouter',
     }
   }
@@ -226,7 +237,7 @@ export function resolveLLMClient(modelId: string): LLMClientResolution {
   return {
     apiKey,
     baseURL,
-    modelForRequest: modelId.replace(PROVIDER_PREFIX_RE, ''),
+    modelForRequest: effectiveModelId.replace(PROVIDER_PREFIX_RE, ''),
     provider: 'litellm',
   }
 }

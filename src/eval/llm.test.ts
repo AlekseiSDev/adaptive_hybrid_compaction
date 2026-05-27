@@ -389,10 +389,12 @@ describe('resolveLLMClient — dual-mode routing via model prefix (2026-05-27)',
     })
   })
 
-  test('`google/` prefix → LiteLLM with stripped alias', () => {
-    const r = resolveLLMClient('google/gemini-3-flash-preview')
+  test('`google/` non-Gemini prefix → LiteLLM with stripped alias', () => {
+    // Gemini models force OpenRouter (separate test below); pick a hypothetical
+    // non-Gemini google/* to exercise the plain LiteLLM strip path.
+    const r = resolveLLMClient('google/non-gemini-model')
     expect(r.provider).toBe('litellm')
-    expect(r.modelForRequest).toBe('gemini-3-flash-preview')
+    expect(r.modelForRequest).toBe('non-gemini-model')
   })
 
   test('`anthropic/` prefix → LiteLLM with stripped alias', () => {
@@ -405,6 +407,25 @@ describe('resolveLLMClient — dual-mode routing via model prefix (2026-05-27)',
     const r = resolveLLMClient('gpt-5.4-mini')
     expect(r.provider).toBe('litellm')
     expect(r.modelForRequest).toBe('gpt-5.4-mini')
+  })
+
+  test('`google/gemini-...` auto-routes to OpenRouter (LiteLLM Gemini tool-use breakage workaround)', () => {
+    const r = resolveLLMClient('google/gemini-3-flash-preview')
+    expect(r.provider).toBe('openrouter')
+    expect(r.modelForRequest).toBe('google/gemini-3-flash-preview')
+    expect(r.baseURL).toBe('https://openrouter.ai/api/v1')
+  })
+
+  test('`openrouter/google/gemini-...` honors explicit prefix (no double-prefix)', () => {
+    const r = resolveLLMClient('openrouter/google/gemini-3-flash-preview')
+    expect(r.provider).toBe('openrouter')
+    expect(r.modelForRequest).toBe('google/gemini-3-flash-preview')
+  })
+
+  test('non-Gemini `google/...` (hypothetical) does NOT auto-route to OpenRouter', () => {
+    const r = resolveLLMClient('google/some-other-model')
+    expect(r.provider).toBe('litellm')
+    expect(r.modelForRequest).toBe('some-other-model')
   })
 
   test('openrouter/ prefix without OPENROUTER_API_KEY → throws', () => {
