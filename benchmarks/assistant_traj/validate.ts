@@ -144,6 +144,109 @@ async function parseFixturePair(
       reason: `fixture task_id '${fixtureResult.data.task_id}' does not match task '${task.task_id}'`,
     }
   }
+  // D6 — production-readiness gate: fixture must not carry placeholder text or
+  // needs_bake marker. Non-deprecated tasks fail; deprecated tasks pass with
+  // a warning so the legacy AT-v2 opensource subset can keep its existing
+  // placeholders without forcing a re-bake.
+  const isDeprecated = task.provenance.deprecated === true
+  for (const fx of fixtureResult.data.fixtures) {
+    if (fx.needs_bake === true) {
+      if (isDeprecated) continue
+      return {
+        ok: false,
+        reason: `fixture entry for ${fx.tool_name} marked needs_bake — run bake-fixtures.ts before sweep`,
+      }
+    }
+    const textBlob = fx.output_parts
+      .map((p) => (p.type === 'text' ? p.text : ''))
+      .join('\n')
+    if (!isDeprecated && /placeholder/i.test(textBlob)) {
+      return {
+        ok: false,
+        reason: `fixture entry for ${fx.tool_name} contains 'placeholder' literal — needs real output`,
+      }
+    }
+  }
+  return { ok: true }
+}
+
+// D6 — referenced image / file attachments must exist on disk. Catches the
+// at_mixed_001 class of bug (task pointed at attachments/at_mixed_001/1.svg
+// but the directory never shipped) by walking every ContentPart in every turn
+// and stat'ing the path. Attachment paths are repo-relative
+// (resolved against benchmarks/assistant_traj/).
+type AttachedPart = { kind: 'image' | 'file'; path: string }
+
+function collectAttachments(task: AssistantTrajTask): AttachedPart[] {
+  const out: AttachedPart[] = []
+  const walk = (part: unknown): void => {
+    if (!part || typeof part !== 'object') return
+    const p = part as { type?: unknown; path?: unknown; content?: unknown }
+    if (p.type === 'image' && typeof p.path === 'string') {
+      out.push({ kind: 'image', path: p.path })
+    } else if (p.type === 'file' && typeof p.path === 'string') {
+      out.push({ kind: 'file', path: p.path })
+    } else if (p.type === 'tool_result' && Array.isArray(p.content)) {
+      for (const c of p.content) walk(c)
+    }
+  }
+  for (const turn of task.turns) {
+    for (const part of turn.content) walk(part)
+  }
+  return out
+}
+
+async function parseAttachments(
+  taskPath: string,
+): Promise<{ ok: true } | { ok: false; reason: string } | { skip: true }> {
+  const raw = await readFile(taskPath, 'utf8')
+  const parsed = JSON.parse(raw) as unknown
+  const taskResult = AssistantTrajTaskSchema.safeParse(parsed)
+  if (!taskResult.success) return { skip: true } // already caught by parseFile
+  const task = taskResult.data
+  // Deprecated AT-v2 legacy tasks are quarantined — broken attachments stay
+  // documented but don't gate the rest of the corpus.
+  if (task.provenance.deprecated === true) return { skip: true }
+  const parts = collectAttachments(task)
+  if (parts.length === 0) return { skip: true }
+  const benchRoot = rootDir() // benchmarks/assistant_traj
+  const missing: string[] = []
+  for (const p of parts) {
+    const abs = join(benchRoot, p.path)
+    try {
+      await stat(abs)
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+        missing.push(`${p.kind}: ${p.path}`)
+      } else {
+        return { ok: false, reason: `attachment stat error: ${(err as Error).message}` }
+      }
+    }
+  }
+  if (missing.length > 0) {
+    return {
+      ok: false,
+      reason: `missing attachment file(s):\n  ${missing.join('\n  ')}`,
+    }
+  }
+  return { ok: true }
+}
+
+// D6 — real-source provenance gate: anonymized_at + original_session_hash
+// non-null required. Schema already enforces anonymized_at via cross-field
+// rule; this adds the session_hash lineage check, separately.
+function checkRealProvenance(
+  task: AssistantTrajTask,
+): { ok: true } | { ok: false; reason: string } {
+  if (task.source !== 'real') return { ok: true }
+  if (task.provenance.deprecated === true) return { ok: true }
+  if (!task.provenance.original_session_hash) {
+    return {
+      ok: false,
+      reason:
+        "source='real' requires non-empty provenance.original_session_hash (lineage trace)",
+    }
+  }
   return { ok: true }
 }
 
@@ -169,9 +272,19 @@ async function validateTaskWithFixture(path: string): Promise<{
     return { schemaOk: false, failure: { file: path, detail: schemaResult.reason } }
   }
   const pairResult = await parseFixturePair(path)
-  if ('skip' in pairResult) return { schemaOk: true }
-  if (!pairResult.ok) {
+  if (!('skip' in pairResult) && !pairResult.ok) {
     return { schemaOk: true, failure: { file: path, detail: pairResult.reason } }
+  }
+  const attachResult = await parseAttachments(path)
+  if (!('skip' in attachResult) && !attachResult.ok) {
+    return { schemaOk: true, failure: { file: path, detail: attachResult.reason } }
+  }
+  // Re-parse to get the typed task for provenance check (cheap — already in mem).
+  const raw = await readFile(path, 'utf8')
+  const task = AssistantTrajTaskSchema.parse(JSON.parse(raw) as unknown)
+  const provResult = checkRealProvenance(task)
+  if (!provResult.ok) {
+    return { schemaOk: true, failure: { file: path, detail: provResult.reason } }
   }
   return { schemaOk: true }
 }
