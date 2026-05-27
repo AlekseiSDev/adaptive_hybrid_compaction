@@ -40,6 +40,29 @@ Append-only. Новые записи внизу.
   hint. Verification n=15 lme-multiturn: acc 0.200 → 0.333 (+13pp), но
   43/48 observer fires вернули пустые arrays (parse-failure на новом
   prompt). Open workstream (`current.md` Track H).
+- **[2026-05-27] Observer parse-failure fix — accept ISO/slash date timestamps**
+  — commit `68f1037`. Root cause найдена через новое diagnostic поле
+  `observerRawText` (записывается в `records.ndjson` когда `parseObservations`
+  вернул `[]`): 7/8 пустых fires из 2026-05-26 sweep'а — Gemini-3.1-Flash
+  писал `- 2023-11-30 (high) ...` или `- 2023/08/11 (high) ...` где parser
+  ждал integer epoch `(\d+)`. 8-й случай — refusal (LLM ответил "25" на
+  user query вместо observations). Fix: parser принимает `YYYY-MM-DD` /
+  `YYYY/MM/DD` / integer; prompt получил anti-answer-leak инструкцию +
+  literal EXAMPLE OUTPUT блок. n=3 debug verify: non-empty obs rate 33%
+  → 100% (12/12), killer task `01493427` отвечает "25" корректно. См.
+  `decisions.md [2026-05-27]`. Closes 2026-05-26 open workstream.
+- **[2026-05-27] Observer content-aware filter + Tier-2 persistence wiring**
+  — commit `f789b7e`. Два связанных fix'а: (1) observer на каждом fire'е
+  видит ТОЛЬКО messages с `metadata.turn_index > max(tier2.observations.sourceTurn)`
+  — раньше LLM получал full Tier-3 (64k) каждый fire, был myopic к tail'у,
+  middle-window sessions тихо терялись. (2) `tier2Registry` пробросан через
+  `createAhcRuntime` → eval-side `ahc_core.ts` теперь persistит Tier-2
+  через `baseline.step()` calls (H Phase 9 decisions claim был incomplete
+  в eval path, observations не accumulated'ились). Result n=3 lme-mt debug:
+  total cost $6.08 → $3.50 (−42%), observer overhead $4.41 → $1.69 (−62%),
+  mean score 2/3 без регрессии. Same 82 fires но каждый input 25× меньше
+  (одна new session, не full window). vs FC ($6.88, 3/3) — AHC@64k 49%
+  cheaper; vs Mastra ($1.43, 3/3) — ещё 2.4× дороже (Step B target).
 
 ### Dataset / Benches
 
