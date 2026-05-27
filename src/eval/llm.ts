@@ -69,6 +69,31 @@ export const OPENROUTER_PRICING: Record<string, ModelPricing> = Object.freeze({
     cache_read_factor: 0.1,
     cache_write_factor: 1.25,
   },
+  // LiteLLM proxy aliases (2026-05-27 migration). Proxy returns model field
+  // WITHOUT provider prefix (`gpt-5.4-mini`, not `openai/gpt-5.4-mini`); our
+  // `costFromUsage` lookup would silently return $0 without these keys.
+  // Same prices as the prefixed entries above — both pass through to the
+  // same upstream provider (LiteLLM does not add markup over direct).
+  // Refresh in lockstep with the prefixed siblings.
+  'gpt-5.4-mini': {
+    input_per_million_usd: 0.75,
+    output_per_million_usd: 4.5,
+    cache_read_factor: 0.5,
+  },
+  'gemini-3.1-flash-lite-preview': {
+    input_per_million_usd: 0.25,
+    output_per_million_usd: 1.5,
+  },
+  'gemini-3-flash': {
+    input_per_million_usd: 0.5,
+    output_per_million_usd: 3.0,
+  },
+  'claude-sonnet-4.6': {
+    input_per_million_usd: 3.0,
+    output_per_million_usd: 15.0,
+    cache_read_factor: 0.1,
+    cache_write_factor: 1.25,
+  },
 })
 
 // Anthropic direct-API pricing snapshot — separate table from OpenRouter
@@ -113,10 +138,7 @@ export const ANTHROPIC_DIRECT_PRICING: Record<string, ModelPricing> = Object.fre
     cache_write_factor: 1.25,
   },
   // Haiku 4.5 — added 2026-05-27 for K-tail-4 (Anthropic /compact on GAIA-med).
-  // Both alias forms supported по той же логике что и Sonnet. Pilot 2026-05-27
-  // показал, что vendor /compact feature на haiku возвращает 400 (Sonnet+ only),
-  // но pricing entry оставлен — sweep YAML может использовать haiku как
-  // tool-aware actor без /compact strategy в follow-up'ах.
+  // Both alias forms supported по той же логике что и Sonnet.
   'claude-haiku-4-5': {
     input_per_million_usd: 1.0,
     output_per_million_usd: 5.0,
@@ -160,6 +182,53 @@ export const ACTOR_MODEL_ENV_VAR = 'AHC_ACTOR_MODEL'
 export function resolveActorModel(defaultModelId: string): string {
   const v = process.env[ACTOR_MODEL_ENV_VAR]
   return v !== undefined && v.length > 0 ? v : defaultModelId
+}
+
+// Dual-mode LLM routing (decisions.md 2026-05-27, supersedes earlier today's
+// "rip OpenRouter"). Model-string prefix selects the route:
+//   - `openrouter/openai/gpt-5.4-mini` → OpenRouter (request sends `openai/gpt-5.4-mini`)
+//   - `openai/gpt-5.4-mini` (default)  → LiteLLM proxy (request sends bare alias `gpt-5.4-mini`)
+// LiteLLM is the default — direct provider keys via jay-canvas/llm-proxy, no
+// markup. OpenRouter remains opt-in via `openrouter/` prefix (fallback when
+// LiteLLM key limits constrain large sweeps).
+export type LLMClientResolution = {
+  apiKey: string
+  baseURL: string
+  modelForRequest: string
+  provider: 'openrouter' | 'litellm'
+}
+
+const PROVIDER_PREFIX_RE = /^(openai|google|gemini|anthropic|groq|xai)\//
+
+export function resolveLLMClient(modelId: string): LLMClientResolution {
+  if (modelId.startsWith('openrouter/')) {
+    const apiKey = process.env['OPENROUTER_API_KEY']
+    if (!apiKey || apiKey.length === 0) {
+      throw new Error(
+        'OPENROUTER_API_KEY env var required for `openrouter/` model prefix',
+      )
+    }
+    return {
+      apiKey,
+      baseURL: 'https://openrouter.ai/api/v1',
+      modelForRequest: modelId.slice('openrouter/'.length),
+      provider: 'openrouter',
+    }
+  }
+  const apiKey = process.env['LITELLM_MASTER_KEY']
+  const baseURL = process.env['LITELLM_BASE_URL']
+  if (!apiKey || apiKey.length === 0) {
+    throw new Error('LITELLM_MASTER_KEY env var required (default LiteLLM route)')
+  }
+  if (!baseURL || baseURL.length === 0) {
+    throw new Error('LITELLM_BASE_URL env var required (default LiteLLM route)')
+  }
+  return {
+    apiKey,
+    baseURL,
+    modelForRequest: modelId.replace(PROVIDER_PREFIX_RE, ''),
+    provider: 'litellm',
+  }
 }
 
 export function costFromUsageWithCache(model: string, usage: OpenRouterUsage): number {

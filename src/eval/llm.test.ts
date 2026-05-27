@@ -11,6 +11,7 @@ import {
   GOOGLE_DIRECT_PRICING,
   OPENROUTER_PRICING,
   resolveActorModel,
+  resolveLLMClient,
 } from './llm.js'
 import type { AnthropicUsage, OpenRouterUsage } from './types.js'
 
@@ -354,6 +355,106 @@ describe('resolveActorModel — H1 env-override hardening', () => {
   test('AHC_ACTOR_MODEL identical to default → returns same string', () => {
     vi.stubEnv(ACTOR_MODEL_ENV_VAR, 'openai/gpt-5.4-mini')
     expect(resolveActorModel('openai/gpt-5.4-mini')).toBe('openai/gpt-5.4-mini')
+  })
+})
+
+describe('resolveLLMClient — dual-mode routing via model prefix (2026-05-27)', () => {
+  beforeEach(() => {
+    vi.unstubAllEnvs()
+    vi.stubEnv('LITELLM_MASTER_KEY', 'sk-litellm')
+    vi.stubEnv('LITELLM_BASE_URL', 'http://localhost:4400/v1')
+    vi.stubEnv('OPENROUTER_API_KEY', 'sk-or-test')
+  })
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
+  test('`openrouter/` prefix → OpenRouter route, strips prefix for request', () => {
+    const r = resolveLLMClient('openrouter/openai/gpt-5.4-mini')
+    expect(r).toEqual({
+      apiKey: 'sk-or-test',
+      baseURL: 'https://openrouter.ai/api/v1',
+      modelForRequest: 'openai/gpt-5.4-mini',
+      provider: 'openrouter',
+    })
+  })
+
+  test('`openai/` (default) → LiteLLM route, strips provider prefix to bare alias', () => {
+    const r = resolveLLMClient('openai/gpt-5.4-mini')
+    expect(r).toEqual({
+      apiKey: 'sk-litellm',
+      baseURL: 'http://localhost:4400/v1',
+      modelForRequest: 'gpt-5.4-mini',
+      provider: 'litellm',
+    })
+  })
+
+  test('`google/` prefix → LiteLLM with stripped alias', () => {
+    const r = resolveLLMClient('google/gemini-3-flash-preview')
+    expect(r.provider).toBe('litellm')
+    expect(r.modelForRequest).toBe('gemini-3-flash-preview')
+  })
+
+  test('`anthropic/` prefix → LiteLLM with stripped alias', () => {
+    const r = resolveLLMClient('anthropic/claude-sonnet-4.6')
+    expect(r.provider).toBe('litellm')
+    expect(r.modelForRequest).toBe('claude-sonnet-4.6')
+  })
+
+  test('bare alias (no prefix) → LiteLLM with same id', () => {
+    const r = resolveLLMClient('gpt-5.4-mini')
+    expect(r.provider).toBe('litellm')
+    expect(r.modelForRequest).toBe('gpt-5.4-mini')
+  })
+
+  test('openrouter/ prefix without OPENROUTER_API_KEY → throws', () => {
+    vi.stubEnv('OPENROUTER_API_KEY', '')
+    expect(() => resolveLLMClient('openrouter/openai/gpt-5.4-mini')).toThrow(
+      /OPENROUTER_API_KEY/,
+    )
+  })
+
+  test('LiteLLM route without LITELLM_MASTER_KEY → throws', () => {
+    vi.stubEnv('LITELLM_MASTER_KEY', '')
+    expect(() => resolveLLMClient('openai/gpt-5.4-mini')).toThrow(/LITELLM_MASTER_KEY/)
+  })
+
+  test('LiteLLM route without LITELLM_BASE_URL → throws', () => {
+    vi.stubEnv('LITELLM_BASE_URL', '')
+    expect(() => resolveLLMClient('openai/gpt-5.4-mini')).toThrow(/LITELLM_BASE_URL/)
+  })
+})
+
+describe('OPENROUTER_PRICING — LiteLLM alias entries (2026-05-27)', () => {
+  test('gpt-5.4-mini alias has same prices as openai/gpt-5.4-mini', () => {
+    const alias = OPENROUTER_PRICING['gpt-5.4-mini']
+    const prefixed = OPENROUTER_PRICING['openai/gpt-5.4-mini']
+    expect(alias).toBeDefined()
+    expect(prefixed).toBeDefined()
+    expect(alias?.input_per_million_usd).toBe(prefixed?.input_per_million_usd)
+    expect(alias?.output_per_million_usd).toBe(prefixed?.output_per_million_usd)
+    expect(alias?.cache_read_factor).toBe(prefixed?.cache_read_factor)
+  })
+
+  test('gemini-3.1-flash-lite-preview alias matches prefixed sibling', () => {
+    const alias = OPENROUTER_PRICING['gemini-3.1-flash-lite-preview']
+    const prefixed = OPENROUTER_PRICING['google/gemini-3.1-flash-lite-preview']
+    expect(alias?.input_per_million_usd).toBe(prefixed?.input_per_million_usd)
+    expect(alias?.output_per_million_usd).toBe(prefixed?.output_per_million_usd)
+  })
+
+  test('claude-sonnet-4.6 alias has anthropic cache factors', () => {
+    const p = OPENROUTER_PRICING['claude-sonnet-4.6']
+    expect(p?.input_per_million_usd).toBe(3.0)
+    expect(p?.cache_read_factor).toBe(0.1)
+    expect(p?.cache_write_factor).toBe(1.25)
+  })
+
+  test('costFromUsage with LiteLLM-style key matches OpenRouter-style key', () => {
+    const usage = { prompt_tokens: 1000, completion_tokens: 200 }
+    expect(costFromUsage('gpt-5.4-mini', usage)).toBe(
+      costFromUsage('openai/gpt-5.4-mini', usage),
+    )
   })
 })
 
