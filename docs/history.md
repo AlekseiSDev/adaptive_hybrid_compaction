@@ -253,6 +253,14 @@ Append-only. Новые записи внизу.
 - **[2026-05-13] Judge → `anthropic/claude-sonnet-4.6` via OpenRouter** —
   D4. Cross-vendor с actor (gpt-5.4-mini), vision-capable для AT image_qa.
   `claude-sonnet-4-7` ещё не на OpenRouter — fallback на 4.6 verified live.
+- **[2026-05-27] Dual-mode LLM routing — `openrouter/` prefix vs default LiteLLM
+  proxy** — `resolveLLMClient(modelId)` единый helper диспетчит actor + AHC
+  internal + Mastra LLM calls. `openrouter/openai/gpt-5.4-mini` → OpenRouter;
+  `openai/gpt-5.4-mini` (default) → LiteLLM proxy (jay-canvas) с bare alias
+  `gpt-5.4-mini`. OpenRouter не удалён — opt-in fallback для случаев когда
+  LiteLLM key лимиты констрейнят. Cost honesty preserved через дубли pricing
+  ключей в `OPENROUTER_PRICING` (обе формы). См. `decisions.md 2026-05-27`
+  dual-mode routing.
 
 ### Instrumentation / Eval harness
 
