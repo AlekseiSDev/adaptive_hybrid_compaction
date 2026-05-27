@@ -179,18 +179,29 @@ Append-only. Новые записи внизу.
 - **[2026-05-27] AssistantTraj v3 — corpus rebuild from jay-canvas golden-set**
   — Tracks D6 + J7. AT-v2 был не-валиден для medium-traj оценки:
   все 50 задач single-turn, все 50 sidecar fixtures = placeholder text,
-  29 synthetic с шаблонным `expected_summary`. AT-v3 = ~50 multi-turn задач
-  reimported из `jay-canvas/apps/platform/api/e2e/golden-set/scenarios/`
+  29 synthetic с шаблонным `expected_summary`. AT-v3 = **63 multi-turn задач**
+  (turns 1-2) reimported из `jay-canvas/apps/platform/api/e2e/golden-set/scenarios/`
   (категории IG/IE/CD/QA/A/ED/WC/MX/DBG, скип VG/MUS/AM), captured
-  `turn.tool_outputs` заменяют placeholder'ы; короткие сценарии extended
-  до median 5-7 turns через synthetic continuation (agent-author +
-  manual review gate). 29 AT-v2 synthetic deleted, 21 opensource marked
-  `provenance.deprecated=true` и фильтруются по умолчанию.
+  `turn.tool_outputs` заменяют placeholder'ы. 29 AT-v2 synthetic deleted,
+  21 opensource marked `provenance.deprecated=true` (фильтруются default'ом).
   Tool палитра расширена с 4 до 5 (added `image_edit`); все 5 тулов
-  получили live wrappers через Gemini/Brave/Firecrawl/E2B (`AT_TOOL_MODE=live`
-  для bake-fixtures). Adapter теперь поддерживает `execution_mode='reroll'`
-  для полного multi-turn run'а (default для turns>1). См. `decisions.md
-  2026-05-27 multi-turn execution mode`.
+  получили live wrappers через Gemini-Imagen / Brave / Firecrawl / E2B
+  (`AT_TOOL_MODE=live` для bake-fixtures). Adapter и runner уже поддерживали
+  multi-turn reroll out-of-the-box (`buildRunnerFromBaseline` итерирует
+  `conv.messages`) — поле `execution_mode` добавлено в schema для будущей
+  селективности. Validator hardened: attachment file existence, fixture
+  placeholder / `needs_bake` guards, real-source provenance lineage check.
+  9 needs_bake fixtures забейкены через live Gemini/E2B (4 потребовали
+  re-bake — Gemini отказывался на длинных русских image-gen промптах,
+  пофикшено заменой на короткий generic prompt). **Verification**:
+  competitor smoke sweep `eval/sweeps/at_v3_smoke_competitors.yaml`
+  (3 configs × 5 tasks, budget $2): all 15 runs completed без adapter
+  ошибок, total cost $0.20, mean primary 0.30 для всех трёх (full_context,
+  mastra_om, ahc_full). Числа спот-проверка sanity, не accuracy-вердикт —
+  E1 re-run с полным корпусом — отдельный PR. Deferred: synthetic
+  continuation для растягивания до 5-7 turns (Step 4 plan); judge
+  re-calibration на новой выборке (Step 8 plan). См. `decisions.md
+  2026-05-27 AT-v3 multi-turn execution mode`.
 
 ### Tools
 

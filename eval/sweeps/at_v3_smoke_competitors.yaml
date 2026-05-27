@@ -1,0 +1,43 @@
+name: at_v3_smoke_competitors
+# 2026-05-27 — D6 verification step 9: capped-budget competitor smoke on the
+# rebuilt AT-v3 corpus. Goal is INCOMPATIBILITY DETECTION, not accuracy:
+# we want to catch the case "competitor X (full_context / mastra_om / Mastra
+# agent) crashes on AT-v3 multi-turn + tools shape" before spending real money
+# on a full sweep. Per feedback_new_bench_competitor_smoke (memory).
+#
+# Pass condition (informal, not enforced by harness):
+#   - every cell completes its 5 tasks without adapter-level errors
+#     (no tool_replay_miss, no schema-validation throws, judge produces a score)
+#   - cost stays under budget_usd (~$2 total)
+#   - numbers themselves are not analysed — that's for the follow-up E1 re-run
+#
+# Run:
+#   set -a && . ./.env && set +a
+#   pnpm tsx scripts/eval.ts --sweep eval/sweeps/at_v3_smoke_competitors.yaml \
+#     --concurrency=2 --max-tasks-per-cell=5
+#
+# Note: AT-v3 still has 9 needs_bake fixtures pending — once
+# bake-fixtures.ts runs (Step 3 of D6 plan), all 63 jay-canvas tasks become
+# replay-ready. Until then, --max-tasks-per-cell=5 in alphabetical readdir
+# order conveniently picks tasks that have full fixtures (the needs_bake
+# subset is small and scattered).
+
+benches:
+  - assistant-traj
+
+configs:
+  - id: full_context
+    baseline: full_context
+  - id: mastra_om
+    baseline: mastra_om
+  # AHC default. Doesn't pin OBSERVER_THRESHOLD — uses post-H Phase 8 default.
+  - id: ahc_full
+    ahc_flags:
+      TASK_AWARE_EXTRACTION: true
+      TYPE_AWARE_OFFLOAD: true
+      TRAJECTORY_CLASSIFIER: true
+      RECALL_TOOL: true
+
+seeds: [42]
+# Capped budget — incompatibility smoke only, not accuracy run.
+budget_usd: 2
