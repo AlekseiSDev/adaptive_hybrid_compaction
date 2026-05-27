@@ -145,21 +145,25 @@ Active:
 
 ## Track K — `gaia-med` bench
 
-**Closed (К-tail-2); ОДИН deferred sweep.** K1-K4 пройдены, К-tail (Mastra
-Agent integration) выявил threshold issue: defaults 30K/40K observer/reflector
-fire слишком aggressive на multi-tool GAIA tasks (60-95K context). Bumped к
-100K/200K (К-tail-2) — Mastra acc 0.28→0.40. Numbers в `baselines_frozen.md`
-gaia-med section с full provenance.
+**Closed (К-tail-3).** K1-K4 + три K-tail итерации завершены. Headline:
+**AHC v3 (K-tail-3) acc=0.44 на n=25**, обгоняя vanilla (0.32) и Mastra (0.40)
+одновременно при cost 62% ниже Mastra. Numbers + provenance в
+`baselines_frozen.md` gaia-med section. Decision rationale в `decisions.md`
+2026-05-27 entry "Two-stage recall + content-aware digest".
 
-Deferred (не active):
-- **К-tail-3 — полный AHC threshold-sweep.** AHC gaia_bench_agent_ahc
-  underperforms vanilla (0.200 vs 0.320) потому что K-tail-2 поднял только
-  observer/reflector, а type-aware offloader (T_SIZE=4096, T_CUM=24000,
-  K_RECENT=6) всё ещё offload'ит web_search results 20-50K chars
-  немедленно — actor теряет search context на следующем step. Ожидаемо
-  T_SIZE→50K, T_CUM→200K, K_RECENT→20 поднимет acc к parity с vanilla.
-  Budget ~$3-5. Blocking? Нет — vanilla numbers competitive, AHC variant
-  не in headline. Если F-report хочет показать "AHC on agentic" — нужен.
+K-tail итерации:
+- **К-tail-1**: Mastra Memory integration — defaults 30K/40K observer/reflector
+  fire слишком aggressive на multi-tool GAIA tasks. Mastra acc 0.28 / cap-hits 4/25.
+- **К-tail-2**: Mastra thresholds 30K→100K, AHC thresholds 100K/200K. Mastra
+  0.28 → 0.40; AHC 0.20 (recall path architecturally dead — 0 invocations
+  across 25 tasks, prompt не упоминал pointers, execute path missing, digest
+  lossy).
+- **К-tail-3**: AHC recall-protocol fix — centralized prompt injection +
+  two-stage rehydration (summary/full) + content-aware per-tool digest +
+  execute path в `gaiaTools()` factory. Plus три side fix'а из debug pass
+  (parallel tool calls в offloader, dedupe recall schema injection,
+  `visit_webpage` Content-Type whitelist). Tightened thresholds 64K/100K.
+  AHC 0.20 → **0.44**, +5 tasks на L2 (multi-tool reasoning).
 
 Persistent caveat:
 - **Mastra opaque to Langfuse.** `@mastra/core` не expose'ит

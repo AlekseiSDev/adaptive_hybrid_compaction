@@ -113,6 +113,49 @@ Append-only. Новые записи внизу.
   Sweep YAMLs: `main_e1_text_lme_mt_n3_observer_t64k.yaml` (canonical),
   `..._t64k_flashlite.yaml` (experimental, regression documented),
   `..._t64k_gemini25flash.yaml` (experimental, regression documented).
+- **[2026-05-27] K-tail-3 — recall-protocol injection + two-stage rehydration
+  + content-aware digest (gaia-med acc 0.20 → 0.44)** — K-tail-2 audit
+  показал `recall_tool_result` invocations = 0 across 25 gaia-med tasks:
+  GAIA driver-system prompt не упоминал pointer'ы, single-tool recall
+  inject'ился middleware'ом без execute path, digest = 80-token LLM-summary
+  поверх 20-50K web_search dump'ов (lossy). Три coupled fix'а в одном
+  cycle. (1) **Centralized recall-protocol injection** в system prompt
+  (`src/adapters/ai-sdk-v6.ts:injectRecallProtocolNote`) — frozen literal
+  text appended как 2-й system message когда `RECALL_TOOL=true` +
+  scratchpad non-empty; actor видит формат stub'а и сигнатуру recall
+  tools. (2) **Two-stage rehydration**: split `recall_tool_result` → пара
+  `recall_tool_summary` (cheap, content-aware) + `recall_tool_full` (raw
+  fallback). Stub format переписан с inline digest на `[Offloaded #G1
+  tool=<name> size=<N>B — summary: recall_tool_summary(G1); raw:
+  recall_tool_full(G1)]`. Scratchpad payload расширен с `AtomicGroup` →
+  `{group, summary}` чтобы summary computed-once-at-offload жил вместе
+  с raw payload. (3) **Content-aware digest** (`CONTENT_AWARE_DIGEST`
+  flag, default off): per-tool projectors заменяют LLM-digest на rule-based
+  projection — `web_search` → top-N {title,url,snippet_head_300};
+  `visit_webpage` → {title, head_800+tail_400}; `python_exec` → {stdout_head,
+  stderr, exit_code}; `text_editor` → {path, size, content_head_600};
+  `describe_image` → description verbatim if ≤2000 chars. (4) **Wire
+  execute path** — `gaiaTools(workspaceDir, recallDeps?)` factory принимает
+  scratchpad + tier-2 pointers и appends `recall_tool_summary` /
+  `recall_tool_full` tools с execute resolution; middleware-side schema
+  injection остаётся для visibility, runner-side execute resolves dispatch.
+  Plus три side fix'а из debug pass'а: (a) `offloader.ts` — replacement
+  map keyed by `(message, tool_use_id)` чтобы parallel tool calls не
+  затирали друг друга на одном tool message; (b) dedupe recall tool
+  injection (middleware + runner оба inject'или → AI SDK падал на duplicate
+  name); (c) `visit_webpage` Content-Type whitelist (text/*, application/xhtml,
+  rss/atom/feed) — throws на application/pdf, image/jpeg, octet-stream
+  (раньше res.text() на PDF дампило 123KB UTF-8-decoded binary в actor context
+  на gaia_010). **Verification** (`main_e1_gaia_ahc_v3.yaml`, n=25, seed=42,
+  64K Tier-3 / 100K Tier-2 thresholds, $0.93): **acc=0.440 (11/25)** vs
+  K-tail-2 AHC=0.200, vanilla=0.320, Mastra=0.400. Per-level: L1 4/7 (0.57)
+  / L2 7/14 (0.50, +3 vs K-tail-2) / L3 0/4. Cost 62% ниже Mastra ($0.93
+  vs $2.47), 31% ниже vanilla ($0.93 vs $1.35). Observer теперь реально
+  fires на heavier tasks (gaia_010 input 115K, gaia_016 83K, gaia_013 79K
+  — все пересекают 64K threshold). Probe'ы перед sweep'ом (5 trajectories
+  через `scripts/probe-rehydration-deeper.ts`) поймали bug'и (a)/(b)/(c) до
+  full run'а. См. `baselines_frozen.md` gaia-med section + `decisions.md
+  2026-05-27 two-stage recall`.
 
 ### Dataset / Benches
 
@@ -133,6 +176,21 @@ Append-only. Новые записи внизу.
   Mastra observationalMemory fire слишком aggressive на GAIA multi-tool
   tasks (60-95K context). После bump'а: Mastra acc 0.28 → 0.40, empty
   4/25 → 1/25. См. `baselines_frozen.md` gaia-med section.
+- **[2026-05-27] AssistantTraj v3 — corpus rebuild from jay-canvas golden-set**
+  — Tracks D6 + J7. AT-v2 был не-валиден для medium-traj оценки:
+  все 50 задач single-turn, все 50 sidecar fixtures = placeholder text,
+  29 synthetic с шаблонным `expected_summary`. AT-v3 = ~50 multi-turn задач
+  reimported из `jay-canvas/apps/platform/api/e2e/golden-set/scenarios/`
+  (категории IG/IE/CD/QA/A/ED/WC/MX/DBG, скип VG/MUS/AM), captured
+  `turn.tool_outputs` заменяют placeholder'ы; короткие сценарии extended
+  до median 5-7 turns через synthetic continuation (agent-author +
+  manual review gate). 29 AT-v2 synthetic deleted, 21 opensource marked
+  `provenance.deprecated=true` и фильтруются по умолчанию.
+  Tool палитра расширена с 4 до 5 (added `image_edit`); все 5 тулов
+  получили live wrappers через Gemini/Brave/Firecrawl/E2B (`AT_TOOL_MODE=live`
+  для bake-fixtures). Adapter теперь поддерживает `execution_mode='reroll'`
+  для полного multi-turn run'а (default для turns>1). См. `decisions.md
+  2026-05-27 multi-turn execution mode`.
 
 ### Tools
 
